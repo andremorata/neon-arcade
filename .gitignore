@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Node (test-games.js roda sem dependências, mas por segurança)
+node_modules/

@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON SERPENT — Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  .stage { max-width: 900px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON SERPENT</h1></a>
+      <div class="tag">// | Snake · Reimagined | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard">
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="snake">0</span></div>
+    <div class="stat">
+      <span class="lbl">Combo</span><span class="val" id="comboVal">×1</span>
+      <div class="combo-bar"><div class="fill" id="comboBar"></div></div>
+    </div>
+    <div class="stat"><span class="lbl">Speed</span><span class="val" id="speed">8.0</span></div>
+    <div class="stat"><span class="lbl">Time</span><span class="val" id="time">0:00</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <div class="toast" id="toast">🏆 NOVO RECORDE!</div>
+    <div class="state-badges" id="activeBoosts"></div>
+    <canvas id="game" width="864" height="576"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON SERPENT</h2>
+      <p id="overlayText">Colete maçãs, desvie dos limites e pegue boosts. Sequências geram COMBO — a velocidade cresce com o tempo.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Tempo</span><b id="fsTime">0:00</b></div>
+        <div class="fstat"><span>Vel. máx</span><b id="fsSpeed">8.0</b></div>
+        <div class="fstat"><span>Boosts</span><b id="fsBoosts">0</b></div>
+        <div class="fstat"><span>Melhor combo</span><b id="fsCombo">×1</b></div>
+        <div class="fstat"><span>Maçãs</span><b id="fsFood">0</b></div>
+        <div class="fstat"><span>Recorde</span><b id="fsRecord">—</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">← ↑ → ↓</span><span class="key">WASD</span>
+        <span class="key">SPACE Start</span><span class="key">P Pause</span>
+      </div>
+    </div>
+    <div class="dpad">
+      <button class="up" data-dx="0" data-dy="-1">▲</button>
+      <button class="left" data-dx="-1" data-dy="0">◀</button>
+      <button class="down" data-dx="0" data-dy="1">▼</button>
+      <button class="right" data-dx="1" data-dy="0">▶</button>
+    </div>
+  </div>
+
+  <section class="legend">
+    <div class="boost-card" style="--accent:#ffe600;"><span class="emoji">⚡</span><div class="name">TURBO</div><div class="desc">Velocidade ×2 por 4s, pontos ×3.</div></div>
+    <div class="boost-card" style="--accent:#39ff7a;"><span class="emoji">🐢</span><div class="name">SLOW-MO</div><div class="desc">Velocidade 40% por 5s.</div></div>
+    <div class="boost-card" style="--accent:#ff8c1a;"><span class="emoji">✨</span><div class="name">FRENZY</div><div class="desc">Pontos ×2 por 6s.</div></div>
+    <div class="boost-card" style="--accent:#00f0ff;"><span class="emoji">👻</span><div class="name">PHANTOM</div><div class="desc">Atravessa paredes e o corpo por 4s.</div></div>
+    <div class="boost-card" style="--accent:#ffd700;"><span class="emoji">💎</span><div class="name">DOURADA</div><div class="desc">Vale 5 pontos, conta pro combo.</div></div>
+  </section>
+
+  <footer>// <a href="../index.html">← arcade</a> · Setas/WASD · SPACE inicia · P pausa</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+
+  const COLS = 36, ROWS = 24, CELL = 24;
+  const W = COLS * CELL, H = ROWS * CELL;
+  const SPEED_START = 8, SPEED_MAX = 22, SPEED_RAMP = 0.35, SPEED_RAMP_MS = 12000;
+  const COMBO_WINDOW = 4000;
+  const GOLD_SPAWN_MIN = 18000, GOLD_SPAWN_MAX = 24000, GOLD_LIFE = 6000;
+  const BOOST_TYPES = [
+    { id: 'turbo',   emoji: '⚡',  name: 'TURBO',   color: '#ffe600', duration: 4000, scoreMult: 3, speedMult: 2 },
+    { id: 'slow',    emoji: '🐢',  name: 'SLOW-MO', color: '#39ff7a', duration: 5000, scoreMult: 1, speedMult: 0.4 },
+    { id: 'frenzy',  emoji: '✨',  name: 'FRENZY',  color: '#ff8c1a', duration: 6000, scoreMult: 2, speedMult: 1 },
+    { id: 'phantom', emoji: '👻',  name: 'PHANTOM', color: '#00f0ff', duration: 4000, scoreMult: 1, speedMult: 1, immortal: true },
+  ];
+  const BOOST_SPAWN_MIN = 12000, BOOST_SPAWN_MAX = 18000, BOOST_MAX_ON_FIELD = 2, BOOST_LIFE_MS = 10000;
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), comboVal: Neon.$('comboVal'), comboBar: Neon.$('comboBar'),
+    speed: Neon.$('speed'), time: Neon.$('time'), activeBoosts: Neon.$('activeBoosts'), stage: Neon.$('stage'),
+    fsTime: Neon.$('fsTime'), fsSpeed: Neon.$('fsSpeed'), fsBoosts: Neon.$('fsBoosts'),
+    fsCombo: Neon.$('fsCombo'), fsFood: Neon.$('fsFood'), fsRecord: Neon.$('fsRecord'),
+  };
+
+  let snake = [], snakePrev = [], direction = { x: 1, y: 0 }, inputQueue = [];
+  let food, golden = null, boosts = [], scorePopups = [], pendingBursts = [], dyingState = { t: 0 };
+  let score = 0, hi = 0, startHi = 0, baseSpeed = SPEED_START;
+  let lastTick = 0, lastIntervalMs = 150, startTime = 0;
+  let lastBoostSpawn = 0, nextBoostDelay = 0, nextGoldSpawn = 0;
+  let activeBoosts = {}, combo = { streak: 0, lastEat: 0, best: 1 };
+  let stats = { food: 0, golden: 0, boosts: { turbo: 0, slow: 0, frenzy: 0, phantom: 0 }, maxSpeed: SPEED_START, maxCombo: 1, timeMs: 0 };
+  let state = 'menu', lastFrame = performance.now(), recordToastShown = false;
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' }, eatWave = { t: 0 };
+
+  const particles = new Neon.Particles();
+  hi = Neon.best.get('snake');
+
+  // ── helpers ────────────────────────────────────────
+  const inSnake = p => snake.some(s => s.x === p.x && s.y === p.y);
+  const eq = (a, b) => a.x === b.x && a.y === b.y;
+
+  function placeOnEmpty() {
+    let p, tries = 0;
+    do {
+      p = { x: (Math.random() * COLS) | 0, y: (Math.random() * ROWS) | 0 };
+      tries++;
+    } while (tries < 300 && (inSnake(p) || (food && eq(p, food)) || (golden && eq(p, golden)) || boosts.some(b => eq(b, p))));
+    return p;
+  }
+
+  function placeNearHead(min = 3, max = 12) {
+    const head = snake[0];
+    for (let tries = 0; tries < 150; tries++) {
+      const d = Neon.rand(min, max);
+      let dx = Math.round(Math.random() * d), dy = Math.round(d - dx);
+      if (Math.random() < 0.5) dx = -dx;
+      if (Math.random() < 0.5) dy = -dy;
+      const p = { x: head.x + dx, y: head.y + dy };
+      if (p.x < 0 || p.x >= COLS || p.y < 0 || p.y >= ROWS) continue;
+      if (inSnake(p) || (food && eq(p, food)) || (golden && eq(p, golden)) || boosts.some(b => eq(b, p))) continue;
+      return p;
+    }
+    return placeOnEmpty();
+  }
+
+  function reset() {
+    const cx = (COLS / 2) | 0, cy = (ROWS / 2) | 0;
+    snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
+    snakePrev = snake.map(s => ({ ...s }));
+    direction = { x: 1, y: 0 }; inputQueue = [];
+    score = 0; baseSpeed = SPEED_START;
+    lastTick = performance.now(); lastIntervalMs = 150; startTime = performance.now();
+    lastBoostSpawn = startTime; nextBoostDelay = Neon.rand(BOOST_SPAWN_MIN, BOOST_SPAWN_MAX);
+    nextGoldSpawn = startTime + Neon.rand(GOLD_SPAWN_MIN, GOLD_SPAWN_MAX);
+    activeBoosts = {};
+    combo = { streak: 0, lastEat: 0, best: 1 };
+    stats = { food: 0, golden: 0, boosts: { turbo: 0, slow: 0, frenzy: 0, phantom: 0 }, maxSpeed: SPEED_START, maxCombo: 1, timeMs: 0 };
+    particles.clear(); boosts = []; scorePopups = []; pendingBursts = [];
+    golden = null; dyingState = { t: 0 };
+    recordToastShown = hi > 0 ? false : true; startHi = hi;
+    shake = { t: 0, max: 1, power: 0 }; flash = { t: 0, color: '' }; eatWave = { t: 0 };
+    spawnFood();
+    els.comboVal.textContent = '×1';
+    els.comboBar.style.width = '0%';
+  }
+
+  function spawnFood() { food = placeNearHead(3, 12); }
+  function spawnGolden() { if (golden) return; golden = { ...placeNearHead(4, 15), born: performance.now(), life: GOLD_LIFE }; }
+  function spawnBoost() {
+    if (boosts.length >= BOOST_MAX_ON_FIELD) return;
+    const type = Neon.choice(BOOST_TYPES);
+    boosts.push({ ...placeOnEmpty(), ...type, born: performance.now(), life: BOOST_LIFE_MS });
+  }
+  function activateBoost(id) {
+    const def = BOOST_TYPES.find(b => b.id === id);
+    if (!def) return;
+    activeBoosts[id] = { remaining: def.duration, max: def.duration };
+    stats.boosts[id]++;
+    Neon.audio.sfx.boost();
+    shakeAt(5, 160);
+  }
+  function shakeAt(power, ms) { shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { flash = { t: ms, color }; }
+
+  function currentSpeed() {
+    let s = baseSpeed;
+    if (activeBoosts.turbo) s *= 2;
+    if (activeBoosts.slow) s *= 0.4;
+    return s;
+  }
+  const comboMult = () => Math.min(3, 1 + Math.floor(combo.streak / 3));
+  function boostMult() {
+    let m = 1;
+    if (activeBoosts.frenzy) m *= 2;
+    if (activeBoosts.turbo) m *= 3;
+    return m;
+  }
+  const totalMult = () => Math.min(9, comboMult() * boostMult());
+
+  function popup(gx, gy, text, color) {
+    scorePopups.push({ x: gx * CELL + CELL / 2, y: gy * CELL + CELL / 2, text, color, age: 0 });
+  }
+  function burstGrid(gx, gy, color, count, speed) {
+    particles.burst(gx * CELL + CELL / 2, gy * CELL + CELL / 2, color, count, speed || 140);
+  }
+
+  // ── game loop ──────────────────────────────────────
+  function tick(now) {
+    if (state !== 'playing') return;
+    const interval = 1000 / currentSpeed();
+    const elapsed = now - lastTick;
+    if (elapsed < interval) return;
+    lastTick = now - (elapsed % interval);
+    lastIntervalMs = interval;
+
+    while (inputQueue.length) {
+      const q = inputQueue.shift();
+      if (q.x === -direction.x && q.y === -direction.y) continue;
+      direction = q; break;
+    }
+
+    const head = snake[0];
+    let nx = head.x + direction.x, ny = head.y + direction.y;
+    const phantom = !!activeBoosts.phantom;
+
+    if (phantom) { nx = (nx + COLS) % COLS; ny = (ny + ROWS) % ROWS; }
+    else if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) return gameOver();
+
+    const willEat = !!food && nx === food.x && ny === food.y;
+    const bodyToCheck = willEat ? snake : snake.slice(0, -1);
+    if (!phantom && bodyToCheck.some(s => s.x === nx && s.y === ny)) return gameOver();
+
+    const oldSnake = snake;
+    const oldTail = { ...oldSnake[oldSnake.length - 1] };
+    snake = [{ x: nx, y: ny }, ...oldSnake];
+    if (willEat) snakePrev = [...oldSnake, oldTail];
+    else { snake.pop(); snakePrev = oldSnake; }
+
+    for (let i = boosts.length - 1; i >= 0; i--) {
+      const b = boosts[i];
+      if (b.x === nx && b.y === ny) {
+        activateBoost(b.id);
+        burstGrid(b.x, b.y, b.color, 26, 170);
+        boosts.splice(i, 1);
+        break;
+      }
+    }
+
+    if (willEat) {
+      if (combo.lastEat && (now - combo.lastEat) <= COMBO_WINDOW) combo.streak++;
+      else combo.streak = 1;
+      combo.lastEat = now;
+      stats.maxCombo = Math.max(stats.maxCombo, comboMult());
+      stats.food++;
+      const gain = 1 * totalMult();
+      score += gain;
+      popup(nx, ny, `+${gain}${totalMult() > 1 ? ` ×${totalMult()}` : ''}`, totalMult() >= 3 ? '#ffd700' : '#39ff7a');
+      burstGrid(nx, ny, '#39ff7a', 12, 110);
+      Neon.audio.sfx.eat(combo.streak);
+      eatWave.t = now;
+      Neon.popEl(els.score);
+      spawnFood();
+    }
+
+    if (golden && nx === golden.x && ny === golden.y) {
+      const gain = 5 * totalMult();
+      score += gain;
+      stats.golden++;
+      combo.streak++; combo.lastEat = now;
+      stats.maxCombo = Math.max(stats.maxCombo, comboMult());
+      popup(nx, ny, `+${gain} 💎`, '#ffd700');
+      burstGrid(nx, ny, '#ffd700', 22, 160);
+      Neon.audio.sfx.golden();
+      eatWave.t = now;
+      Neon.popEl(els.score);
+      spawnFood();
+      golden = null;
+      nextGoldSpawn = now + Neon.rand(GOLD_SPAWN_MIN, GOLD_SPAWN_MAX);
+    }
+
+    if (!recordToastShown && hi > 0 && score > hi) {
+      recordToastShown = true;
+      Neon.toast('🏆 NOVO RECORDE!');
+      Neon.audio.sfx.record();
+      flashAt('rgba(255, 215, 0,', 260);
+      els.best.textContent = score;
+    }
+
+    for (let i = boosts.length - 1; i >= 0; i--) {
+      if (now - boosts[i].born > boosts[i].life) boosts.splice(i, 1);
+    }
+    if (golden && (now - golden.born) > golden.life) golden = null;
+    for (const k in activeBoosts) {
+      activeBoosts[k].remaining -= interval;
+      if (activeBoosts[k].remaining <= 0) delete activeBoosts[k];
+    }
+
+    const playTime = now - startTime;
+    baseSpeed = Math.min(SPEED_MAX, SPEED_START + Math.floor(playTime / SPEED_RAMP_MS) * SPEED_RAMP);
+    stats.maxSpeed = Math.max(stats.maxSpeed, baseSpeed);
+    stats.timeMs = playTime;
+
+    if (now - lastBoostSpawn > nextBoostDelay) {
+      spawnBoost(); lastBoostSpawn = now;
+      nextBoostDelay = Neon.rand(BOOST_SPAWN_MIN, BOOST_SPAWN_MAX);
+    }
+    if (!golden && now > nextGoldSpawn) spawnGolden();
+
+    updateHUD(now);
+  }
+
+  function gameOver() {
+    state = 'dying';
+    dyingState = { t: 0 };
+    shakeAt(14, 500);
+    flashAt('rgba(255, 43, 214,', 320);
+    Neon.audio.sfx.death();
+    pendingBursts = [];
+    for (let i = 0; i < snake.length; i++) {
+      const s = snake[i];
+      const hue = (i * 22 + (performance.now() / 600) * 40) % 360;
+      pendingBursts.push({ at: i * 35, x: s.x, y: s.y, color: `hsl(${hue}, 100%, 60%)`, count: 9 });
+    }
+    pendingBursts.push({ at: snake.length * 35, x: snake[0].x, y: snake[0].y, color: '#ff2bd6', count: 40, speed: 230 });
+  }
+
+  function finishGameOver() {
+    state = 'gameover';
+    Neon.best.update('snake', score);
+    els.best.textContent = Neon.best.get('snake');
+
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord) { Neon.audio.sfx.record(); flashAt('rgba(255, 215, 0,', 320); }
+
+    els.fsTime.textContent = (() => { const t = stats.timeMs / 1000 | 0; return `${(t / 60) | 0}:${String(t % 60).padStart(2, '0')}`; })();
+    els.fsSpeed.textContent = stats.maxSpeed.toFixed(1);
+    els.fsBoosts.textContent = Object.values(stats.boosts).reduce((a, b) => a + b, 0);
+    els.fsCombo.textContent = `×${stats.maxCombo}`;
+    els.fsFood.textContent = stats.food + stats.golden;
+    els.fsRecord.textContent = isRecord ? '🏆 SIM' : 'NÃO';
+    els.fsRecord.className = 'gold';
+    Neon.$('finalStats').style.display = 'grid';
+
+    const title = isRecord ? 'NOVO RECORDE!' : 'GAME OVER';
+    Neon.overlay.show(title,
+      `Sua serpente colapsou com ${score} pontos.`,
+      'PLAY AGAIN', isRecord ? 'record' : 'go');
+  }
+
+  function updateHUD(now) {
+    els.score.textContent = score;
+    els.best.textContent = Math.max(hi, score);
+    els.speed.textContent = baseSpeed.toFixed(1);
+    const e = (now - startTime) / 1000 | 0;
+    els.time.textContent = `${(e / 60) | 0}:${String(e % 60).padStart(2, '0')}`;
+    els.comboVal.textContent = `×${comboMult()}`;
+    const comboPct = combo.streak > 0 && combo.lastEat ? Math.max(0, 100 * (1 - (now - combo.lastEat) / COMBO_WINDOW)) : 0;
+    els.comboBar.style.width = `${comboPct}%`;
+
+    const c = els.activeBoosts;
+    c.innerHTML = '';
+    for (const k in activeBoosts) {
+      const def = BOOST_TYPES.find(b => b.id === k);
+      const ab = activeBoosts[k];
+      const el = document.createElement('div');
+      el.className = 'badge';
+      el.style.setProperty('--accent', def.color);
+      el.innerHTML = `<span class="emoji">${def.emoji}</span><span>${def.name}</span>
+        <div class="bar"><div class="fill" style="width:${Math.max(0, (ab.remaining / ab.max) * 100)}%"></div></div>`;
+      c.appendChild(el);
+    }
+  }
+
+  function updateExtra(dt) {
+    for (let i = scorePopups.length - 1; i >= 0; i--) {
+      const p = scorePopups[i];
+      p.age += dt; p.y -= 42 * dt;
+      if (p.age > 0.8) scorePopups.splice(i, 1);
+    }
+  }
+
+  // ── render ─────────────────────────────────────────
+  function segPos(i, progress) {
+    const a = snakePrev[i] || snakePrev[snakePrev.length - 1];
+    const b = snake[i];
+    if (!a || !b) return null;
+    return { x: a.x + (b.x - a.x) * progress, y: a.y + (b.y - a.y) * progress };
+  }
+
+  function render(now) {
+    let progress = Math.min(1, (now - lastTick) / lastIntervalMs);
+    const dying = state === 'dying';
+    if (dying) progress = 1;
+
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+
+    ctx.fillStyle = '#04001a';
+    ctx.fillRect(0, 0, W, H);
+
+    const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, W / 1.4);
+    grad.addColorStop(0, 'rgba(80, 0, 160, 0.35)');
+    grad.addColorStop(1, 'rgba(4, 0, 26, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.05)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= COLS; x++) { ctx.moveTo(x * CELL + 0.5, 0); ctx.lineTo(x * CELL + 0.5, H); }
+    for (let y = 0; y <= ROWS; y++) { ctx.moveTo(0, y * CELL + 0.5); ctx.lineTo(W, y * CELL + 0.5); }
+    ctx.stroke();
+
+    // quadro em gradiente rotativo
+    const fw = 5;
+    const phantom = !!activeBoosts.phantom;
+    const rot = ((now % 10000) / 10000) * Math.PI * 2;
+    if (typeof ctx.createConicGradient === 'function') {
+      const stops = 10;
+      const conic = ctx.createConicGradient(rot, W / 2, H / 2);
+      for (let i = 0; i <= stops; i++) {
+        const hue = phantom ? 185 + (i / stops) * 60 : (i / stops) * 360;
+        conic.addColorStop(i / stops, `hsl(${hue}, 100%, ${phantom ? 68 : 60}%)`);
+      }
+      ctx.strokeStyle = conic;
+      Neon.glow(ctx, phantom ? '#00f0ff' : '#ff2bd6', 24);
+      ctx.lineWidth = fw;
+      ctx.strokeRect(fw / 2 + 1, fw / 2 + 1, W - fw - 2, H - fw - 2);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(fw / 2 + 1 + fw * 0.4, fw / 2 + 1 + fw * 0.4, W - fw - 2 - fw * 0.8, H - fw - 2 - fw * 0.8);
+      ctx.globalAlpha = 1;
+    } else {
+      const wallColor = phantom ? '#00f0ff' : '#ff2bd6';
+      ctx.strokeStyle = wallColor;
+      ctx.lineWidth = 3;
+      Neon.glow(ctx, wallColor, 28);
+      ctx.strokeRect(1.5, 1.5, W - 3, H - 3);
+      ctx.shadowBlur = 0;
+    }
+
+    // comida
+    if (food) {
+      const fx = food.x * CELL + CELL / 2, fy = food.y * CELL + CELL / 2;
+      const pulse = Math.sin(now / 220) * 0.18 + 1;
+      Neon.glow(ctx, '#39ff7a', 22);
+      ctx.fillStyle = '#39ff7a';
+      Neon.circle(ctx, fx, fy, (CELL / 2 - 3) * pulse);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#ffffff';
+      Neon.circle(ctx, fx - 2, fy - 2, 3.5 * pulse);
+      ctx.font = `${CELL - 6}px ${Neon.EMOJI}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🍎', fx, fy + 1);
+    }
+
+    // maçã dourada
+    if (golden) {
+      const gx = golden.x * CELL + CELL / 2, gy = golden.y * CELL + CELL / 2;
+      const age = (now - golden.born) / golden.life;
+      const fade = age > 0.6 ? Math.max(0, 1 - (age - 0.6) / 0.4) : 1;
+      const pulse = Math.sin(now / 160) * 0.15 + 1;
+      ctx.globalAlpha = 0.5 * fade;
+      ctx.strokeStyle = '#ffd700';
+      Neon.glow(ctx, '#ffd700', 20);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(gx, gy, CELL / 2 + 7 + Math.sin(now / 140) * 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = fade;
+      ctx.shadowBlur = 26;
+      ctx.fillStyle = '#ffd700';
+      Neon.circle(ctx, gx, gy, (CELL / 2 - 2) * pulse);
+      ctx.shadowBlur = 0;
+      ctx.font = `${CELL - 4}px ${Neon.EMOJI}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('💎', gx, gy + 1);
+      ctx.globalAlpha = 1;
+    }
+
+    // boosts no tabuleiro
+    for (const b of boosts) {
+      const bx = b.x * CELL + CELL / 2, by = b.y * CELL + CELL / 2;
+      const t = (now - b.born) / 1000;
+      const pulse = Math.sin(t * 5) * 0.12 + 1;
+      const ageRatio = (now - b.born) / b.life;
+      const fade = ageRatio > 0.7 ? Math.max(0, 1 - (ageRatio - 0.7) / 0.3) : 1;
+      ctx.globalAlpha = 0.45 * fade;
+      ctx.strokeStyle = b.color;
+      Neon.glow(ctx, b.color, 18);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(bx, by, CELL / 2 + 6 + Math.sin(t * 6) * 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 24;
+      ctx.fillStyle = b.color;
+      Neon.circle(ctx, bx, by, (CELL / 2 - 2) * pulse);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = fade;
+      ctx.font = `${CELL - 6}px ${Neon.EMOJI}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(b.emoji, bx, by + 1);
+      ctx.globalAlpha = 1;
+    }
+
+    drawSnake(progress, dying, now);
+    particles.draw(ctx);
+    for (const p of scorePopups) {
+      const a = Math.max(0, 1 - p.age / 0.8);
+      ctx.globalAlpha = a;
+      ctx.font = `700 15px Orbitron, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      Neon.glow(ctx, p.color, 12);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.color} ${Math.min(0.45, flash.t / 260)})`;
+      ctx.fillRect(-8, -8, W + 16, H + 16);
+    }
+    ctx.restore();
+  }
+
+  function drawSnake(progress, dying, now) {
+    const phantom = !!activeBoosts.phantom, turbo = !!activeBoosts.turbo, frenzy = !!activeBoosts.frenzy;
+    const t = now;
+    const fade = dying ? Math.max(0, 1 - dyingState.t / 700) : 1;
+    if (fade <= 0.01) return;
+
+    let headGlow = '#00f0ff';
+    if (turbo) headGlow = '#ffe600';
+    else if (frenzy) headGlow = '#ff8c1a';
+
+    let waveP = -1, bodyPulse = 0;
+    if (eatWave.t) {
+      const age = (t - eatWave.t) / 600;
+      if (age <= 1.1) { waveP = age; bodyPulse = Math.max(0, 1 - age / 0.75) * 0.4; }
+      else eatWave.t = 0;
+    }
+
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const p = segPos(i, progress);
+      if (!p) continue;
+      const h = (i * 22 + (t / 600) * 40) % 360;
+      ctx.globalAlpha = 0.35 * fade;
+      Neon.glow(ctx, phantom ? '#00f0ff' : `hsl(${h}, 100%, 60%)`, 26);
+      ctx.fillStyle = `hsl(${h}, 100%, 50%)`;
+      Neon.circle(ctx, p.x * CELL + CELL / 2, p.y * CELL + CELL / 2, CELL / 2 - 1);
+    }
+    ctx.shadowBlur = 0;
+
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const p = segPos(i, progress);
+      if (!p) continue;
+      const h = (i * 22 + (t / 600) * 40) % 360;
+      const isHead = i === 0;
+      const cx = p.x * CELL + CELL / 2, cy = p.y * CELL + CELL / 2;
+      const r = CELL / 2 - 2.5;
+      ctx.globalAlpha = fade;
+      if (isHead) {
+        ctx.fillStyle = bodyPulse > 0 ? `hsl(0, 0%, ${100 - bodyPulse * 18}%)` : '#ffffff';
+        Neon.glow(ctx, headGlow, 20 + bodyPulse * 14);
+        Neon.circle(ctx, cx, cy, r);
+      } else {
+        const wf = waveP >= 0 ? Math.max(0, 1 - Math.abs(i - waveP * snake.length) / 2.5) : 0;
+        const lift = bodyPulse * 32 + wf * 30;
+        const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r);
+        g.addColorStop(0,    `hsl(${h}, 100%, ${Math.min(92, 82 + lift)}%)`);
+        g.addColorStop(0.55, `hsl(${(h + 35) % 360}, 100%, ${Math.min(88, 60 + lift)}%)`);
+        g.addColorStop(1,    `hsl(${(h + 70) % 360}, 100%, ${Math.min(82, 47 + lift)}%)`);
+        ctx.fillStyle = g;
+        Neon.glow(ctx, `hsl(${h}, 100%, 65%)`, 9);
+        Neon.circle(ctx, cx, cy, r);
+      }
+    }
+    ctx.shadowBlur = 0;
+
+    if (waveP >= 0 && snake.length > 1) {
+      for (let i = 1; i < snake.length; i++) {
+        const p = segPos(i, progress);
+        if (!p) continue;
+        const wf = Math.max(0, 1 - Math.abs(i - waveP * snake.length) / 2.5);
+        if (wf <= 0.02) continue;
+        ctx.globalAlpha = wf * 0.75 * fade;
+        ctx.fillStyle = '#ffffff';
+        Neon.glow(ctx, '#ffffff', 20);
+        Neon.circle(ctx, p.x * CELL + CELL / 2, p.y * CELL + CELL / 2, CELL / 2 - 1.5);
+      }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const p = segPos(i, progress);
+      if (!p) continue;
+      const isHead = i === 0;
+      const cx = p.x * CELL + CELL / 2, cy = p.y * CELL + CELL / 2;
+      const r = CELL / 2 - 2.5;
+      ctx.globalAlpha = fade * (isHead ? 0.9 : 0.55);
+      ctx.fillStyle = '#ffffff';
+      Neon.glow(ctx, '#ffffff', 6);
+      Neon.circle(ctx, cx - r * 0.35, cy - r * 0.42, r * (isHead ? 0.32 : 0.26));
+    }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+
+    const hp = segPos(0, progress);
+    if (hp) {
+      const hx = hp.x * CELL + CELL / 2, hy = hp.y * CELL + CELL / 2;
+      ctx.globalAlpha = fade;
+      Neon.glow(ctx, '#ffffff', 10);
+      ctx.fillStyle = '#0a0028';
+      const er = 3, off = 5;
+      if (direction.x === 1)       { Neon.circle(ctx, hx + off, hy - 5, er); Neon.circle(ctx, hx + off, hy + 5, er); }
+      else if (direction.x === -1) { Neon.circle(ctx, hx - off, hy - 5, er); Neon.circle(ctx, hx - off, hy + 5, er); }
+      else if (direction.y === -1) { Neon.circle(ctx, hx - 5, hy - off, er); Neon.circle(ctx, hx + 5, hy - off, er); }
+      else                         { Neon.circle(ctx, hx - 5, hy + off, er); Neon.circle(ctx, hx + 5, hy + off, er); }
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ── input ──────────────────────────────────────────
+  function queueDir(dx, dy) {
+    if (dx === 0 && dy === 0) return;
+    const last = inputQueue.length ? inputQueue[inputQueue.length - 1] : direction;
+    if (dx === -last.x && dy === -last.y) return;
+    if (dx === last.x && dy === last.y) return;
+    if (inputQueue.length >= 3) return;
+    inputQueue.push({ x: dx, y: dy });
+  }
+
+  function startGame() {
+    Neon.audio.ensure();
+    reset();
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar.', 'RESUME');
+  }
+  function resumeGame() {
+    state = 'playing';
+    lastTick = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if ((k === ' ' || k === 'Enter')) {
+      e.preventDefault();
+      if (state === 'menu' || state === 'gameover') startGame();
+      return;
+    }
+    if (k === 'p' || k === 'P') {
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+      return;
+    }
+    if (state !== 'playing') return;
+    const key = k.toLowerCase();
+    if (key === 'arrowup' || key === 'w')    { e.preventDefault(); queueDir(0, -1); }
+    else if (key === 'arrowdown' || key === 's') { e.preventDefault(); queueDir(0, 1); }
+    else if (key === 'arrowleft' || key === 'a') { e.preventDefault(); queueDir(-1, 0); }
+    else if (key === 'arrowright' || key === 'd'){ e.preventDefault(); queueDir(1, 0); }
+  });
+
+  let swipeStart = null;
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.dpad, .sound-toggle')) return;
+    swipeStart = { x: e.clientX, y: e.clientY };
+  });
+  els.stage.addEventListener('pointerup', (e) => {
+    if (!swipeStart) return;
+    const dx = e.clientX - swipeStart.x, dy = e.clientY - swipeStart.y;
+    swipeStart = null;
+    if (Math.abs(dx) < 26 && Math.abs(dy) < 26) return;
+    if (Math.abs(dx) > Math.abs(dy)) queueDir(dx > 0 ? 1 : -1, 0);
+    else queueDir(0, dy > 0 ? 1 : -1);
+  });
+
+  document.querySelectorAll('.dpad button').forEach(btn => {
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      queueDir(+btn.dataset.dx, +btn.dataset.dy);
+    });
+  });
+
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── main loop ──────────────────────────────────────
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+
+    tick(now);
+    if (state === 'dying') {
+      dyingState.t += dt * 800;
+      let i = pendingBursts.length;
+      while (i--) {
+        const b = pendingBursts[i];
+        if (dyingState.t >= b.at) {
+          burstGrid(b.x, b.y, b.color, b.count, b.speed || 150);
+          pendingBursts.splice(i, 1);
+        }
+      }
+      particles.update(dt * 0.55);
+      if (dyingState.t >= 1000) finishGameOver();
+    } else {
+      if (state === 'playing' || state === 'gameover') {
+        particles.update(dt);
+        updateExtra(dt);
+      }
+    }
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  reset();
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

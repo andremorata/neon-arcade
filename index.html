@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON ARCADE — Suíte de clássicos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/neon-theme.css">
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <h1>NEON ARCADE</h1>
+      <div class="tag">// 9 clássicos · estética synthwave · sessões curtas</div>
+    </div>
+  </header>
+
+  <section class="arcade-tiles" id="tiles"></section>
+
+  <footer>// Setas/WASD/SPACE em cada jogo · P pausa · sons 100% sintetizados · recordes salvos localmente</footer>
+</div>
+
+<script src="assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+
+  const GAMES = [
+    { key: 'snake',  emoji: '🐍', name: 'NEON SERPENT', desc: 'Maçãs, combos, boosts e velocidade crescente.', href: 'games/neon-snake.html',   color: '#39ff7a' },
+    { key: 'tetris', emoji: '🧱', name: 'NEON BLOCKS',  desc: 'Tetris com limpeza em cascata e nível por 10 linhas.', href: 'games/neon-blocks.html', color: '#00f0ff' },
+    { key: 'pong',   emoji: '🏓', name: 'NEON PONG',    desc: 'Pong contra a IA — primeiro a 7 acelera o rally.', href: 'games/neon-pong.html',   color: '#ff2bd6' },
+    { key: 'simon',  emoji: '🎵', name: 'NEON SIMON',   desc: 'Memória musical com 4 campos sintetizados.', href: 'games/neon-simon.html',   color: '#ffe600' },
+    { key: 'asteroid', emoji: '☄️', name: 'NEON ASTEROID', desc: 'Asteroids vetorial — rochas dividem ao explodir.', href: 'games/neon-asteroid.html', color: '#ff8c1a' },
+    { key: 'flappy', emoji: '🐤', name: 'NEON FLAPPY',  desc: 'Voe entre pilares que aceleram a cada ponto.', href: 'games/neon-flappy.html',  color: '#ffd700' },
+    { key: '2048',   emoji: '🔢', name: 'NEON 2048',    desc: 'Fundição de blocos com animação e glow por valor.', href: 'games/neon-2048.html', color: '#9b30ff' },
+    { key: 'mines',  emoji: '💣', name: 'NEON MINES',   desc: 'Campo minado — melhor tempo é o recorde.', href: 'games/neon-mines.html',  color: '#ff3b5c' },
+    { key: 'whack',  emoji: '🐹', name: 'NEON WHACK',   desc: '30 segundos de whack-a-mole com combos.', href: 'games/neon-whack.html',  color: '#4d7dff' },
+  ];
+
+  const fmtBest = (key, val) => {
+    if (key === 'mines') return val ? `⏱ ${(val / 60) | 0}:${String(val % 60).padStart(2, '0')}` : '';
+    return val ? `🏆 ${val}` : '';
+  };
+
+  const tiles = Neon.$('tiles');
+  tiles.innerHTML = '';
+  for (const g of GAMES) {
+    const bestVal = Neon.best.get(g.key);
+    const t = document.createElement('a');
+    t.className = 'tile';
+    t.href = g.href;
+    t.style.setProperty('--ticon', g.color);
+    t.innerHTML = `
+      <div class="inner">
+        <span class="t-emoji">${g.emoji}</span>
+        <span class="t-name">${g.name}</span>
+        <span class="t-desc">${g.desc}</span>
+        <span class="t-best">${fmtBest(g.key, bestVal)}</span>
+        <span class="t-go">▼ JOGAR</span>
+      </div>`;
+    tiles.appendChild(t);
+  }
+})();
+</script>
+</body>
+</html>

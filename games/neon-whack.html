@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEON WHACK — Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  .stage { max-width: 560px; aspect-ratio: 1 / 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON WHACK</h1></a>
+      <div class="tag">// | 30 segundos de reflexo puro | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="whack">0</span></div>
+    <div class="stat"><span class="lbl">Vidas</span><span class="val" id="lives">3</span></div>
+    <div class="stat"><span class="lbl">Tempo</span><span class="val" id="time">30</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <div class="toast" id="toast">COMBO ×2!</div>
+    <canvas id="game" width="600" height="600"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON WHACK</h2>
+      <p id="overlayText">Toque nas criaturas antes que sumam. 🐹 vale 1, dourado vale 5, 💣 tira 1 vida. Acertos na sequência geram combo.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Score</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Acertos</span><b id="fsHits">0</b></div>
+        <div class="fstat"><span>Combo máx</span><b id="fsCombo">×1</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">Clique / Toque</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · acertos em sequência (< 2s) multiplicam · 💣 tira 1 vida</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const N = 3, SIZE = 600, CELL = SIZE / N, ROUND_MS = 30000;
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), lives: Neon.$('lives'), time: Neon.$('time'),
+    fsScore: Neon.$('fsScore'), fsHits: Neon.$('fsHits'), fsCombo: Neon.$('fsCombo'), stage: Neon.$('stage'),
+  };
+
+  let score = 0, pb = 0, startHi = 0, lives = 3, hits = 0;
+  let timeLeft = ROUND_MS, state = 'menu', lastFrame = performance.now();
+  let target = null, targetT = 0, nextSpawn = 0, combo = 0, comboLast = 0;
+  let popups = [], shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' };
+  const particles = new Neon.Particles();
+  pb = Neon.best.get('whack');
+
+  const spawnDelay = () => Neon.rand(260, 480);
+  const targetDur = () => Math.max(380, 620 - (timeLeft < 10000 ? 140 : 0));
+
+  function newRound() {
+    score = 0; lives = 3; hits = 0; combo = 0; comboLast = 0;
+    timeLeft = ROUND_MS; target = null; targetT = 0; nextSpawn = 0;
+    popups = []; particles.clear();
+    els.score.textContent = '0';
+    els.lives.textContent = '3';
+    els.time.textContent = '30';
+  }
+
+  function startGame() {
+    Neon.audio.ensure();
+    startHi = pb;
+    newRound();
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P para retomar os 30s.', 'RESUME');
+  }
+  function resumeGame() {
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  function shakeAt(power, ms) { shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { flash = { t: ms, color }; }
+  function popup(x, y, text, color) {
+    popups.push({ x, y, text, color, age: 0 });
+  }
+
+  function spawnTarget() {
+    const r = Math.random();
+    const kinds = [
+      { roll: 0.82, kind: 'mole', emoji: '🐹', val: 1 },
+      { roll: 0.92, kind: 'gold', emoji: '🐹', val: 5, gold: true },
+      { roll: 1,    kind: 'bomb', emoji: '💣', val: 0 },
+    ];
+    const picked = kinds.find(k => r < k.roll) || kinds[0];
+    let idx;
+    do { idx = (Math.random() * N * N) | 0; } while (target && N * N > 1 && idx === target.idx && Math.random() < 0.6);
+    target = { idx, ...picked, born: performance.now(), dur: targetDur() };
+    targetT = performance.now();
+  }
+
+  function hit(cx, cy) {
+    if (!target) return;
+    const now = performance.now();
+    if (now - targetT > target.dur) { target = null; return; }
+    const px = (target.idx % N) * CELL + CELL / 2;
+    const py = ((target.idx / N) | 0) * CELL + CELL / 2;
+
+    if (target.kind === 'bomb') {
+      lives--;
+      els.lives.textContent = lives;
+      Neon.audio.sfx.boom();
+      shakeAt(12, 350);
+      flashAt('rgba(255, 59, 92,', 240);
+      particles.burst(px, py, '#ff3b5c', 30, 230);
+      popup(px, py, '💣 -1', '#ff3b5c');
+      if (lives <= 0) return endRound();
+    } else {
+      const now2 = performance.now();
+      combo = (comboLast && now2 - comboLast <= 2000) ? combo + 1 : 1;
+      comboLast = now2;
+      const mult = Math.min(3, 1 + Math.floor(combo / 3));
+      const gain = target.val * mult;
+      score += gain;
+      hits++;
+      Neon.audio.sfx[target.gold ? 'golden' : 'whack']();
+      particles.burst(px, py, target.gold ? '#ffd700' : '#ffe600', 16, 180);
+      popup(px, py, `+${gain}${mult > 1 ? ` ×${mult}` : ''}`, target.gold ? '#ffd700' : '#39ff7a');
+      Neon.popEl(els.score);
+      if (mult > 1) Neon.toast(`COMBO ×${mult}!`);
+      els.score.textContent = score;
+      els.best.textContent = Math.max(pb, score);
+    }
+    target = null;
+  }
+
+  function endRound() {
+    state = 'gameover';
+    const maxCombo = Math.min(3, 1 + Math.floor(Math.max(0, combo) / 3));
+    Neon.best.update('whack', score);
+    els.best.textContent = Neon.best.get('whack');
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    els.fsScore.textContent = score;
+    els.fsHits.textContent = hits;
+    els.fsCombo.textContent = `×${maxCombo}`;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'TEMPO ESGOTADO',
+      `${hits} ${hits === 1 ? 'acerto' : 'acertos'} nos 30s.`,
+      'JOGAR DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  // ── input ─────────────────────────────────────────
+  canvas.addEventListener('pointerdown', (e) => {
+    if (state === 'menu' || state === 'gameover') return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width * SIZE;
+    const y = (e.clientY - rect.top) / rect.height * SIZE;
+    hit(x, y);
+  });
+
+  document.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if (k === ' ' || k === 'Enter') {
+      e.preventDefault();
+      if (state === 'menu' || state === 'gameover') startGame();
+      else if (state === 'paused') resumeGame();
+      return;
+    }
+    if (k === 'p' || k === 'P') {
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+    }
+  });
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt, now) {
+    if (state !== 'playing') return;
+    timeLeft -= dt * 1000;
+    els.time.textContent = Math.max(0, timeLeft / 1000 | 0);
+    if (timeLeft <= 0) { target = null; return endRound(); }
+
+    if (target) {
+      if (now - targetT > target.dur) {
+        target = null;
+        nextSpawn = now + spawnDelay();
+        Neon.audio.sfx.sizzle();
+      }
+    } else if (now >= nextSpawn) {
+      spawnTarget();
+    }
+  }
+
+  // ── render ────────────────────────────────────────
+  function render(now) {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+    ctx.fillStyle = '#05001a';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    const g = ctx.createRadialGradient(SIZE / 2, SIZE / 2, 0, SIZE / 2, SIZE / 2, 460);
+    g.addColorStop(0, 'rgba(80, 0, 160, 0.32)');
+    g.addColorStop(1, 'rgba(4, 0, 26, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // células
+    for (let i = 0; i < N * N; i++) {
+      const x = (i % N) * CELL, y = ((i / N) | 0) * CELL;
+      const isT = target && target.idx === i && now - targetT <= target.dur;
+      const cg = ctx.createLinearGradient(x, y, x + CELL, y + CELL);
+      cg.addColorStop(0, isT ? 'rgba(155, 48, 255, 0.25)' : 'rgba(155, 48, 255, 0.10)');
+      cg.addColorStop(1, isT ? 'rgba(0, 240, 255, 0.14)' : 'rgba(0, 240, 255, 0.05)');
+      ctx.fillStyle = cg;
+      Neon.glow(ctx, isT ? '#9b30ff' : 'rgba(155, 48, 255, 0.3)', isT ? 14 : 3);
+      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+      ctx.shadowBlur = 0;
+      // buraco
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(x + CELL / 2, y + CELL - 18, 52, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // alvo
+    if (target && now - targetT <= target.dur) {
+      const x = (target.idx % N) * CELL + CELL / 2;
+      const y = ((target.idx / N) | 0) * CELL + CELL / 2;
+      const life = 1 - (now - targetT) / target.dur;
+      const scale = Math.min(1, life * 2 + 0.4);
+      const g2 = ctx.createRadialGradient(x, y - 14, 4, x, y - 4, 52 * scale);
+      g2.addColorStop(0, target.gold ? '#ffd700' : '#39ff7a');
+      g2.addColorStop(1, target.kind === 'bomb' ? '#ff3b5c' : '#0a0a2a');
+      ctx.fillStyle = g2;
+      Neon.glow(ctx, target.kind === 'bomb' ? '#ff3b5c' : (target.gold ? '#ffd700' : '#39ff7a'), 22);
+      Neon.circle(ctx, x, y, 46 * scale);
+      ctx.shadowBlur = 0;
+      ctx.font = `${44 * scale}px ${Neon.EMOJI}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(target.emoji, x, y + 2);
+      // anel de emergência
+      if (life < 0.35) {
+        ctx.strokeStyle = `rgba(255, 59, 92, ${(1 - life / 0.35) * 0.9})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 52, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    // popups
+    for (let i = popups.length - 1; i >= 0; i--) {
+      const p = popups[i];
+      p.age += 0.016;
+      if (p.age > 0.8) { popups.splice(i, 1); continue; }
+      const a = 1 - p.age / 0.8;
+      ctx.globalAlpha = a;
+      ctx.font = '900 26px Orbitron, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      Neon.glow(ctx, p.color, 12);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y - p.age * 60);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
+
+    particles.draw(ctx);
+
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.color} ${Math.min(0.45, flash.t / 240)})`;
+      ctx.fillRect(0, 0, SIZE, SIZE);
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt, now);
+    if (state === 'playing' || state === 'gameover') particles.update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  newRound();
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
