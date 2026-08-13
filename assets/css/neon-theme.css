@@ -29,7 +29,12 @@ html, body {
   color: var(--text);
   font-family: 'Space Mono', monospace;
   overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
+
+button, a { touch-action: manipulation; }
 
 body::before {
   content: '';
@@ -184,7 +189,14 @@ header { display: flex; justify-content: center; text-align: center; }
     0 0 96px rgba(255, 43, 214, 0.18),
     inset 0 0 80px rgba(155, 48, 255, 0.12);
   width: 100%;
-  max-width: 900px;
+  /* Cada jogo sobrescreve --arw/--arh/--maxw. O quadro nunca passa da altura util
+     da tela, entao no celular ele para de exigir scroll pra ser jogado.
+     ponytail: --chrome e constante por breakpoint, nao medida. Se desalinhar em
+     algum aparelho, ajuste o numero no media query em vez de medir via JS. */
+  --arw: 3; --arh: 2; --maxw: 900px; --chrome: 0px;
+  aspect-ratio: var(--arw) / var(--arh);
+  max-width: min(var(--maxw), calc((100vh - var(--chrome)) * var(--arw) / var(--arh)));
+  max-width: min(var(--maxw), calc((100dvh - var(--chrome)) * var(--arw) / var(--arh)));
   margin: 0 auto;
   user-select: none;
   -webkit-user-select: none;
@@ -295,7 +307,12 @@ canvas { display: block; width: 100%; height: 100%; }
   z-index: 10;
   overflow-y: auto;
 }
-.overlay.hidden { opacity: 0; pointer-events: none; }
+.overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;                       /* tira o backdrop-filter do compositor */
+  transition: opacity 0.3s, visibility 0s 0.3s;
+}
 
 .overlay h2 {
   font-family: 'Orbitron', sans-serif;
@@ -383,12 +400,14 @@ canvas { display: block; width: 100%; height: 100%; }
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transition: transform 0.15s, box-shadow 0.15s;
 }
-.btn:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 0 32px rgba(255, 43, 214, 0.9),
-    0 8px 24px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+@media (hover: hover) {
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 0 32px rgba(255, 43, 214, 0.9),
+      0 8px 24px rgba(0, 0, 0, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
 }
 .btn:active { transform: translateY(0); }
 
@@ -446,14 +465,16 @@ canvas { display: block; width: 100%; height: 100%; }
   right: 14px;
   bottom: 14px;
   z-index: 15;
-  width: 132px;
-  height: 132px;
+  --k: 44px;
+  width: calc(var(--k) * 3);
+  height: calc(var(--k) * 3);
 }
 @media (pointer: coarse), (max-width: 700px) { .dpad { display: block; } }
+.overlay:not(.hidden) ~ .dpad { display: none; }
 .dpad button {
   position: absolute;
-  width: 44px;
-  height: 44px;
+  width: var(--k);
+  height: var(--k);
   border-radius: 12px;
   border: 1px solid rgba(0, 240, 255, 0.5);
   background: rgba(5, 0, 24, 0.6);
@@ -469,10 +490,11 @@ canvas { display: block; width: 100%; height: 100%; }
   padding: 0;
 }
 .dpad button:active { background: rgba(0, 240, 255, 0.25); }
-.dpad .up    { top: 0; left: 44px; }
-.dpad .left  { top: 44px; left: 0; }
-.dpad .right { top: 44px; left: 88px; }
-.dpad .down  { top: 88px; left: 44px; }
+.dpad .up    { top: 0; left: var(--k); }
+.dpad .left  { top: var(--k); left: 0; }
+.dpad .right { top: var(--k); left: calc(var(--k) * 2); }
+.dpad .down  { top: calc(var(--k) * 2); left: var(--k); }
+@media (pointer: coarse) { .dpad { --k: 52px; } }
 
 /* ── Arcade hub ───────────────────────────────────── */
 .arcade-tiles {
@@ -480,7 +502,7 @@ canvas { display: block; width: 100%; height: 100%; }
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 18px;
 }
-.tile { position: relative; border-radius: 18px; padding: 2.5px; overflow: hidden; }
+.tile { position: relative; border-radius: 18px; padding: 2.5px; overflow: hidden; text-decoration: none; }
 .tile::before {
   content: '';
   position: absolute;
@@ -506,7 +528,7 @@ canvas { display: block; width: 100%; height: 100%; }
   justify-content: center;
   transition: transform 0.2s;
 }
-.tile:hover .inner { transform: translateY(-3px); }
+@media (hover: hover) { .tile:hover .inner { transform: translateY(-3px); } }
 
 .tile .t-emoji {
   font-size: 44px;
@@ -541,7 +563,8 @@ canvas { display: block; width: 100%; height: 100%; }
   opacity: 0;
   transition: opacity 0.2s;
 }
-.tile:hover .t-go { opacity: 1; }
+@media (hover: hover) { .tile:hover .t-go { opacity: 1; } }
+@media (hover: none) { .tile .t-go { opacity: 1; } }   /* no touch nao existe hover */
 
 /* ── Footer ───────────────────────────────────────── */
 footer {
@@ -555,7 +578,21 @@ footer {
 }
 footer a { color: var(--neon-cyan); text-decoration: none; }
 
-@media (max-width: 640px) {
+@media (max-width: 700px) {
+  .app {
+    padding: 10px max(10px, env(safe-area-inset-right)) 24px max(10px, env(safe-area-inset-left));
+    gap: 12px;
+  }
+  .brand h1 { font-size: clamp(24px, 7vw, 34px); }
+  .brand .tag { font-size: 10px; letter-spacing: 0.2em; }
+  .stage { --chrome: 200px; }
+  .sound-toggle { width: 48px; height: 48px; font-size: 19px; }
+  .overlay { padding: 14px 12px; }
+  .overlay h2 { font-size: clamp(22px, 6.5vw, 30px); margin-bottom: 8px; }
+  .overlay p { font-size: 11.5px; line-height: 1.45; margin-bottom: 10px; }
+  .overlay .sub { margin-bottom: 12px; }
+  .btn { padding: 13px 30px; }
+  .controls-hint { margin-top: 10px; gap: 5px; }
   .dashboard { gap: 2px; padding: 10px 8px; }
   .stat .val { font-size: 18px; }
   .stat .lbl { font-size: 8px; }
@@ -563,4 +600,20 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
   .legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .arcade-tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
   .tile .t-emoji { font-size: 32px; }
+}
+
+/* ── Celular deitado: o cromo some pra sobrar tela pro jogo ─────────── */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app { padding: 6px max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left)); gap: 8px; }
+  .brand h1 { font-size: 20px; }
+  .brand .tag, footer, .legend { display: none; }
+  .dashboard { padding: 5px 10px; }
+  .stat .val { font-size: 15px; }
+  .stat .lbl { font-size: 7px; margin-bottom: 1px; }
+  .stage { --chrome: 118px; }
+  .overlay { padding: 10px; }
+  .overlay h2 { font-size: 26px; margin-bottom: 6px; }
+  .overlay p { font-size: 11px; line-height: 1.4; margin-bottom: 8px; }
+  .final-stats { margin-bottom: 10px; }
+  .controls-hint { margin-top: 8px; }
 }
