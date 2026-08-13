@@ -1,0 +1,32 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+
+# duas pushes seguidas nao podem brigar pelo mesmo numero de tag
+concurrency: release
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # precisa das tags pra numerar o release do dia
+
+      - name: Teste
+        run: node test-games.js
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # CalVer: v2026.08.13, e v2026.08.13.1, .2... se sair mais de um no dia
+          tag="v$(date -u +%Y.%m.%d)"
+          n=$(git tag -l "$tag" "$tag.*" | wc -l | tr -d ' ')
+          if [ "$n" -gt 0 ]; then tag="$tag.$n"; fi
+          gh release create "$tag" --title "$tag" --generate-notes --target "$GITHUB_SHA"
