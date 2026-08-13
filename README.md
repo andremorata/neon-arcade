@@ -5,6 +5,9 @@ dependências, sem backend — cada jogo é um único arquivo `.html` que roda d
 
 Jogos: Serpent (snake), Blocks (tetris), Pong, Simon, Asteroid, Flappy, 2048, Mines, Whack.
 
+**▶ Jogue agora: https://andremorata.github.io/neon-arcade/** — funciona no desktop e no celular,
+nada pra instalar.
+
 ## Requisitos
 
 - Um navegador moderno (WebAudio + Canvas 2D).
@@ -13,7 +16,8 @@ Jogos: Serpent (snake), Blocks (tetris), Pong, Simon, Asteroid, Flappy, 2048, Mi
 
 ## Rodando
 
-Abrir `index.html` no navegador funciona. Para evitar diferenças de comportamento
+Para jogar basta abrir <https://andremorata.github.io/neon-arcade/> (GitHub Pages, servido da
+`main`). Para mexer no código, abrir `index.html` no navegador funciona. Para evitar diferenças de comportamento
 com `file://`, prefira um servidor local:
 
 ```bash
