@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NEON ARCHER — Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  /* cursor fica visivel pra posicionar a mao antes do tiro; some quando o reticulo assume */
+  .stage { --arw: 3; --arh: 2; --maxw: 900px; cursor: crosshair; }
+  .stage.aiming { cursor: none; }
+  .stage .overlay { cursor: auto; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON ARCHER</h1></a>
+      <div class="tag">// | Besta pesada · mira com inércia · vento | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Rodada</span><span class="val" id="round">1</span></div>
+    <div class="stat"><span class="lbl">Você</span><span class="val" id="you">0</span></div>
+    <div class="stat"><span class="lbl">Bot</span><span class="val" id="bot">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="archer">0</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <div class="toast" id="toast">🏆 NOVO RECORDE!</div>
+    <canvas id="game" width="900" height="600"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON ARCHER</h2>
+      <p id="overlayText">Segure o botão: a besta carrega e a mira aparece — num lugar diferente a cada tiro. Arraste para levá-la até o alvo, mas ela é pesada, atrasa e passa do ponto se você jogar rápido. Solte antes da carga encher: cheia, a mão começa a tremer. Carga fraca deixa o virote cair e o vento empurra pro lado.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Seus pontos</span><b id="fsYou">0</b></div>
+        <div class="fstat"><span>Bot</span><b id="fsBot" class="pink">0</b></div>
+        <div class="fstat"><span>Melhor flecha</span><b id="fsBest" class="gold">0</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">Segurar + mover</span><span class="key">Toque e arraste</span><span class="key">SPACE</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · 5 rodadas de 3 virotes contra o bot · centro vale 10 · carga cheia voa reto · corrija o vento</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 900, H = 600;
+
+  // ── cenario ───────────────────────────────────────
+  const HY = 268, VPX = 450, VPY = 268;            // horizonte e ponto de fuga
+  const TX = 450, TY = 226, TR = 82;               // alvo la no fundo
+
+  // ── regras ────────────────────────────────────────
+  const ROUNDS = 5, ARROWS = 3;
+  // Carga lenta de proposito: esses 3.5s sao a janela pra ajustar a mira com calma. Passou
+  // da carga cheia, comeca o tremor e ai fica dificil — e essa a tensao do tiro.
+  const DRAW_T = 3.5;                              // segundos ate a carga cheia
+  const FATIGUE_T = 1.8;                           // depois da carga cheia, a mao comeca a tremer
+  const FATIGUE_MAX = 17;                          // px de tremor no pico
+  // Deriva do braco. Nunca zera: sem isso a mola assenta exata no centro e ficar parado
+  // com o mouse acerta 10 toda vez. E ela que faz a mira nunca "travar" no alvo.
+  const SWAY = 10, SWAY_DRAW = 24;                 // px de deriva no comeco da carga e no cheio
+  const DRAW_DRAG = 0.45;                          // besta carregada responde mais devagar ao mouse
+  // Mira relativa (estilo mouse-look), nao absoluta. Com mira absoluta o reticulo voltaria
+  // sozinho pro ponto do mouse e sortear a posicao inicial nao adiantaria nada.
+  const AIM_SENS = 1.15;
+  const START_MIN = 70, START_MAX = 150;           // a mira nasce a essa distancia do centro
+  const FLIGHT = 0.55;
+  const DROP_K = 55;                               // queda do virote com carga fraca
+  const WIND_MAX = 1.6, WIND_PX = 30;              // vento: forca sorteada e px de desvio por unidade
+  // mola subamortecida: a mira arrasta atras do mouse e passa do ponto em movimento rapido.
+  // ponytail: K e DAMP sao o "peso" do arco. Mexer nesses dois numeros e o unico ajuste
+  // de dificuldade da mira — nao precisa de mais nada.
+  const K = 38, DAMP = 0.90;
+  // bot de dificuldade media, com rubber band mais suave que o do Darts
+  const BOT_SIGMA = 26, BOT_K = 0.55, BOT_MIN = 12, BOT_MAX = 44, BOT_AIM_T = 0.9;
+
+  const CYAN = '#00f0ff', MAGENTA = '#ff2bd6', GOLD = '#ffd700', GREEN = '#39ff7a', RED = '#ff3b5c';
+
+  const els = {
+    round: Neon.$('round'), you: Neon.$('you'), bot: Neon.$('bot'), best: Neon.$('best'),
+    fsYou: Neon.$('fsYou'), fsBot: Neon.$('fsBot'), fsBest: Neon.$('fsBest'), stage: Neon.$('stage'),
+  };
+
+  let state = 'menu', resumeState = 'aim', turn = 'player';
+  let round = 1, arrowsLeft = ARROWS;
+  let youScore = 0, botScore = 0, bestArrow = 0, pb = 0, startHi = 0, recordShown = false;
+  const want = { x: TX, y: TY };                   // pra onde o mouse aponta
+  const aim = { x: TX, y: TY, vx: 0, vy: 0 };      // onde a mira realmente esta
+  let drawing = false, draw = 0, holdT = 0, shakeX = 0, shakeY = 0;
+  let arrow = null, botAim = null, phaseT = 0, lastLabel = '', wind = 0;
+  let stuck = [], pops = [];
+  let tPlay = 0, lastFrame = performance.now();
+  const particles = new Neon.Particles();
+  pb = Neon.best.get('archer');
+
+  const ringScore = (x, y) => {
+    const d = Math.hypot(x - TX, y - TY);
+    if (d > TR) return 0;
+    return Math.min(10, Math.max(1, 11 - Math.ceil(d / (TR / 10))));
+  };
+  const ringColor = s => s >= 9 ? GOLD : s >= 7 ? RED : s >= 5 ? CYAN : s >= 3 ? '#9b30ff' : '#8ea3c0';
+
+  // ── fundo pre-renderizado (ceu + sol + cidade + grid + alvo nao mudam) ──
+  const scene = document.createElement('canvas');
+  scene.width = W; scene.height = H;
+  const sctx = scene.getContext('2d');
+
+  function drawScene(b) {
+    b.clearRect(0, 0, W, H);
+
+    // ceu
+    const sky = b.createLinearGradient(0, 0, 0, HY);
+    sky.addColorStop(0, '#100033');
+    sky.addColorStop(0.55, '#3d0a5c');
+    sky.addColorStop(1, '#8a1a6b');
+    b.fillStyle = sky;
+    b.fillRect(0, 0, W, HY);
+
+    // sol neon com as fatias classicas
+    b.save();
+    b.beginPath(); b.rect(0, 0, W, HY); b.clip();
+    // grande de proposito: o alvo fica na frente, entao o sol tem que sobrar como halo
+    const SR = 172, SY = HY - 10;
+    const sun = b.createLinearGradient(0, SY - SR, 0, SY + SR);
+    sun.addColorStop(0, '#ffe600');
+    sun.addColorStop(0.45, '#ff8c1a');
+    sun.addColorStop(1, '#ff2bd6');
+    b.fillStyle = sun;
+    b.shadowColor = '#ff8c1a'; b.shadowBlur = 70;
+    b.beginPath(); b.arc(VPX, SY, SR, 0, Math.PI * 2); b.fill();
+    b.shadowBlur = 0;
+    b.fillStyle = sky;                                     // fatias: barras da cor do ceu
+    for (let i = 0; i < 8; i++) {
+      const y = SY - SR * 0.12 + i * 20;
+      b.fillRect(VPX - SR, y, SR * 2, 3 + i * 1.9);
+    }
+    b.restore();
+
+    // skyline
+    b.save();
+    b.beginPath(); b.rect(0, 0, W, HY); b.clip();
+    let bx = -40;
+    const seed = [70, 130, 46, 96, 160, 58, 112, 78, 142, 62, 122, 88, 150, 54, 104, 134, 74, 118, 60, 96];
+    for (let i = 0; bx < W + 40; i++) {
+      const bw = 34 + (seed[i % seed.length] % 5) * 11;
+      const bh = seed[i % seed.length];
+      b.fillStyle = '#12002e';
+      b.fillRect(bx, HY - bh, bw, bh);
+      b.strokeStyle = 'rgba(0, 240, 255, 0.28)';
+      b.lineWidth = 1;
+      b.strokeRect(bx + 0.5, HY - bh + 0.5, bw - 1, bh);
+      b.fillStyle = 'rgba(0, 240, 255, 0.5)';              // janelas
+      for (let wy = HY - bh + 8; wy < HY - 6; wy += 11) {
+        for (let wx = bx + 5; wx < bx + bw - 5; wx += 9) {
+          if ((wx * 7 + wy * 13 + i * 31) % 5 < 2) b.fillRect(wx, wy, 3, 4);
+        }
+      }
+      bx += bw + 8;
+    }
+    b.restore();
+
+    // chao
+    b.fillStyle = '#0a0122';
+    b.fillRect(0, HY, W, H - HY);
+
+    // grid em fuga
+    b.strokeStyle = 'rgba(255, 43, 214, 0.45)';
+    b.lineWidth = 1.5;
+    b.shadowColor = MAGENTA; b.shadowBlur = 8;
+    for (let i = 1; i <= 20; i++) {
+      const t = i / 20, y = HY + (H - HY) * t * t;
+      b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke();
+    }
+    b.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+    b.shadowColor = CYAN;
+    for (let i = -12; i <= 12; i++) {
+      b.beginPath();
+      b.moveTo(VPX, VPY);
+      b.lineTo(VPX + i * 150, H);
+      b.stroke();
+    }
+    b.shadowBlur = 0;
+
+    // linha do horizonte
+    b.strokeStyle = CYAN;
+    b.lineWidth = 2;
+    b.shadowColor = CYAN; b.shadowBlur = 16;
+    b.beginPath(); b.moveTo(0, HY); b.lineTo(W, HY); b.stroke();
+    b.shadowBlur = 0;
+
+    // poste do alvo
+    b.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+    b.lineWidth = 5;
+    b.beginPath(); b.moveTo(TX, TY); b.lineTo(TX, HY + 46); b.stroke();
+
+    // alvo: 10 aneis, do maior pro menor
+    b.shadowColor = GOLD; b.shadowBlur = 22;
+    b.beginPath(); b.arc(TX, TY, TR + 7, 0, Math.PI * 2);
+    b.fillStyle = '#05001a'; b.fill();
+    b.shadowBlur = 0;
+    for (let s = 1; s <= 10; s++) {
+      b.beginPath();
+      b.arc(TX, TY, TR * (11 - s) / 10, 0, Math.PI * 2);
+      b.fillStyle = ringColor(s);
+      b.globalAlpha = s >= 9 ? 1 : 0.82;
+      b.fill();
+    }
+    b.globalAlpha = 1;
+    b.strokeStyle = 'rgba(5, 0, 26, 0.55)';
+    b.lineWidth = 1;
+    for (let s = 1; s <= 9; s++) {
+      b.beginPath(); b.arc(TX, TY, TR * (11 - s) / 10, 0, Math.PI * 2); b.stroke();
+    }
+    b.strokeStyle = CYAN;
+    b.lineWidth = 2;
+    b.shadowColor = CYAN; b.shadowBlur = 18;
+    b.beginPath(); b.arc(TX, TY, TR + 7, 0, Math.PI * 2); b.stroke();
+    b.shadowBlur = 0;
+  }
+  drawScene(sctx);
+
+  // ── fluxo ─────────────────────────────────────────
+  function resetRun() {
+    round = 1; turn = 'player'; arrowsLeft = ARROWS;
+    youScore = 0; botScore = 0; bestArrow = 0;
+    recordShown = false; lastLabel = '';
+    arrow = null; botAim = null;
+    setDrawing(false); draw = 0; holdT = 0; shakeX = 0; shakeY = 0;
+    aim.x = want.x = TX; aim.y = want.y = TY; aim.vx = aim.vy = 0;
+    stuck = []; pops = [];
+    particles.clear();
+    rollWind();
+    els.round.textContent = '1';
+    els.you.textContent = '0';
+    els.bot.textContent = '0';
+    els.best.textContent = pb;
+  }
+
+  function startGame() {
+    Neon.audio.ensure();
+    startHi = pb;
+    resetRun();
+    randomAim();                                           // o primeiro tiro tambem sorteia
+    state = 'aim';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    resumeState = state;
+    state = 'paused';
+    setDrawing(false); draw = 0; holdT = 0;
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P para voltar ao campo.', 'RESUME');
+  }
+  function resumeGame() {
+    state = resumeState;
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 2;
+  const rollWind = () => { wind = Neon.rand(-WIND_MAX, WIND_MAX); };
+
+  function beginBotAim() {
+    const lead = youScore - botScore;
+    const sigma = Neon.clamp(BOT_SIGMA - lead * BOT_K, BOT_MIN, BOT_MAX);
+    // o bot corrige o vento, mas so 80% dele — senao vento vira desvantagem so do jogador
+    botAim = { x: TX - wind * WIND_PX * 0.8 + gauss() * sigma, y: TY + gauss() * sigma };
+    phaseT = BOT_AIM_T;
+    state = 'botAim';
+  }
+
+  // Cada tiro nasce com a mira sorteada em volta do alvo. Sem isso, acertar um 10 e so
+  // apertar de novo — a mira ficaria parada no mesmo lugar e o segundo tiro seria de graca.
+  function randomAim() {
+    const a = Neon.rand(0, Math.PI * 2), r = Neon.rand(START_MIN, START_MAX);
+    want.x = Neon.clamp(TX + Math.cos(a) * r, 60, W - 60);
+    want.y = Neon.clamp(TY + Math.sin(a) * r, 60, H - 170);
+    aim.x = want.x; aim.y = want.y; aim.vx = aim.vy = 0;
+    setDrawing(false); draw = 0; holdT = 0; shakeX = shakeY = 0;
+  }
+
+  function startTurn(who) {
+    turn = who;
+    arrowsLeft = ARROWS;
+    stuck = [];
+    if (who === 'player') {
+      randomAim();
+      state = 'aim';
+    } else {
+      beginBotAim();
+    }
+  }
+
+  function shoot(sx, sy, power) {
+    arrowsLeft--;
+    const drop = DROP_K * (1 - power) / power;
+    const drift = wind * WIND_PX;
+    arrow = { sx, sy, ix: sx + drift, iy: sy + drop, drop, drift, t: 0 };
+    Neon.audio.sfx.shoot();
+    particles.burst(sx, sy, CYAN, 10, 150, 2.4);
+    setDrawing(false); draw = 0; holdT = 0; shakeX = shakeY = 0;
+    state = 'flight';
+  }
+
+  // reto no comeco, entortando no fim: queda e vento entram como termo quadratico
+  function arrowPos(a, t) {
+    return {
+      x: a.sx + (a.ix - a.drift - a.sx) * t + a.drift * t * t,
+      y: a.sy + (a.iy - a.drop - a.sy) * t + a.drop * t * t,
+    };
+  }
+
+  function land() {
+    const s = ringScore(arrow.ix, arrow.iy);
+    stuck.push({ x: arrow.ix, y: arrow.iy, spin: Neon.rand(0, Math.PI * 2) });
+    lastLabel = s === 0 ? 'ERROU' : s === 10 ? 'CHEIO! 10' : String(s);
+
+    if (turn === 'player') {
+      youScore += s;
+      bestArrow = Math.max(bestArrow, s);
+      els.you.textContent = youScore;
+      Neon.popEl(els.you);
+    } else {
+      botScore += s;
+      els.bot.textContent = botScore;
+      Neon.popEl(els.bot);
+    }
+
+    if (s === 0) Neon.audio.sfx.wrong();
+    else if (s === 10) { Neon.audio.sfx.golden(); Neon.audio.sfx.boost(); }
+    else if (s >= 8) Neon.audio.sfx.golden();
+    else Neon.audio.sfx.hit();
+
+    particles.burst(arrow.ix, arrow.iy, s ? ringColor(s) : '#8ea3c0', s >= 9 ? 22 : 10, s >= 9 ? 190 : 110, 2.4);
+    pops.push({ x: arrow.ix, y: arrow.iy, text: lastLabel, v: s, color: s ? ringColor(s) : RED, t: 1 });
+
+    if (turn === 'player') checkRecord();
+    phaseT = (arrowsLeft === 0 ? 1.3 : 0.85) * (turn === 'player' ? 1 : 0.8);
+    state = 'resolve';
+  }
+
+  function afterArrow() {
+    arrow = null;
+    if (arrowsLeft > 0) {
+      if (turn === 'player') { randomAim(); state = 'aim'; } else beginBotAim();
+      return;
+    }
+    if (turn === 'player') { startTurn('bot'); return; }
+    round++;
+    if (round > ROUNDS) { gameOver(); return; }
+    rollWind();                                            // vento novo a cada rodada
+    els.round.textContent = round;
+    Neon.popEl(els.round);
+    Neon.audio.sfx.level();
+    startTurn('player');
+  }
+
+  function checkRecord() {
+    if (recordShown || pb <= 0 || youScore <= pb) return;
+    recordShown = true;
+    Neon.toast('🏆 NOVO RECORDE!');
+    Neon.audio.sfx.record();
+  }
+
+  function gameOver() {
+    state = 'gameover';
+    pb = Neon.best.update('archer', youScore);
+    els.best.textContent = pb;
+    const won = youScore > botScore, tie = youScore === botScore;
+    const isRecord = startHi === 0 ? youScore > 0 : youScore > startHi;
+    if (won) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    els.fsYou.textContent = youScore;
+    els.fsBot.textContent = botScore;
+    els.fsBest.textContent = bestArrow;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(
+      won ? 'VOCÊ VENCEU!' : tie ? 'EMPATE!' : 'O BOT VENCEU!',
+      won ? `${youScore} a ${botScore}. Mão firme.`
+        : tie ? `${youScore} a ${botScore}. Ninguém levou.`
+        : `${botScore} a ${youScore}. Revanche?`,
+      'JOGAR DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  // ── input ─────────────────────────────────────────
+  const canAim = () => state === 'aim' && turn === 'player';
+
+  // um lugar so pra ligar/desligar a carga, senao o cursor escapa dessincronizado
+  function setDrawing(v) {
+    if (drawing === v) return;
+    drawing = v;
+    els.stage.classList.toggle('aiming', v);
+  }
+
+  function toCanvas(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+  }
+
+  function press() {
+    if (state === 'menu' || state === 'gameover') { startGame(); return; }
+    if (state === 'paused') { resumeGame(); return; }
+    if (canAim() && !drawing) { setDrawing(true); draw = 0; holdT = 0; Neon.audio.sfx.rotate(); }
+  }
+  function release() {
+    if (!canAim() || !drawing) { setDrawing(false); return; }
+    const power = 0.35 + 0.65 * draw;
+    shoot(aim.x + shakeX, aim.y + shakeY, power);
+  }
+
+  let lastPtr = null;
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle')) return;
+    lastPtr = toCanvas(e);                // ancora do arrasto, sem teleportar a mira
+    press();
+  });
+  // Deslocamento, nao posicao: a mira anda o quanto o ponteiro andou. So vale carregando —
+  // antes de apertar o reticulo nem aparece, entao mexer o mouse ali nao faria sentido.
+  // Escuta na window, nao no quadro: sair do canvas no meio do tiro nao pode matar a mira.
+  window.addEventListener('pointermove', (e) => {
+    const p = toCanvas(e);
+    if (lastPtr && drawing && canAim()) {
+      want.x = Neon.clamp(want.x + (p.x - lastPtr.x) * AIM_SENS, 30, W - 30);
+      want.y = Neon.clamp(want.y + (p.y - lastPtr.y) * AIM_SENS, 30, H - 130);
+    }
+    lastPtr = p;
+  });
+  // saiu da janela inteira: zera a ancora, senao o primeiro delta na volta joga a mira longe
+  document.addEventListener('pointerleave', () => { lastPtr = null; });
+  window.addEventListener('pointerup', release);
+  els.stage.addEventListener('pointercancel', release);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); press(); return; }
+    if (e.key === 'p' || e.key === 'P') {
+      if (state === 'paused') resumeGame();
+      else if (state !== 'menu' && state !== 'gameover') pauseGame();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    if (e.key === ' ' || e.key === 'Enter') release();
+  });
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame(); else startGame();
+  });
+  Neon.onHide(() => { if (state !== 'menu' && state !== 'gameover' && state !== 'paused') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    tPlay += dt;
+    particles.update(dt);
+    for (let i = pops.length - 1; i >= 0; i--) {
+      pops[i].t -= dt;
+      if (pops[i].t <= 0) pops.splice(i, 1);
+    }
+
+    if (state === 'aim') {
+      if (!drawing) return;                                // mira so ganha vida ao carregar
+      // mola: puxa a mira pro ponteiro, mas com peso — atrasa e passa do ponto.
+      // com a besta carregada ela fica ainda mais lenta pra corrigir.
+      const k = K * (1 - DRAW_DRAG * draw);
+      aim.vx += (want.x - aim.x) * k * dt;
+      aim.vy += (want.y - aim.y) * k * dt;
+      const damp = Math.pow(DAMP, dt * 60);
+      aim.vx *= damp; aim.vy *= damp;
+      aim.x += aim.vx * dt;
+      aim.y += aim.vy * dt;
+
+      if (drawing) {
+        draw = Math.min(1, draw + dt / DRAW_T);
+        if (draw >= 1) holdT += dt;
+      }
+
+      // deriva lenta do braco: some do centro sozinha, tem que soltar na hora certa
+      const amp = SWAY + (SWAY_DRAW - SWAY) * draw;
+      shakeX = (Math.sin(tPlay * 1.13) * 0.62 + Math.sin(tPlay * 2.37 + 1.1) * 0.38) * amp;
+      shakeY = (Math.sin(tPlay * 0.91 + 2.2) * 0.62 + Math.sin(tPlay * 1.87 + 0.4) * 0.38) * amp;
+      if (holdT > 0) {                                     // tremor de cansaco por cima
+        const f = Math.min(1, holdT / FATIGUE_T) * FATIGUE_MAX;
+        shakeX += (Math.sin(tPlay * 21.3) + Math.sin(tPlay * 13.7)) * 0.5 * f;
+        shakeY += (Math.sin(tPlay * 17.9) + Math.sin(tPlay * 11.1)) * 0.5 * f;
+      }
+      return;
+    }
+    if (state === 'botAim') {
+      phaseT -= dt;
+      if (phaseT <= 0) shoot(botAim.x, botAim.y, 1);
+      return;
+    }
+    if (state === 'flight') {
+      arrow.t = Math.min(1, arrow.t + dt / FLIGHT);
+      const p = arrowPos(arrow, arrow.t);
+      particles.emit(p.x, p.y, Neon.rand(-25, 25), Neon.rand(-25, 25),
+        turn === 'player' ? CYAN : RED, Neon.rand(1.4, 3), Neon.rand(0.12, 0.28));
+      if (arrow.t >= 1) land();
+      return;
+    }
+    if (state === 'resolve') {
+      phaseT -= dt;
+      if (phaseT <= 0) afterArrow();
+    }
+  }
+
+  // ── render ────────────────────────────────────────
+  function drawStuckArrow(a) {
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    Neon.glow(ctx, GREEN, 10);
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = GREEN;                                 // empena vista de frente
+    for (let i = 0; i < 3; i++) {
+      const ang = a.spin + i * Math.PI * 2 / 3;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(ang) * 8, Math.sin(ang) * 8);
+      ctx.lineTo(Math.cos(ang + 0.6) * 4.5, Math.sin(ang + 0.6) * 4.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Besta de mao em primeira pessoa. Vista de tras ela e simetrica — nao sofre o
+  // encurtamento que faz um arco visto de frente virar um risco. A coronha nasce fora da
+  // tela, embaixo, e a arma inteira aponta pro ponto de mira: tudo e desenhado num quadro
+  // girado onde +x vai da coronha ate a mira, entao a arma acompanha a mira sozinha.
+  // Carregar nao mexe na corda (besta ja fica armada) — sobe energia pelo trilho.
+  // Besta de mao cravada no canto inferior direito, grande e cortada pelas bordas — e assim
+  // que jogo de tiro em primeira pessoa mostra a arma. Ela NAO segue o reticulo: so faz uma
+  // parallax leve. Tentar centrar a arma na mira achata ela num triangulo fino, porque um
+  // objeto simetrico apontando pra longe nao tem silhueta. Cortar na borda resolve isso.
+  const BOW_X = 796, BOW_Y = 448, BOW_ANG = -2.36, BOW_SCALE = 1.45;
+  function drawCrossbow(ax, ay, d) {
+    const full = d >= 1;
+    const col = full ? GOLD : CYAN;
+    const kick = full ? Math.sin(tPlay * 30) * 1.5 : 0;     // vibra de leve carregada
+
+    ctx.save();
+    // parallax: acompanha a mira de longe, sem grudar nela
+    ctx.translate(BOW_X + (ax - TX) * 0.07, BOW_Y + (ay - TY) * 0.07 + kick);
+    ctx.rotate(BOW_ANG + (ax - TX) * 0.00012);
+    ctx.scale(BOW_SCALE, BOW_SCALE);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // coronha e trilho: corpo unico saindo de fora da tela ate a ponta
+    ctx.beginPath();
+    ctx.moveTo(-210, -30);
+    ctx.lineTo(-40, -17);
+    ctx.lineTo(118, -9);
+    ctx.lineTo(118, 9);
+    ctx.lineTo(-40, 20);
+    ctx.lineTo(-210, 34);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(9, 2, 36, 0.95)';
+    ctx.fill();
+    Neon.glow(ctx, col, 16 + 10 * d);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    // punho, descendo pra fora da tela
+    ctx.beginPath();
+    ctx.moveTo(-150, 22);
+    ctx.lineTo(-96, 26);
+    ctx.lineTo(-118, 132);
+    ctx.lineTo(-176, 128);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(9, 2, 36, 0.95)';
+    ctx.fill();
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+
+    // energia percorrendo o trilho conforme carrega
+    if (d > 0) {
+      ctx.beginPath();
+      ctx.moveTo(-190, 2);
+      ctx.lineTo(-190 + 300 * d, 0);
+      ctx.strokeStyle = full ? '#fff2a8' : '#7ae7ff';
+      ctx.lineWidth = 6;
+      Neon.glow(ctx, full ? GOLD : CYAN, 20);
+      ctx.stroke();
+    }
+
+    // arco da besta: dois bracos varrendo pra tras
+    ctx.strokeStyle = full ? GOLD : MAGENTA;
+    ctx.lineWidth = 12;
+    Neon.glow(ctx, full ? GOLD : MAGENTA, 20);
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(24, s * 6);
+      ctx.quadraticCurveTo(2, s * 74, -46, s * 116);
+      ctx.stroke();
+    }
+
+    // corda armada, das pontas ate o nock
+    ctx.strokeStyle = 'rgba(234, 246, 255, 0.95)';
+    ctx.lineWidth = 3;
+    Neon.glow(ctx, '#eaf6ff', 10);
+    ctx.beginPath();
+    ctx.moveTo(-46, -116); ctx.lineTo(-88, 0); ctx.lineTo(-46, 116);
+    ctx.stroke();
+
+    // virote no trilho
+    ctx.strokeStyle = full ? '#fff2a8' : '#eaf6ff';
+    ctx.lineWidth = 6;
+    Neon.glow(ctx, col, 14);
+    ctx.beginPath(); ctx.moveTo(-88, 0); ctx.lineTo(104, 0); ctx.stroke();
+    ctx.fillStyle = full ? GOLD : CYAN;                    // ponta do virote
+    ctx.beginPath();
+    ctx.moveTo(126, 0); ctx.lineTo(102, -7); ctx.lineTo(102, 7);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // fio de luz ate o reticulo — so com a besta carregando, senao entregaria a mira
+    if (d <= 0) return;
+    ctx.save();
+    ctx.strokeStyle = col;
+    ctx.globalAlpha = 0.18 + 0.32 * d;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 7]);
+    ctx.beginPath();
+    ctx.moveTo(BOW_X - 120, BOW_Y - 120);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawReticle(cx, cy, color, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    Neon.glow(ctx, color, 12);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      ctx.moveTo(cx + dx * 17, cy + dy * 17);
+      ctx.lineTo(cx + dx * 6, cy + dy * 6);
+    }
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawFlyingArrow() {
+    const p = arrowPos(arrow, arrow.t);
+    const q = arrowPos(arrow, Math.max(0, arrow.t - 0.06));
+    const ang = Math.atan2(p.y - q.y, p.x - q.x);
+    const sc = 1.5 - 1.32 * arrow.t;                       // encolhe indo pro fundo
+    const col = turn === 'player' ? CYAN : RED;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang);
+    ctx.scale(sc, sc);
+    Neon.glow(ctx, col, 14);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-30, 0); ctx.lineTo(10, 0); ctx.stroke();
+    ctx.fillStyle = '#eaf6ff';
+    ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(8, -3); ctx.lineTo(8, 3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = col;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(-30, 0); ctx.lineTo(-38, 8 * s); ctx.lineTo(-21, 3.5 * s); ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // indicador de vento: seta cresce com a forca e aponta pro lado que empurra o virote
+  function drawWind() {
+    const strong = Math.abs(wind) > 1;
+    const col = strong ? RED : CYAN;
+    const w = 150, x = VPX - w / 2, y = 22, h = 32;
+    ctx.save();
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.78)';
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, 16); else ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+
+    const dir = Math.sign(wind) || 1;
+    const len = 14 + Math.abs(wind) / WIND_MAX * 22;
+    const cx = x + 34, cy = y + h / 2;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 3;
+    Neon.glow(ctx, col, 10);
+    ctx.beginPath();
+    ctx.moveTo(cx - dir * len / 2, cy);
+    ctx.lineTo(cx + dir * len / 2, cy);
+    ctx.moveTo(cx + dir * len / 2, cy);
+    ctx.lineTo(cx + dir * (len / 2 - 7), cy - 5);
+    ctx.moveTo(cx + dir * len / 2, cy);
+    ctx.lineTo(cx + dir * (len / 2 - 7), cy + 5);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    ctx.textAlign = 'left';
+    ctx.font = '700 10px "Orbitron", "Space Mono", monospace';
+    ctx.fillStyle = 'rgba(234, 246, 255, 0.6)';
+    ctx.fillText('VENTO', x + 62, cy - 3);
+    ctx.font = '900 15px "Orbitron", "Space Mono", monospace';
+    ctx.fillStyle = col;
+    ctx.fillText(Math.abs(wind).toFixed(1), x + 62, cy + 12);
+    ctx.restore();
+  }
+
+  function drawPops() {
+    ctx.textAlign = 'center';
+    for (const p of pops) {
+      const rise = (1 - p.t) * 40;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, p.t * 2.5);
+      ctx.fillStyle = p.color;
+      Neon.glow(ctx, p.color, 16);
+      ctx.font = '900 30px "Orbitron", "Space Mono", monospace';
+      ctx.fillText(p.text, p.x, p.y - 26 - rise);
+      ctx.restore();
+    }
+    ctx.textAlign = 'left';
+  }
+
+  function statusText() {
+    if (state === 'aim') {
+      if (!drawing) return 'SEGURE PARA CARREGAR — A MIRA APARECE';
+      if (draw < 1) return 'ARRASTE PARA MIRAR';
+      return holdT > FATIGUE_T * 0.45 ? 'A MÃO ESTÁ TREMENDO — SOLTE!' : 'SOLTE PARA ATIRAR';
+    }
+    if (state === 'botAim') return 'O BOT ESTÁ ARMANDO...';
+    if (state === 'flight') return turn === 'player' ? 'FLECHA NO AR' : 'FLECHA DO BOT';
+    if (state === 'resolve') return lastLabel === 'ERROU' ? 'FORA DO ALVO' : lastLabel;
+    if (state === 'paused') return 'PAUSADO';
+    return '';
+  }
+
+  function drawPanel() {
+    const yl = H - 84, yv = H - 52;
+    const pActive = turn === 'player', live = state !== 'menu' && state !== 'gameover';
+
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.72)';
+    ctx.fillRect(0, H - 116, W, 116);
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H - 116); ctx.lineTo(W, H - 116); ctx.stroke();
+
+    for (const side of ['you', 'bot']) {
+      const isYou = side === 'you';
+      const on = live && (isYou ? pActive : !pActive);
+      const color = isYou ? MAGENTA : GOLD;
+      ctx.textAlign = isYou ? 'left' : 'right';
+      const x = isYou ? 46 : W - 46;
+      ctx.font = '700 11px "Orbitron", "Space Mono", monospace';
+      ctx.fillStyle = on ? color : 'rgba(234, 246, 255, 0.4)';
+      ctx.fillText(isYou ? 'VOCÊ' : 'BOT', x, yl);
+      ctx.font = '900 36px "Orbitron", "Space Mono", monospace';
+      ctx.fillStyle = color;
+      Neon.glow(ctx, color, on ? 22 : 6);
+      ctx.fillText(isYou ? youScore : botScore, x, yv);
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.textAlign = 'center';
+    if (live) {
+      const color = pActive ? MAGENTA : GOLD;
+      for (let i = 0; i < ARROWS; i++) {
+        const x = VPX + (i - (ARROWS - 1) / 2) * 24;
+        const filled = i < arrowsLeft + (state === 'flight' || state === 'resolve' ? 1 : 0);
+        ctx.globalAlpha = filled ? 1 : 0.25;
+        ctx.fillStyle = color;
+        Neon.glow(ctx, color, filled ? 12 : 0);
+        Neon.circle(ctx, x, H - 96, 6);
+        ctx.shadowBlur = 0;
+      }
+      ctx.globalAlpha = 1;
+
+      // barra de armamento: enche ate o arco cheio, depois vira aviso de tremor
+      const bw = 200, bx = VPX - bw / 2, by = H - 74;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fillRect(bx, by, bw, 7);
+      const fat = Math.min(1, holdT / FATIGUE_T);
+      const barCol = draw < 1 ? CYAN : fat > 0.45 ? RED : GOLD;
+      ctx.fillStyle = barCol;
+      Neon.glow(ctx, barCol, 12);
+      ctx.fillRect(bx, by, bw * draw, 7);
+      ctx.shadowBlur = 0;
+      if (draw >= 1 && fat > 0) {                          // quanto ja se perdeu segurando
+        ctx.fillStyle = 'rgba(255, 59, 92, 0.85)';
+        ctx.fillRect(bx + bw * (1 - fat), by, bw * fat, 7);
+      }
+    }
+    ctx.font = '700 14px "Space Mono", monospace';
+    ctx.fillStyle = state === 'resolve'
+      ? (lastLabel === 'ERROU' ? RED : CYAN)
+      : (draw >= 1 && holdT > FATIGUE_T * 0.45 ? RED : 'rgba(234, 246, 255, 0.7)');
+    ctx.fillText(statusText(), VPX, H - 48);
+    ctx.textAlign = 'left';
+  }
+
+  function render() {
+    ctx.drawImage(scene, 0, 0);
+
+    for (const s of stuck) drawStuckArrow(s);
+
+    if (state === 'aim' && turn === 'player') {
+      const cx = aim.x + shakeX, cy = aim.y + shakeY;
+      drawCrossbow(cx, cy, draw);
+      // reticulo so aparece ao carregar: e ao ve-lo surgir num lugar novo que o jogador
+      // descobre pra onde tem que arrastar
+      if (drawing) drawReticle(cx, cy, draw >= 1 ? GOLD : CYAN, 0.95);
+    } else if (state === 'botAim') {
+      const k = 1 - Math.max(0, phaseT) / BOT_AIM_T;
+      const e = k * k * (3 - 2 * k);
+      drawReticle(TX + (botAim.x - TX) * e, TY + (botAim.y - TY) * e, RED, 0.5 + 0.5 * e);
+    }
+
+    if (arrow && state === 'flight') drawFlyingArrow();
+    particles.draw(ctx);
+    drawPops();
+    if (state !== 'menu' && state !== 'gameover') drawWind();
+    drawPanel();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    if (state !== 'menu' && state !== 'paused' && state !== 'gameover') update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  resetRun();
+  render();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
