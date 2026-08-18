@@ -1,13 +1,10 @@
 # NEON ARCADE
 
-Suíte de 11 jogos clássicos em HTML/Canvas com estética synthwave. Sem build, sem
+Suíte de jogos arcade em HTML/Canvas com estética synthwave. Sem build, sem
 dependências, sem backend — cada jogo é um único arquivo `.html` que roda direto no navegador.
 
-Jogos: Serpent (snake), Blocks (tetris), Pong, Simon, Asteroid, Flappy, 2048, Mines, Whack,
-Hoops (basquete flappy), Siege (estilingue com fases procedurais).
-
 **▶ Jogue agora: https://andremorata.github.io/neon-arcade/** — funciona no desktop e no celular,
-nada pra instalar.
+nada pra instalar. O catálogo completo é o próprio menu; ele se monta a partir de `games/`.
 
 ## Requisitos
 
@@ -32,9 +29,11 @@ python3 -m http.server 8000
 node test-games.js
 ```
 
-Verifica que os scripts de Pong, Flappy, Hoops e Siege avaliam sem erro de sintaxe, que a
-física de rebatida do Pong devolve a bola na direção certa, que Hoops e Siege atualizam o
-recorde, e que a duração do toast no CSS não regride.
+O teste varre `games/` sozinho: todo `.html` novo entra na checagem sem editar nada. Verifica
+que o script de cada jogo avalia sem erro de sintaxe e tem tile no menu, que a física de
+rebatida do Pong devolve a bola na direção certa, que a geometria do alvo do Darts pontua o
+setor/anel que desenha, que os jogos de placar crescente atualizam o recorde, e que a duração
+do toast no CSS não regride.
 
 ## Estrutura
 
@@ -45,6 +44,9 @@ assets/js/neon-core.js   núcleo compartilhado (window.Neon)
 assets/css/neon-theme.css tema, layout do stage, overlay, HUD, animações
 test-games.js            teste de regressão
 ```
+
+Um jogo novo = um arquivo em `games/` + uma entrada no array `GAMES` de `index.html`. Nada
+mais precisa ser tocado: menu, contagem e teste saem dessas duas fontes.
 
 `window.Neon` expõe: áudio sintetizado via WebAudio (`audio.sfx`, trilha procedural
 `audio.music`), sistema de partículas, overlay/HUD, recordes em `localStorage`
