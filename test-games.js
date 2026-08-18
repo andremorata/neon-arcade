@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore' };
 for (const [key, variable] of Object.entries(BEST)) {
   assert.match(games[key], new RegExp(`pb\\s*=\\s*Neon\\.best\\.update\\('${key}', ${variable}\\)`),
     `O ${key} deve atualizar o recorde em memória`);
@@ -80,6 +80,23 @@ assert.strictEqual(at(-90, 1.05).v, 0, 'Fora do alvo não pontua');
 for (const [i, expected] of [[1, 1], [5, 6], [10, 3], [15, 11], [19, 5]]) {
   assert.strictEqual(at(-90 + i * 18, 0.80).v, expected,
     `O setor ${i} do alvo deve valer ${expected}`);
+}
+
+// aneis do Archer: o ponto tem que cair de 10 no centro pra 1 na borda, e 0 fora
+const archer = games.archer;
+const arc = new Function(
+  archer.slice(archer.indexOf('  const HY = 268'), archer.indexOf('  const els = {')) +
+  block(archer, '  const ringScore = (x, y) => {') +
+  '; return { ringScore, TX, TY, TR };')();
+const ring = f => arc.ringScore(arc.TX + arc.TR * f, arc.TY);
+assert.strictEqual(ring(0), 10, 'O centro do alvo vale 10');
+assert.strictEqual(ring(0.05), 10, 'O anel central inteiro vale 10');
+assert.strictEqual(ring(0.15), 9, 'O segundo anel vale 9');
+assert.strictEqual(ring(0.5), 6, 'Metade do raio cai no anel 6');
+assert.strictEqual(ring(0.99), 1, 'A borda do alvo vale 1');
+assert.strictEqual(ring(1.2), 0, 'Fora do alvo não pontua');
+for (let f = 0; f <= 1; f += 0.02) {
+  assert.ok(ring(f) >= ring(f + 0.02), `A pontuação do Archer não pode subir indo pra fora (${f.toFixed(2)})`);
 }
 
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
