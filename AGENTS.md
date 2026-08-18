@@ -19,13 +19,13 @@ There is no linter, formatter, or type checker. Do not add one unless asked.
 - `games/neon-*.html` — one self-contained game per file: markup, page-specific `<style>`,
   and the game loop in a trailing `<script>`. Games do not import each other.
 - `assets/js/neon-core.js` — `window.Neon`, shared by every page. Changing it touches all
-  9 games.
+  11 games.
 - `assets/css/neon-theme.css` — shared theme, `.stage`, overlay, HUD, toast, animations.
 
 ## Constraints
 
 - **Shared core is load-bearing.** Before editing `neon-core.js` or `neon-theme.css`, grep
-  the 9 game files for the symbol/class. A "small" change there is a 9-game change.
+  the 11 game files for the symbol/class. A "small" change there is an 11-game change.
 - Games reach the core through `window.Neon` only. Keep the returned API surface stable.
 - Best scores live in `localStorage` under `neon-best-<key>`, where `<key>` matches the
   `key` field in the `GAMES` array. Renaming a key silently wipes players' records.

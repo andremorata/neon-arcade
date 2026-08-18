@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NEON HOOPS — Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  .stage { --arw: 3; --arh: 2; --maxw: 900px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON HOOPS</h1></a>
+      <div class="tag">// | Basquete flappy · siga a seta do aro | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:3;">
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">🔥 Fogo</span><span class="val" id="fire">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="hoops">0</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <div class="toast" id="toast">🏆 NOVO RECORDE!</div>
+    <canvas id="game" width="900" height="600"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON HOOPS</h2>
+      <p id="overlayText">Clique, toque ou aperte espaço para quicar. Passe por dentro do aro na direção da seta — sem tocar no ferro a bola pega fogo e vale mais.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Cestas</span><b id="fsHoops">0</b></div>
+        <div class="fstat"><span>Maior 🔥</span><b id="fsFire">0</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">SPACE / Clique</span><span class="key">Toque</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · ▼ entra por cima, ▲ entra por baixo · swish em sequência multiplica os pontos</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 900, H = 600;
+  const G = 1500, IMPULSE = -400, BALL_X = 230, R = 15;
+  const RIM_R = 6, GAP_W = 116, SPACING = 380;
+  const SPEED0 = 210, SPEED_INC = 2, SPEED_MAX = 270;
+  const CYAN = '#00f0ff', MAGENTA = '#ff2bd6';
+  const EMBER = ['#fff2a8', '#ffd000', '#ff8c1a', '#ff4d00', '#ff2bd6'];
+
+  const els = {
+    score: Neon.$('score'), fire: Neon.$('fire'), best: Neon.$('best'),
+    fsScore: Neon.$('fsScore'), fsHoops: Neon.$('fsHoops'), fsFire: Neon.$('fsFire'), stage: Neon.$('stage'),
+  };
+
+  let ball, hoops, spawned = 0, score = 0, fire = 0, maxFire = 0, hoopsPassed = 0;
+  let speed = SPEED0, tPlay = 0, ballRot = 0, pb = 0, startHi = 0, recordShown = false;
+  let state = 'menu', lastFrame = performance.now();
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' };
+  let groundHit = false;
+  const particles = new Neon.Particles();
+  pb = Neon.best.get('hoops');
+
+  function resetRun() {
+    ball = { y: H / 2, vy: 0 };
+    hoops = [];
+    spawned = 0;
+    score = 0; fire = 0; maxFire = 0; hoopsPassed = 0;
+    speed = SPEED0; tPlay = 0; ballRot = 0;
+    recordShown = false;
+    groundHit = false;
+    particles.clear();
+    els.score.textContent = '0';
+    els.fire.textContent = '0';
+    els.best.textContent = Math.max(pb, 0);
+  }
+
+  function spawnHoop(x) {
+    const n = spawned++;
+    const dir = n < 4 ? 1 : Neon.choice([1, -1]);
+    let amp = 0, freq = 0;
+    if (n >= 8 && Math.random() < Math.min(0.8, 0.3 + (n - 8) * 0.05)) {
+      amp = n >= 15 ? Neon.rand(40, 90) : Neon.rand(30, 70);
+      freq = Neon.rand(1.2, 2.0);
+    }
+    hoops.push({
+      x, dir, amp, freq,
+      baseY: Neon.rand(150 + amp, H - 170 - amp),
+      phase: Neon.rand(0, Math.PI * 2),
+      scored: false, touched: false,
+    });
+  }
+
+  const rimY = h => h.baseY + (h.amp ? h.amp * Math.sin(h.phase + tPlay * h.freq) : 0);
+
+  function startGame() {
+    Neon.audio.ensure();
+    startHi = pb;
+    resetRun();
+    spawnHoop(W + 60);
+    spawnHoop(W + 60 + SPACING);
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P para voltar à quadra.', 'RESUME');
+  }
+  function resumeGame() {
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  function bounce() {
+    if (state !== 'playing' || groundHit) return;
+    ball.vy = IMPULSE;
+    Neon.audio.sfx.flap();
+    particles.burst(BALL_X - 10, ball.y + R, '#ff7a1a', 5, 90, 2);
+  }
+
+  function scoreHoop(h) {
+    h.scored = true;
+    hoopsPassed++;
+    let pts;
+    if (h.touched) {
+      pts = 1;
+      fire = 0;
+      Neon.audio.sfx.point();
+    } else {
+      pts = 2 + Math.min(fire, 3);
+      fire++;
+      maxFire = Math.max(maxFire, fire);
+      Neon.audio.sfx.golden();
+      flashAt('rgba(255, 140, 26,', 120 + fire * 30);
+      particles.burst(BALL_X, ball.y, '#ffd000', 12 + fire * 4, 200, 3);
+      if (fire === 3) { Neon.audio.sfx.boost(); Neon.toast('🔥 EM CHAMAS! Próximo swish vale 5'); }
+    }
+    score += pts;
+    speed = Math.min(SPEED_MAX, speed + SPEED_INC);
+    els.score.textContent = score;
+    els.fire.textContent = fire;
+    Neon.popEl(els.score);
+    if (fire > 0) Neon.popEl(els.fire);
+    if (!recordShown && pb > 0 && score > pb) {
+      recordShown = true;
+      Neon.toast('🏆 NOVO RECORDE!');
+      Neon.audio.sfx.record();
+      flashAt('rgba(255, 215, 0,', 220);
+    }
+    els.best.textContent = Math.max(pb, score);
+  }
+
+  function gameOver() {
+    state = 'gameover';
+    pb = Neon.best.update('hoops', score);
+    els.best.textContent = pb;
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    els.fsScore.textContent = score;
+    els.fsHoops.textContent = hoopsPassed;
+    els.fsFire.textContent = maxFire;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'FIM DE JOGO!',
+      `Você marcou ${score} ${score === 1 ? 'ponto' : 'pontos'} em ${hoopsPassed} ${hoopsPassed === 1 ? 'cesta' : 'cestas'}.`,
+      'TENTAR DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  function crash() {
+    if (groundHit) return;
+    groundHit = true;
+    Neon.audio.sfx.boom();
+    shakeAt(12, 400);
+    flashAt('rgba(255, 43, 214,', 240);
+    particles.burst(BALL_X, ball.y, '#ffffff', 36, 260);
+    setTimeout(gameOver, 700);
+  }
+
+  function shakeAt(power, ms) { shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { flash = { t: ms, color }; }
+
+  // ── input ─────────────────────────────────────────
+  document.addEventListener('keydown', (e) => {
+    const k = e.key;
+    if (k === ' ' || k === 'Enter' || k === 'ArrowUp') {
+      e.preventDefault();
+      if (state === 'menu' || state === 'gameover') startGame();
+      else if (state === 'paused') resumeGame();
+      else bounce();
+      return;
+    }
+    if (k === 'p' || k === 'P') {
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+      return;
+    }
+  });
+
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle')) return;
+    if (state === 'menu' || state === 'gameover') startGame();
+    else if (state === 'paused') resumeGame();
+    else bounce();
+  });
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    if (state !== 'playing') return;
+    tPlay += dt;
+
+    const prevY = ball.y;
+    ball.vy += G * dt;
+    ball.y += ball.vy * dt;
+    ballRot += dt * 4;
+
+    // rastro (fogo quando em streak)
+    if (fire >= 1) {
+      const n = 2 + Math.min(fire, 3);
+      for (let i = 0; i < n; i++) {
+        particles.emit(BALL_X - Neon.rand(4, 20), ball.y + Neon.rand(-R, R),
+          -Neon.rand(90, 200), Neon.rand(-70, -20) - ball.vy * 0.15,
+          Neon.choice(EMBER), Neon.rand(2.5, 5.5), Neon.rand(0.25, 0.5));
+      }
+    } else {
+      particles.emit(BALL_X - 16, ball.y + 4, -60, 10, '#ff7a1a', 2, 0.25);
+    }
+
+    for (let i = hoops.length - 1; i >= 0; i--) {
+      const h = hoops[i];
+      h.x -= speed * dt;
+      if (h.x < -GAP_W - 60) { hoops.splice(i, 1); continue; }
+      const ry = rimY(h);
+      const prevRy = h.prevRy === undefined ? ry : h.prevRy;
+
+      // colisão com as pontas do rim (sólido, quica)
+      for (const tipX of [h.x, h.x + GAP_W]) {
+        const dx = BALL_X - tipX;
+        if (Math.abs(dx) < R + RIM_R && Math.hypot(dx, ball.y - ry) < R + RIM_R) {
+          const side = Math.sign(ball.y - ry) || (prevY < ry ? -1 : 1);
+          ball.y = ry + side * Math.sqrt((R + RIM_R) ** 2 - dx * dx);
+          if (Math.sign(ball.vy) === -side) ball.vy *= -0.55;
+          if (!h.scored && !h.touched) {
+            h.touched = true;
+            if (fire > 0) { fire = 0; els.fire.textContent = '0'; }
+          }
+          Neon.audio.sfx.wall();
+          particles.burst(tipX, ry, h.dir === 1 ? CYAN : MAGENTA, 6, 120, 2);
+        }
+      }
+
+      // passagem pelo gap na direção certa (no referencial do aro, que pode oscilar)
+      if (!h.scored &&
+          (prevY - prevRy) * (ball.y - ry) <= 0 &&
+          BALL_X > h.x + RIM_R && BALL_X < h.x + GAP_W - RIM_R &&
+          Math.sign((ball.y - ry) - (prevY - prevRy)) === h.dir) {
+        scoreHoop(h);
+        particles.burst(BALL_X, ry, h.touched ? '#ffffff' : '#ffd700', h.touched ? 10 : 18, 180, 2.6);
+      }
+
+      // aro perdido = fim (sem return: o clamp de chão ainda vale na animação de morte)
+      if (!h.scored && h.x + GAP_W < BALL_X - R - RIM_R) crash();
+      h.prevRy = ry;
+    }
+
+    // spawn
+    const last = hoops[hoops.length - 1];
+    if (!last || last.x < W - SPACING) spawnHoop(W + 60);
+
+    // chão e teto
+    if (ball.y + R >= H - 8) {
+      ball.y = H - 8 - R;
+      crash();
+      return;
+    }
+    if (ball.y - R < 0) ball.y = R;
+  }
+
+  // ── render ────────────────────────────────────────
+  function chevron(x, y, dir, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3.5;
+    Neon.glow(ctx, color, 10);
+    for (const off of [0, 9]) {
+      ctx.beginPath();
+      ctx.moveTo(x - 9, y + (off - 4) * dir);
+      ctx.lineTo(x, y + (off + 4) * dir);
+      ctx.lineTo(x + 9, y + (off - 4) * dir);
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  function drawHoop(h) {
+    const ry = rimY(h);
+    const color = h.dir === 1 ? CYAN : MAGENTA;
+    const cx = h.x + GAP_W / 2;
+
+    // rede (sem colisão): trapézio no lado da saída
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 1.5;
+    const netH = 34 * h.dir, inset = 14;
+    ctx.beginPath();
+    for (const [x0, x1] of [[h.x, h.x + inset], [h.x + GAP_W, h.x + GAP_W - inset],
+                            [h.x + GAP_W * 0.33, h.x + inset + 12], [h.x + GAP_W * 0.67, h.x + GAP_W - inset - 12]]) {
+      ctx.moveTo(x0, ry);
+      ctx.lineTo(x1, ry + netH);
+    }
+    ctx.moveTo(h.x + inset, ry + netH);
+    ctx.lineTo(h.x + GAP_W - inset, ry + netH);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // linha do aro (vista de lado) + pontas do rim
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(h.x, ry);
+    ctx.lineTo(h.x + GAP_W, ry);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    Neon.glow(ctx, color, 14);
+    ctx.fillStyle = color;
+    Neon.circle(ctx, h.x, ry, RIM_R);
+    Neon.circle(ctx, h.x + GAP_W, ry, RIM_R);
+    ctx.shadowBlur = 0;
+
+    // seta da direção: ▼ acima (entra por cima) / ▲ abaixo (entra por baixo)
+    if (!h.scored) {
+      const bob = 4 * Math.sin(tPlay * 5);
+      chevron(cx, ry - h.dir * (34 + bob) - (h.dir === 1 ? 6 : -6), h.dir, color);
+    }
+  }
+
+  // fogo do swish em sequência: aura + línguas de chama atrás da bola
+  function drawFire() {
+    if (fire < 1) return;
+    const k = Math.min(fire, 4), heat = Math.min(1, fire / 3);
+    const t = tPlay * 13;
+
+    const rad = R + 14 + k * 6 + Math.sin(t) * 3;
+    const gr = ctx.createRadialGradient(BALL_X, ball.y, R * 0.3, BALL_X, ball.y, rad);
+    gr.addColorStop(0, `rgba(255, 245, 190, ${0.55 + 0.25 * heat})`);
+    gr.addColorStop(0.4, `rgba(255, 140, 26, ${0.4 + 0.3 * heat})`);
+    gr.addColorStop(0.75, `rgba(255, 45, 0, ${0.22 + 0.25 * heat})`);
+    gr.addColorStop(1, 'rgba(255, 43, 214, 0)');
+    ctx.fillStyle = gr;
+    Neon.circle(ctx, BALL_X, ball.y, rad);
+
+    const tongues = 3 + k;
+    for (let i = 0; i < tongues; i++) {
+      const wob = Math.sin(t * (1 + i * 0.35) + i * 1.9);
+      const len = (26 + k * 13) * (0.65 + 0.35 * Math.abs(wob));
+      const cy = ball.y + (i - (tongues - 1) / 2) * (R * 0.62);
+      const half = (R * 0.5) * (1 - Math.abs(i - (tongues - 1) / 2) / tongues);
+      ctx.globalAlpha = 0.32 + 0.4 * heat;
+      ctx.fillStyle = i % 2 ? '#ff8c1a' : (fire >= 3 ? MAGENTA : '#ff4d00');
+      ctx.beginPath();
+      ctx.moveTo(BALL_X - R * 0.3, cy - half);
+      ctx.lineTo(BALL_X - R * 0.3 - len, cy + wob * 9 - ball.vy * 0.012);
+      ctx.lineTo(BALL_X - R * 0.3, cy + half);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    // multiplicador do próximo swish
+    ctx.font = '700 17px "Space Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = fire >= 3 ? '#fff2a8' : '#ffd000';
+    Neon.glow(ctx, fire >= 3 ? MAGENTA : '#ff4d00', 12);
+    ctx.globalAlpha = 0.75 + 0.25 * Math.sin(t * 0.6);
+    ctx.fillText(`×${2 + Math.min(fire, 3)}`, BALL_X, ball.y - R - 20 - k);
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
+  }
+
+  function drawBall() {
+    ctx.save();
+    ctx.translate(BALL_X, ball.y);
+    ctx.rotate(ballRot);
+    Neon.glow(ctx, fire >= 3 ? MAGENTA : fire >= 1 ? '#ff4d00' : '#ff8c1a', 18 + fire * 12);
+    ctx.fillStyle = fire >= 3 ? '#ff4d00' : fire >= 1 ? '#ff5f0a' : '#ff7a1a';
+    Neon.circle(ctx, 0, 0, R);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#7a2d00';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -R); ctx.lineTo(0, R);
+    ctx.moveTo(-R, 0); ctx.lineTo(R, 0);
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(-R * 1.1, 0, R * 0.85, -0.9, 0.9); ctx.stroke();
+    ctx.beginPath(); ctx.arc(R * 1.1, 0, R * 0.85, Math.PI - 0.9, Math.PI + 0.9); ctx.stroke();
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+    ctx.fillStyle = '#05001a';
+    ctx.fillRect(0, 0, W, H);
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 620);
+    g.addColorStop(0, 'rgba(80, 0, 160, 0.32)');
+    g.addColorStop(1, 'rgba(4, 0, 26, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // chão (quadra)
+    const groundY = H - 8;
+    ctx.fillStyle = 'rgba(255, 140, 26, 0.15)';
+    ctx.fillRect(0, groundY, W, 8);
+    ctx.strokeStyle = '#ff8c1a';
+    Neon.glow(ctx, '#ff8c1a', 12);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, groundY + 4);
+    ctx.lineTo(W, groundY + 4);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    for (const h of hoops) drawHoop(h);
+    if (ball) { drawFire(); drawBall(); }
+    particles.draw(ctx);
+
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.color} ${Math.min(0.45, flash.t / 220)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    if (state === 'playing' || state === 'gameover') particles.update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  resetRun();
+  spawnHoop(W - 340);
+  render();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

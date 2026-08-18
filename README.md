@@ -1,9 +1,10 @@
 # NEON ARCADE
 
-Suíte de 9 jogos clássicos em HTML/Canvas com estética synthwave. Sem build, sem
+Suíte de 11 jogos clássicos em HTML/Canvas com estética synthwave. Sem build, sem
 dependências, sem backend — cada jogo é um único arquivo `.html` que roda direto no navegador.
 
-Jogos: Serpent (snake), Blocks (tetris), Pong, Simon, Asteroid, Flappy, 2048, Mines, Whack.
+Jogos: Serpent (snake), Blocks (tetris), Pong, Simon, Asteroid, Flappy, 2048, Mines, Whack,
+Hoops (basquete flappy), Siege (estilingue com fases procedurais).
 
 **▶ Jogue agora: https://andremorata.github.io/neon-arcade/** — funciona no desktop e no celular,
 nada pra instalar.
@@ -31,9 +32,9 @@ python3 -m http.server 8000
 node test-games.js
 ```
 
-Verifica que os scripts de Pong e Flappy avaliam sem erro de sintaxe, que a física de
-rebatida do Pong devolve a bola na direção certa, e que a duração do toast no CSS não
-regride.
+Verifica que os scripts de Pong, Flappy, Hoops e Siege avaliam sem erro de sintaxe, que a
+física de rebatida do Pong devolve a bola na direção certa, que Hoops e Siege atualizam o
+recorde, e que a duração do toast no CSS não regride.
 
 ## Estrutura
 

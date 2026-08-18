@@ -6,9 +6,11 @@ const path = require('path');
 const read = file => fs.readFileSync(path.join(__dirname, file), 'utf8');
 const pong = read('games/neon-pong.html');
 const flappy = read('games/neon-flappy.html');
+const hoops = read('games/neon-hoops.html');
+const siege = read('games/neon-siege.html');
 const css = read('assets/css/neon-theme.css');
 
-for (const html of [pong, flappy]) {
+for (const html of [pong, flappy, hoops, siege]) {
   const script = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
     .map(match => match[1]).filter(Boolean).at(-1);
   new Function(script);
@@ -31,6 +33,8 @@ const hit = makeHit({ audio: { sfx: { paddle() {} } }, toast() {} }, { burst() {
 assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direita');
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 assert.match(flappy, /pb\s*=\s*Neon\.best\.update\('flappy', passed\)/, 'O Flappy deve atualizar o recorde em memória');
+assert.match(hoops, /pb\s*=\s*Neon\.best\.update\('hoops', score\)/, 'O Hoops deve atualizar o recorde em memória');
+assert.match(siege, /pb\s*=\s*Neon\.best\.update\('siege', score\)/, 'O Siege deve atualizar o recorde em memória');
 assert.ok(+css.match(/toast-out[^;]*\s([\d.]+)s forwards/)[1] >= 3, 'O toast deve ficar visível por pelo menos 3s');
 assert.match(css, /toast-in[^,]*forwards/, 'O toast deve permanecer visível após a entrada');
-console.log('Flappy e Pong: OK');
+console.log('Pong, Flappy, Hoops e Siege: OK');

@@ -502,7 +502,7 @@ canvas { display: block; width: 100%; height: 100%; }
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 18px;
 }
-.tile { position: relative; border-radius: 18px; padding: 2.5px; overflow: hidden; text-decoration: none; }
+.tile { position: relative; display: flex; border-radius: 18px; padding: 2.5px; overflow: hidden; text-decoration: none; }
 .tile::before {
   content: '';
   position: absolute;
@@ -525,6 +525,7 @@ canvas { display: block; width: 100%; height: 100%; }
   align-items: center;
   gap: 6px;
   min-height: 168px;
+  flex: 1;                   /* sem isto, cards mais baixos mostravam a borda animada embaixo */
   justify-content: center;
   transition: transform 0.2s;
 }
