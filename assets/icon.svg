@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="NEON ARCADE">
+  <title>NEON ARCADE</title>
+  <defs>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe600"/>
+      <stop offset=".42" stop-color="#ff8c1a"/>
+      <stop offset="1" stop-color="#ff2bd6"/>
+    </linearGradient>
+    <radialGradient id="halo" cx=".5" cy=".5" r=".5">
+      <stop offset=".45" stop-color="#ff2bd6" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#9b30ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#00f0ff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#9b30ff" stop-opacity=".25"/>
+    </linearGradient>
+    <!-- o sol e' recortado no proprio circulo: as faixas nao vazam pro halo -->
+    <clipPath id="sunClip"><circle cx="256" cy="216" r="114"/></clipPath>
+  </defs>
+
+  <rect width="512" height="512" fill="#04001a"/>
+  <circle cx="256" cy="216" r="200" fill="url(#halo)"/>
+
+  <circle cx="256" cy="216" r="114" fill="url(#sun)"/>
+  <g clip-path="url(#sunClip)" fill="#04001a">
+    <rect x="130" y="238" width="252" height="9"/>
+    <rect x="130" y="258" width="252" height="12"/>
+    <rect x="130" y="282" width="252" height="16"/>
+    <rect x="130" y="310" width="252" height="20"/>
+  </g>
+
+  <g stroke="url(#floor)" stroke-width="4" fill="none" stroke-linecap="square">
+    <path d="M-100 512 256 330M40 512 256 330M156 512 256 330M256 512v-182M356 512 256 330M472 512 256 330M612 512 256 330"/>
+    <path d="M0 344h512M0 360h512M0 384h512M0 418h512M0 464h512"/>
+  </g>
+
+  <rect x="0" y="326" width="512" height="6" fill="#00f0ff"/>
+</svg>

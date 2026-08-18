@@ -22,6 +22,9 @@ There is no linter, formatter, or type checker. Do not add one unless asked.
 - `assets/js/neon-core.js` — `window.Neon`, shared by every page. Changing it touches every
   game at once.
 - `assets/css/neon-theme.css` — shared theme, `.stage`, overlay, HUD, toast, animations.
+- `sw.js` + `manifest.webmanifest` — offline/PWA. `sw.js` precaches only the shell; the menu
+  precaches every `GAMES` href into the same cache, so a new game needs no change here.
+  `assets/icon.svg` is the icon source — regenerate the PNGs from it, do not hand-edit them.
 
 ## Constraints
 

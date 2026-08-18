@@ -2,6 +2,28 @@
    NEON ARCADE — Tema compartilhado
    Design tokens + componentes visuais reutilizáveis
    ══════════════════════════════════════════════════════ */
+
+/* Fontes locais (subset latin) em vez do Google Fonts: o arcade tem que abrir offline
+   sem depender de terceiro. Veja assets/fonts/README.md pra origem e licença. */
+@font-face {
+  font-family: 'Orbitron';
+  src: url('../fonts/orbitron-var-latin.woff2') format('woff2');
+  font-weight: 400 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('../fonts/space-mono-400-latin.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Space Mono';
+  src: url('../fonts/space-mono-700-latin.woff2') format('woff2');
+  font-weight: 700;
+  font-display: swap;
+}
+
 :root {
   --bg: #04001a;
   --bg-deep: #0a0228;

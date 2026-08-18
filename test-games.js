@@ -99,6 +99,19 @@ for (let f = 0; f <= 1; f += 0.02) {
   assert.ok(ring(f) >= ring(f + 0.02), `A pontuação do Archer não pode subir indo pra fora (${f.toFixed(2)})`);
 }
 
+// PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
+// E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
+const sw = read('sw.js');
+const cacheName = sw.match(/const CACHE = '([^']+)'/)[1];
+const shell = sw.match(/const SHELL = \[([\s\S]*?)\]/)[1].match(/'([^']+)'/g).map(s => s.slice(1, -1));
+const icons = JSON.parse(read('manifest.webmanifest')).icons.map(i => i.src);
+for (const file of [...shell, ...icons]) {
+  if (file === '.') continue;
+  assert.ok(fs.existsSync(path.join(__dirname, file)), `PWA: arquivo referenciado não existe — ${file}`);
+}
+assert.ok(menu.includes(`caches.open('${cacheName}')`), `index.html deve pré-carregar no cache '${cacheName}'`);
+assert.ok(menu.includes('manifest.webmanifest'), 'index.html deve linkar o manifest');
+
 assert.ok(+css.match(/toast-out[^;]*\s([\d.]+)s forwards/)[1] >= 3, 'O toast deve ficar visível por pelo menos 3s');
 assert.match(css, /toast-in[^,]*forwards/, 'O toast deve permanecer visível após a entrada');
 

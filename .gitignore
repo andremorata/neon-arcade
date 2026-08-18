@@ -8,3 +8,6 @@
 
 # Node (test-games.js roda sem dependências, mas por segurança)
 node_modules/
+
+# git worktrees criadas dentro do próprio repo
+.claude/worktrees/
