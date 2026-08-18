@@ -14,7 +14,7 @@
   <header>
     <div class="brand">
       <h1>NEON ARCADE</h1>
-      <div class="tag">// 11 clássicos · estética synthwave · sessões curtas</div>
+      <div class="tag" id="tag">// estética synthwave · sessões curtas</div>
     </div>
   </header>
 
@@ -41,12 +41,16 @@
     { key: 'whack',  emoji: '🐹', name: 'NEON WHACK',   desc: '30 segundos de whack-a-mole com combos.', href: 'games/neon-whack.html',  color: '#4d7dff' },
     { key: 'hoops',  emoji: '🏀', name: 'NEON HOOPS',   desc: 'Basquete flappy — passe pelo aro na direção certa e pegue fogo.', href: 'games/neon-hoops.html', color: '#ff4d00' },
     { key: 'siege',  emoji: '🏰', name: 'NEON SIEGE',   desc: 'Estilingue contra fortalezas — poderes no toque, fases infinitas.', href: 'games/neon-siege.html', color: '#00ffc3' },
+    { key: 'darts',  emoji: '🎯', name: 'NEON DARTS',   desc: 'Trave a mira em dois toques e dispute 5 rodadas contra o bot.', href: 'games/neon-darts.html', color: '#b9ff2b' },
   ];
 
   const fmtBest = (key, val) => {
     if (key === 'mines') return val ? `⏱ ${(val / 60) | 0}:${String(val % 60).padStart(2, '0')}` : '';
     return val ? `🏆 ${val}` : '';
   };
+
+  // contagem sai do GAMES: incluir um jogo nao pede mais editar texto nenhum
+  Neon.$('tag').textContent = `// ${GAMES.length} clássicos · estética synthwave · sessões curtas`;
 
   const tiles = Neon.$('tiles');
   tiles.innerHTML = '';

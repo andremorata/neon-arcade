@@ -14,18 +14,19 @@ There is no linter, formatter, or type checker. Do not add one unless asked.
 
 ## Map
 
-- `index.html` — arcade menu. The `GAMES` array is the single source of truth for tiles;
-  a new game means one entry there plus one file in `games/`.
+- `index.html` — arcade menu. The `GAMES` array is the single source of truth for tiles and
+  for the game count in the header; a new game means one entry there plus one file in
+  `games/`. Never hardcode how many games exist — derive it from `GAMES`.
 - `games/neon-*.html` — one self-contained game per file: markup, page-specific `<style>`,
   and the game loop in a trailing `<script>`. Games do not import each other.
-- `assets/js/neon-core.js` — `window.Neon`, shared by every page. Changing it touches all
-  11 games.
+- `assets/js/neon-core.js` — `window.Neon`, shared by every page. Changing it touches every
+  game at once.
 - `assets/css/neon-theme.css` — shared theme, `.stage`, overlay, HUD, toast, animations.
 
 ## Constraints
 
 - **Shared core is load-bearing.** Before editing `neon-core.js` or `neon-theme.css`, grep
-  the 11 game files for the symbol/class. A "small" change there is an 11-game change.
+  every file in `games/` for the symbol/class. A "small" change there is an all-games change.
 - Games reach the core through `window.Neon` only. Keep the returned API surface stable.
 - Best scores live in `localStorage` under `neon-best-<key>`, where `<key>` matches the
   `key` field in the `GAMES` array. Renaming a key silently wipes players' records.
@@ -34,9 +35,11 @@ There is no linter, formatter, or type checker. Do not add one unless asked.
 - Game loops are `requestAnimationFrame` with delta time. Do not switch to fixed
   `setInterval` stepping.
 - UI copy is pt-BR. Match it.
-- `test-games.js` parses game HTML by string matching (last `<script>` block, the literal
-  `  function bounce(onPlayer)` line in Pong). Renaming or reindenting those breaks the test
-  in a confusing way — update the test in the same change.
+- `test-games.js` discovers games by scanning `games/*.html`, so a new file is covered
+  automatically — but it parses HTML by string matching (last `<script>` block, the literal
+  `  function bounce(onPlayer)` line in Pong, and `pb = Neon.best.update('<key>', <var>)` for
+  the games listed in its `BEST` map). Renaming or reindenting those breaks the test in a
+  confusing way — update the test in the same change.
 
 ## Validation
 
