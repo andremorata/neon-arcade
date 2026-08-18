@@ -4,9 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>NEON ARCADE — Suíte de clássicos</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#04001a">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- iOS < 16.4 ignora o manifest: standalone e nome da tela inicial vem daqui -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NEON ARCADE">
 <link rel="stylesheet" href="assets/css/neon-theme.css">
 </head>
 <body>
@@ -69,6 +75,17 @@
         <span class="t-go">▼ JOGAR</span>
       </div>`;
     tiles.appendChild(t);
+  }
+
+  // offline: SW cuida do esqueleto; aqui o menu pre-carrega os jogos que ele lista,
+  // entao um jogo novo no GAMES ja entra no cache sem editar mais nada.
+  if (location.protocol !== 'file:') {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    if ('caches' in window) {
+      caches.open('neon-arcade')
+        .then(c => Promise.all(GAMES.map(g => c.add(g.href).catch(() => {}))))
+        .catch(() => {});
+    }
   }
 })();
 </script>
