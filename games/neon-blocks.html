@@ -171,18 +171,25 @@
     if (!rowsToClear.length) return;
     cleared = rowsToClear.length;
     const gains = [0, 40, 100, 300, 1200];
-    score += gains[cleared] * level;
+    score += (gains[cleared] || 1200) * level;
     totalLines += cleared;
     level = Math.floor(totalLines / 10) + 1;
     gravity = Math.max(110, 720 - (level - 1) * 66);
 
+    // explosão: cada célula da linha estoura com a própria cor
     clearFx = { t: 0, rows: rowsToClear };
     for (const y of rowsToClear) {
-      particles.burst(0, y * CELL + CELL / 2, '#ffffff', 6, 90, 2.5);
-      for (let x = 0; x < COLS; x += 2) {
-        particles.burst(x * CELL + CELL / 2, y * CELL + CELL / 2, COLORS[board[y][x] ?? 0], 2, 70, 2);
+      for (let x = 0; x < COLS; x++) {
+        const cx = x * CELL + CELL / 2, cy = y * CELL + CELL / 2;
+        particles.burst(cx, cy, COLORS[board[y][x] ?? 0], 5, 150, 2.8);
+        particles.emit(cx, cy, Neon.rand(-40, 40), Neon.rand(-190, -70), '#ffffff', 2.4, 0.5);
       }
     }
+    flashAt('rgba(255, 255, 255,', cleared >= 4 ? 260 : 150);
+
+    // some com as linhas cheias e desce o que estava acima
+    board = board.filter((_, y) => !rowsToClear.includes(y));
+    while (board.length < ROWS) board.unshift(emptyRow());
     Neon.audio.sfx.clear(cleared);
     if (cleared >= 4) { Neon.toast('★ TETRIS!'); Neon.audio.sfx.level(); }
     if (level > 1 && (totalLines - cleared) < 10) { Neon.toast(`NÍVEL ${level}!`); Neon.audio.sfx.level(); }
