@@ -238,6 +238,33 @@ window.Neon = (function () {
     }
   }
 
+  // ── canvas na resolucao real da tela ───────────────
+  // O width/height do HTML continua sendo o sistema de coordenadas do jogo.
+  // Aqui so aumentamos o backing store e escalamos o contexto, entao nenhum
+  // jogo precisa saber que isso existe. Toque tambem nao muda: os jogos mapeiam
+  // por getBoundingClientRect().width, que e tamanho CSS.
+  // ponytail: teto de 3x. O quadro nunca passa de 900px CSS (.stage max-width),
+  // entao o backing store para em 2700px de largura no pior caso.
+  function fitCanvas(canvas) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    let applied = 0;
+    const fit = () => {
+      const box = canvas.getBoundingClientRect();
+      if (!box.width) return; // ainda sem layout
+      const s = clamp((box.width * (window.devicePixelRatio || 1)) / W, 1, 3);
+      if (Math.abs(s - applied) < 0.01) return;
+      applied = s;
+      canvas.width = Math.round(W * s);   // zera o contexto
+      canvas.height = Math.round(H * s);
+      ctx.setTransform(s, 0, 0, s, 0, 0); // volta pras coordenadas do jogo
+    };
+    fit();
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(canvas);
+    else window.addEventListener('resize', fit);
+    return ctx;
+  }
+
   // ── canvas helpers ─────────────────────────────────
   function circle(ctx, x, y, r, fill) {
     ctx.beginPath();
@@ -261,6 +288,8 @@ window.Neon = (function () {
   // Espera DOM pronto e aplica: fontes, sound toggle, best keys.
   function initPage() {
     bindSoundToggle();
+    const cv = $('game');
+    if (cv && cv.getContext) fitCanvas(cv);
     const tag = $('best');
     if (tag) tag.textContent = best.get(tag.dataset.key || 'none');
   }
@@ -274,7 +303,7 @@ window.Neon = (function () {
     rand, clamp, choice, $, EMOJI,
     best, popEl, toast,
     overlay, audio,
-    Particles, circle, glow, onHide,
+    Particles, circle, glow, onHide, fitCanvas,
     initPage,
   };
 })();

@@ -41,8 +41,14 @@
       </div>
       <button class="btn" id="startBtn">START</button>
       <div class="controls-hint">
-        <span class="key">← → girar</span><span class="key">↑ empurrar</span><span class="key">SPACE tiro</span><span class="key">P pausa</span>
+        <span class="key">← → girar</span><span class="key">↑ empurrar</span><span class="key">SPACE tiro</span><span class="key">Toque = tiro</span><span class="key">P pausa</span>
       </div>
+    </div>
+    <div class="dpad">
+      <button class="up" data-act="thrust">▲</button>
+      <button class="left" data-act="left">◀</button>
+      <button class="right" data-act="right">▶</button>
+      <button class="down" data-act="fire">●</button>
     </div>
   </div>
 
@@ -231,6 +237,36 @@
     });
     Neon.audio.sfx.shoot();
   };
+
+  // Toque: dpad gira e empurra, resto do quadro atira. Dois polegares, como no fliperama.
+  const touchFire = (on) => {
+    kFire = on;
+    if (on && ship && state === 'playing' && shootCd <= 0) { fire(); shootCd = 0.24; }
+  };
+  document.querySelectorAll('.dpad button').forEach(btn => {
+    const hold = (on) => (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const act = btn.dataset.act;
+      if (act === 'left') kLeft = on;
+      else if (act === 'right') kRight = on;
+      else if (act === 'thrust') kThrust = on;
+      else touchFire(on);
+    };
+    btn.addEventListener('pointerdown', hold(true));
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) {
+      btn.addEventListener(ev, hold(false));
+    }
+  });
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle') || e.target.closest('.dpad')) return;
+    if (state === 'menu' || state === 'gameover') return startGame();
+    if (state === 'paused') return resumeGame();
+    touchFire(true);
+  });
+  // solta no window: se o dedo sair do quadro antes de levantar, o tiro para mesmo assim
+  window.addEventListener('pointerup', () => touchFire(false));
+  window.addEventListener('pointercancel', () => touchFire(false));
 
   Neon.$('startBtn').addEventListener('click', () => {
     if (state === 'paused') resumeGame();
