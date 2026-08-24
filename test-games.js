@@ -99,6 +99,28 @@ for (let f = 0; f <= 1; f += 0.02) {
   assert.ok(ring(f) >= ring(f + 0.02), `A pontuação do Archer não pode subir indo pra fora (${f.toFixed(2)})`);
 }
 
+// gravidade do Siege: uma laje sobre dois postes cai quando um dos postes some.
+// O apoio e por centro de massa, entao encaixe lateral sozinho nao segura nada.
+const siege = games.siege;
+const support = new Function('Neon', 'blocks', 'groundY', `
+  const rngSign = () => -1;
+  ${block(siege, '  function refreshSupport()')}
+  let supportDirty = true;
+  refreshSupport();
+  return blocks;
+`);
+const forte = (comEsquerdo) => {
+  const b = [];
+  if (comEsquerdo) b.push({ x: 500, y: 510, w: 26, h: 70, resting: true, vx: 0, vy: 0, spin: 0 });
+  b.push({ x: 606, y: 510, w: 26, h: 70, resting: true, vx: 0, vy: 0, spin: 0 });
+  b.push({ x: 496, y: 490, w: 140, h: 20, resting: true, vx: 0, vy: 0, spin: 0 }); // laje
+  return support({ rand: (a, b2) => (a + b2) / 2 }, b, 580);
+};
+assert.ok(forte(true).at(-1).resting, 'A laje sobre os dois postes deve ficar de pé');
+const caindo = forte(false).at(-1);
+assert.ok(!caindo.resting, 'Sem o poste esquerdo a laje tem que cair');
+assert.ok(caindo.vx < 0, 'A laje deve tombar para o lado que perdeu o apoio');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

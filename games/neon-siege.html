@@ -46,14 +46,15 @@
     </div>
   </div>
 
-  <section class="legend" style="--legend-cols:4;">
+  <section class="legend" style="--legend-cols:5;">
     <div class="boost-card" style="--accent:#00f0ff;"><span class="emoji">⚪</span><div class="name">BOLT</div><div class="desc">Equilibrado. Bom contra vidro.</div></div>
     <div class="boost-card" style="--accent:#ffe600;"><span class="emoji">🟡</span><div class="name">TRIO</div><div class="desc">Toque: divide em 3. Estilhaça vidro.</div></div>
     <div class="boost-card" style="--accent:#ff2bd6;"><span class="emoji">🟣</span><div class="name">BOMBA</div><div class="desc">Toque: explode. Racha pedra.</div></div>
     <div class="boost-card" style="--accent:#ff8c1a;"><span class="emoji">🟠</span><div class="name">DASH</div><div class="desc">Toque: acelera e perfura madeira.</div></div>
+    <div class="boost-card" style="--accent:#39ff7a;"><span class="emoji">🟢</span><div class="name">BUMERANGUE</div><div class="desc">Toque: volta e ataca por trás.</div></div>
   </section>
 
-  <footer>// <a href="../index.html">← arcade</a> · vidro quebra fácil, madeira aguenta, pedra só com bomba · fases geradas por semente</footer>
+  <footer>// <a href="../index.html">← arcade</a> · vidro quebra fácil, madeira aguenta, pedra só com bomba, TNT explode em cadeia · fases geradas por semente</footer>
 </div>
 
 <script src="../assets/js/neon-core.js"></script>
@@ -73,18 +74,21 @@
     vidro:   { hp: 10, pts: 10, color: '#7ee7ff', fill: 'rgba(126, 231, 255, 0.16)' },
     madeira: { hp: 22, pts: 25, color: '#d98b3a', fill: 'rgba(217, 139, 58, 0.22)' },
     pedra:   { hp: 45, pts: 50, color: '#aab4d4', fill: 'rgba(170, 180, 212, 0.20)' },
+    tnt:     { hp: 8,  pts: 40, color: '#ff5b2b', fill: 'rgba(255, 91, 43, 0.22)' },
   };
   const PROJS = {
     bolt:  { color: '#00f0ff', dmg: 18 },
     trio:  { color: '#ffe600', dmg: 12 },
     bomba: { color: '#ff2bd6', dmg: 13 },
     dash:  { color: '#ff8c1a', dmg: 21 },
+    bumer: { color: '#39ff7a', dmg: 16 },
   };
   const MULT = {
-    bolt:  { vidro: 1.5, madeira: 1,   pedra: 0.6 },
-    trio:  { vidro: 2,   madeira: 0.8, pedra: 0.4 },
-    bomba: { vidro: 1,   madeira: 1,   pedra: 2 },
-    dash:  { vidro: 1,   madeira: 2,   pedra: 0.8 },
+    bolt:  { vidro: 1.5, madeira: 1,   pedra: 0.6, tnt: 1 },
+    trio:  { vidro: 2,   madeira: 0.8, pedra: 0.4, tnt: 1 },
+    bomba: { vidro: 1,   madeira: 1,   pedra: 2,   tnt: 1 },
+    dash:  { vidro: 1,   madeira: 2,   pedra: 0.8, tnt: 1 },
+    bumer: { vidro: 1.2, madeira: 1.3, pedra: 0.7, tnt: 1 },
   };
 
   // PRNG semeado: fase N gera sempre a mesma fase N
@@ -103,6 +107,7 @@
   };
 
   let blocks = [], targets = [], projs = [], queue = [], current = null;
+  let trail = [], ghost = [], trailC = '#fff', ghostC = '#fff';
   let level = 1, score = 0, scoreAtLevelStart = 0;
   let targetsKilledRun = 0, targetsKilledAtLevelStart = 0;
   let phase = 'aim'; // aim | drag | flight | clearing | fail
@@ -136,7 +141,7 @@
   // ── geração procedural ────────────────────────────
   function addBlock(x, y, w, h, mat) {
     blocks.push({ x, y, w, h, mat, hp: MATS[mat].hp, maxHp: MATS[mat].hp,
-      vy: 0, resting: true, angle: 0, spin: 0, dead: false });
+      vx: 0, vy: 0, resting: true, angle: 0, spin: 0, dead: false });
   }
 
   function mkTarget(x, y, pulse) {
@@ -144,6 +149,7 @@
   }
 
   function matFor(rng, lv) {
+    if (lv >= 2 && rng() < 0.1) return 'tnt';
     const stoneP = lv >= 3 ? Math.min(0.15 + lv * 0.05, 0.6) : 0;
     if (rng() < stoneP) return 'pedra';
     return rng() < 0.5 ? 'vidro' : 'madeira';
@@ -179,14 +185,27 @@
         spots.push({ x: cx, y: groundY - POST.h - SLAB.h - 13 });
       }
     },
+    torre(cx, rng, lv, spots) {
+      const floors = 2 + ((rng() * (lv >= 5 ? 2 : 1)) | 0);
+      let base = groundY;
+      for (let f = 0; f < floors; f++) {
+        addBlock(cx - 40 - POST.w, base - POST.h, POST.w, POST.h, matFor(rng, lv));
+        addBlock(cx + 40, base - POST.h, POST.w, POST.h, matFor(rng, lv));
+        addBlock(cx - SLAB.w / 2, base - POST.h - SLAB.h, SLAB.w, SLAB.h, matFor(rng, lv));
+        spots.push({ x: cx, y: base - 13 }); // dentro do andar
+        base -= POST.h + SLAB.h;
+      }
+      spots.push({ x: cx, y: base - 13 });
+    },
   };
 
   function genLevel(lv, rng) {
     blocks = []; targets = [];
-    const nStruct = Math.min(3, 1 + (lv >= 2 ? 1 : 0) + (lv >= 5 && rng() < 0.5 ? 1 : 0));
-    const slots = [[630], [520, 760], [470, 630, 800]][nStruct - 1];
+    const nStruct = Math.min(3, 1 + (lv >= 2 ? 1 : 0) + (lv >= 4 ? 1 : 0));
+    // 440/630/800: 170px de folga entre centros, o mínimo pra pirâmide (96) não invadir o vizinho (70)
+    const slots = [[630], [520, 760], [440, 630, 800]][nStruct - 1];
     const spots = [];
-    const names = Object.keys(TEMPLATES);
+    const names = Object.keys(TEMPLATES).filter(n => n !== 'torre' || lv >= 3);
     let prev = '';
     for (const cx of slots) {
       let name = names[(rng() * names.length) | 0];
@@ -221,7 +240,9 @@
     const pool = ['bolt', 'trio'];
     if (lv >= 2) pool.push('bomba');
     if (lv >= 4) pool.push('dash');
+    if (lv >= 5) pool.push('bumer');
     const q = ['bolt', 'bolt'];
+    if (lv >= 2) q.push('bomba'); // sem ela, alvo fechado vira fase impossível
     while (q.length < n) q.push(pool[(rng() * pool.length) | 0]);
     for (let i = q.length - 1; i > 0; i--) {
       const j = (rng() * (i + 1)) | 0;
@@ -236,6 +257,7 @@
     queue = buildQueue(rng, targets.length, lv);
     current = queue.shift();
     projs = [];
+    trail = []; ghost = [];
     phase = 'aim';
     supportDirty = false;
     settleT = clearT = failT = 0;
@@ -244,6 +266,10 @@
   }
 
   // ── física dos blocos (AABB, rotação só no render) ─
+  const rngSign = () => (Math.random() < 0.5 ? -1 : 1);
+  // Um bloco só para de pé se o centro dele cair dentro do vão apoiado.
+  // Perdeu o apoio de um lado, tomba pro lado que ficou sem.
+  // ponytail: usa o envelope [menor esquerda, maior direita] dos apoios e ignora buracos no meio.
   function refreshSupport() {
     supportDirty = false;
     let changed = true;
@@ -252,20 +278,23 @@
       for (const b of blocks) {
         if (!b.resting) continue;
         if (b.y + b.h >= groundY - 2) continue;
-        const need = Math.min(b.w * 0.25, 20);
-        let ok = false;
+        let left = Infinity, right = -Infinity;
         for (const o of blocks) {
           if (o === b || !o.resting || o.dead) continue;
           if (Math.abs(o.y - (b.y + b.h)) > 2) continue;
-          const ov = Math.min(b.x + b.w, o.x + o.w) - Math.max(b.x, o.x);
-          if (ov >= need) { ok = true; break; }
+          const l = Math.max(b.x, o.x), r = Math.min(b.x + b.w, o.x + o.w);
+          if (r - l < 2) continue;
+          if (l < left) left = l;
+          if (r > right) right = r;
         }
-        if (!ok) {
-          b.resting = false;
-          b.vy = 0;
-          b.spin = Neon.rand(-1.5, 1.5);
-          changed = true;
-        }
+        const cx = b.x + b.w / 2;
+        if (cx > left + 1 && cx < right - 1) continue;
+        const dir = right < left ? (rngSign()) : (cx <= left ? -1 : 1);
+        b.resting = false;
+        b.vy = 0;
+        b.vx = dir * Neon.rand(45, 105);
+        b.spin = dir * Neon.rand(0.8, 2.2);
+        changed = true;
       }
     }
   }
@@ -281,6 +310,8 @@
       else if (b.mat === 'madeira') Neon.audio.sfx.lock();
       else Neon.audio.sfx.boom();
       particles.burst(b.x + b.w / 2, b.y + b.h / 2, MATS[b.mat].color, 14, 200, 3);
+      // cadeia termina sozinha: quem já está dead sai no topo de damageBlock
+      if (b.mat === 'tnt') explode(b.x + b.w / 2, b.y + b.h / 2);
       updateHud();
       return true;
     }
@@ -293,6 +324,7 @@
       b.vy += G * dt;
       const prevBottom = b.y + b.h;
       b.y += b.vy * dt;
+      b.x += b.vx * dt;
       b.angle += b.spin * dt;
 
       for (const t of targets) {
@@ -309,7 +341,7 @@
       if (b.y + b.h >= landY) {
         b.y = landY - b.h;
         const impact = b.vy;
-        b.vy = 0; b.spin = 0; b.angle = 0;
+        b.vy = 0; b.vx = 0; b.spin = 0; b.angle = 0;
         b.resting = true;
         supportDirty = true;
         if (impact > 240) {
@@ -458,6 +490,11 @@
     } else if (p.type === 'bomba') {
       p.dead = true;
       explode(p.x, p.y);
+    } else if (p.type === 'bumer') {
+      Neon.audio.sfx.boost();
+      p.vx = -p.vx * 1.15;
+      p.vy -= 130;
+      particles.burst(p.x, p.y, '#39ff7a', 12, 180, 2.5);
     } else {
       Neon.audio.sfx.boost();
       p.vx *= 1.8; p.vy *= 1.8;
@@ -497,6 +534,8 @@
   }
 
   function updateProjs(dt) {
+    const lead = projs.find(p => !p.dead);
+    if (lead && trail.length < 300) { trail.push({ x: lead.x, y: lead.y }); trailC = PROJS[lead.type].color; }
     for (const p of projs) {
       if (p.dead) continue;
       p.age += dt;
@@ -591,6 +630,7 @@
     const a = ballAim();
     if (a.len < DRAG_MIN) { phase = 'aim'; return; }
     projs.push(mkProj(current, a.x, a.y, -a.dx * LAUNCH_K, -a.dy * LAUNCH_K));
+    ghost = trail; ghostC = trailC; trail = [];
     phase = 'flight';
     settleT = 0;
     Neon.audio.sfx.shoot();
@@ -702,6 +742,13 @@
       }
       ctx.stroke();
     }
+    if (b.mat === 'tnt') {
+      ctx.fillStyle = m.color;
+      ctx.font = '700 13px "Space Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('TNT', 0, 0);
+    }
     ctx.globalAlpha = 1;
     ctx.restore();
   }
@@ -746,6 +793,12 @@
       ctx.beginPath();
       ctx.moveTo(x, y - r * 0.4);
       ctx.lineTo(x, y - r * 0.95);
+      ctx.stroke();
+    } else if (type === 'bumer') {
+      ctx.strokeStyle = '#05001a';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.5, Math.PI * 0.2, Math.PI * 1.2);
       ctx.stroke();
     } else if (type === 'dash') {
       ctx.strokeStyle = '#05001a';
@@ -809,6 +862,21 @@
     ctx.lineTo(W, groundY);
     ctx.stroke();
     ctx.shadowBlur = 0;
+
+    // sombra da trajetória anterior
+    const gp = phase === 'flight' ? ghost : trail, gc = phase === 'flight' ? ghostC : trailC;
+    if (gp.length > 1) {
+      ctx.strokeStyle = gc;
+      ctx.globalAlpha = 0.28;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 9]);
+      ctx.beginPath();
+      ctx.moveTo(gp[0].x, gp[0].y);
+      for (let i = 1; i < gp.length; i++) ctx.lineTo(gp[i].x, gp[i].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+    }
 
     for (const b of blocks) drawBlock(b);
     for (const t of targets) { if (t.alive) drawTarget(t); }
