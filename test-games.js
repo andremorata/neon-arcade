@@ -121,6 +121,35 @@ const caindo = forte(false).at(-1);
 assert.ok(!caindo.resting, 'Sem o poste esquerdo a laje tem que cair');
 assert.ok(caindo.vx < 0, 'A laje deve tombar para o lado que perdeu o apoio');
 
+// fitCanvas: o backing store cresce com o devicePixelRatio e o contexto volta pras
+// coordenadas do jogo, senao tudo desenha no lugar errado depois do resize.
+const core = read('assets/js/neon-core.js');
+const fitSrc = block(core, '  function fitCanvas(canvas)');
+const makeFit = new Function('clamp', 'canvas', 'window', `${fitSrc}; return fitCanvas(canvas);`);
+const fakeCanvas = (cssW, W, H) => {
+  const calls = [];
+  return {
+    width: W, height: H, calls,
+    getContext: () => ({ setTransform: (...a) => calls.push(a) }),
+    getBoundingClientRect: () => ({ width: cssW, height: cssW * H / W }),
+  };
+};
+const clampFn = (v, a, b) => Math.max(a, Math.min(b, v));
+const fitAt = (dpr, cssW = 900, W = 900, H = 600) => {
+  const cv = fakeCanvas(cssW, W, H);
+  makeFit(clampFn, cv, { devicePixelRatio: dpr, addEventListener() {} });
+  return cv;
+};
+const retina = fitAt(2);
+assert.strictEqual(retina.width, 1800, 'Em dpr 2 o canvas deve dobrar o backing store');
+assert.strictEqual(retina.height, 1200, 'A altura do backing store acompanha a largura');
+assert.deepStrictEqual(retina.calls.at(-1), [2, 0, 0, 2, 0, 0],
+  'O contexto tem que ser escalado, senão o jogo desenha em 1/4 do quadro');
+assert.strictEqual(fitAt(1).width, 900, 'Em dpr 1 o canvas fica no tamanho declarado');
+assert.strictEqual(fitAt(4).width, 2700, 'O teto de 3x segura o custo em telas muito densas');
+assert.strictEqual(fitAt(2, 450).width, 900, 'Metade do tamanho em dpr 2 continua 1:1');
+assert.strictEqual(fitAt(2, 200).width, 900, 'A escala nunca cai abaixo de 1');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');
