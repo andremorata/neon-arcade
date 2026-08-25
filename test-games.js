@@ -195,6 +195,29 @@ for (const file of [...shell, ...icons]) {
 assert.ok(menu.includes(`caches.open('${cacheName}')`), `index.html deve pré-carregar no cache '${cacheName}'`);
 assert.ok(menu.includes('manifest.webmanifest'), 'index.html deve linkar o manifest');
 
+// sem theme-color a barra de status do PWA volta pro branco ao entrar num jogo
+for (const [name, html] of Object.entries(games)) {
+  assert.ok(html.includes('<meta name="theme-color" content="#04001a">'),
+    `${name}: falta a theme-color, o PWA fica branco fora do quadro`);
+  assert.ok(html.includes('rel="manifest"'), `${name}: falta o link do manifest`);
+}
+assert.ok(JSON.parse(read('manifest.webmanifest')).theme_color === '#04001a',
+  'A theme_color do manifest tem que bater com a das páginas');
+
+// o sw manda codigo do proprio site pela rede primeiro; o resto sai do cache
+const ehCodigo = new Function('self', `${block(sw, 'function ehCodigo(req)')}; return ehCodigo;`)(
+  { location: { origin: 'https://exemplo.com' } });
+const req = (url, mode) => ({ url, mode: mode || 'no-cors' });
+assert.ok(ehCodigo(req('https://exemplo.com/games/neon-siege.html', 'navigate')), 'Página do jogo vem da rede');
+assert.ok(ehCodigo(req('https://exemplo.com/assets/js/neon-core.js')), 'O core vem da rede');
+assert.ok(ehCodigo(req('https://exemplo.com/assets/css/neon-theme.css')), 'O tema vem da rede');
+assert.ok(!ehCodigo(req('https://exemplo.com/assets/fonts/space-mono-400-latin.woff2')), 'Fonte sai do cache');
+assert.ok(!ehCodigo(req('https://exemplo.com/assets/icon-192.png')), 'Ícone sai do cache');
+assert.ok(!ehCodigo(req('https://fonts.googleapis.com/css2?family=X', 'navigate')), 'Cross-origin sai do cache');
+// sem await o SW dorme antes de gravar e a versão nova nunca entra no cache
+assert.match(sw, /await c\.put\(req, res\.clone\(\)\)/,
+  'O sw precisa aguardar a gravação no cache');
+
 assert.ok(+css.match(/toast-out[^;]*\s([\d.]+)s forwards/)[1] >= 3, 'O toast deve ficar visível por pelo menos 3s');
 assert.match(css, /toast-in[^,]*forwards/, 'O toast deve permanecer visível após a entrada');
 
