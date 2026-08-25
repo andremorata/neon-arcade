@@ -310,8 +310,12 @@ window.Neon = (function () {
 
   // ── partículas ─────────────────────────────────────
   class Particles {
-    constructor() { this.list = []; }
-    clear() { this.list.length = 0; }
+    constructor() { this.list = []; this.waves = []; this.floats = []; }
+    clear() { this.list.length = 0; this.waves.length = 0; this.floats.length = 0; }
+    // Anel que abre a partir do ponto. Marca impacto sem tapar o que esta atras.
+    wave(x, y, color, r) { this.waves.push({ x, y, color, r: r || 90, life: 1 }); }
+    // Texto que sobe e some. Serve pra "+30 x3" e pra nome de poder.
+    float(x, y, text, color, size) { this.floats.push({ x, y, text, color, size: size || 15, life: 1 }); }
     burst(x, y, color, count, speed = 140, size = 3.5) {
       for (let i = 0; i < count; i++) {
         const a = (Math.PI * 2 * i) / count + rand(-0.3, 0.3);
@@ -331,6 +335,14 @@ window.Neon = (function () {
         p.life -= dt;
         if (p.life <= 0) L.splice(i, 1);
       }
+      for (let i = this.waves.length - 1; i >= 0; i--) {
+        if ((this.waves[i].life -= dt * 2.2) <= 0) this.waves.splice(i, 1);
+      }
+      for (let i = this.floats.length - 1; i >= 0; i--) {
+        const f = this.floats[i];
+        f.y -= 36 * dt;
+        if ((f.life -= dt * 1.25) <= 0) this.floats.splice(i, 1);
+      }
     }
     draw(ctx) {
       for (const p of this.list) {
@@ -342,6 +354,28 @@ window.Neon = (function () {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2);
         ctx.fill();
+      }
+      for (const w of this.waves) {
+        ctx.globalAlpha = w.life * 0.7;
+        ctx.strokeStyle = w.color;
+        ctx.lineWidth = 3 * w.life;
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = w.color;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, (1 - w.life) * w.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (this.floats.length) {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const f of this.floats) {
+          ctx.globalAlpha = Math.min(1, f.life * 1.6);
+          ctx.font = `700 ${f.size}px Orbitron, sans-serif`;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = f.color;
+          ctx.fillStyle = f.color;
+          ctx.fillText(f.text, f.x, f.y);
+        }
       }
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
@@ -388,10 +422,11 @@ window.Neon = (function () {
   }
 
   // ── pausa ao trocar de aba ─────────────────────────
+  // Pausa ao esconder a aba E ao perder o foco da janela. So o visibilitychange
+  // deixava o jogo rodando quando voce clicava em outra janela por cima.
   function onHide(fn) {
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) fn();
-    });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) fn(); });
+    window.addEventListener('blur', fn);
   }
 
   // ── formato do mundo por orientacao ────────────────

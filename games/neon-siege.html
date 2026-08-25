@@ -398,6 +398,8 @@
     score += 100;
     Neon.audio.sfx.golden();
     particles.burst(t.x, t.y, '#ff3b5c', 20, 220, 3);
+    particles.wave(t.x, t.y, '#ffd700', 120);
+    particles.float(t.x, t.y, '+100', '#ffd700');
     Neon.popEl(els.score);
     updateHud();
     if (targetsAlive() === 0 && phase !== 'fail' && phase !== 'clearing') levelClear();
@@ -458,6 +460,7 @@
     shakeAt(14, 450);
     flashAt('rgba(255, 43, 214,', 200);
     particles.burst(x, y, '#ff2bd6', 40, 320, 4);
+    particles.wave(x, y, '#ff2bd6', 220);
     for (const b of blocks) {
       if (b.dead) continue;
       const cx = Neon.clamp(x, b.x, b.x + b.w), cy = Neon.clamp(y, b.y, b.y + b.h);

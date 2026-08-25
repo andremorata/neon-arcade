@@ -325,6 +325,37 @@ assert.strictEqual(setIntensity(clampFn, 0, -3), 0, 'intensity abaixo de 0 tem q
 assert.strictEqual(setIntensity(clampFn, 0, undefined), 0, 'intensity sem valor é 0, não NaN');
 assert.strictEqual(setIntensity(clampFn, 0, 0.5), 0.5, 'intensity no meio passa direto');
 
+// ondas e textos flutuantes: entram no mesmo Particles que os jogos já usam, então
+// clear/update/draw precisam cuidar dos três sem o jogo saber que existem.
+const ParticlesSrc = block(core, '  class Particles {');
+const Particles = new Function('rand', `${ParticlesSrc}; return Particles;`)(
+  (a, b) => (a + b) / 2);
+const fx = new Particles();
+fx.burst(10, 10, '#fff', 4);
+fx.wave(20, 20, '#0ff');
+fx.float(30, 30, '+100', '#ff0');
+assert.strictEqual(fx.waves.length, 1, 'wave entra na lista de ondas');
+assert.strictEqual(fx.floats.length, 1, 'float entra na lista de textos');
+const ctxFalso = new Proxy({}, {
+  get: (_, k) => (k === 'canvas' ? {} : typeof k === 'string' ? () => {} : undefined),
+  set: () => true,
+});
+fx.draw(ctxFalso);                                   // não pode explodir com os três juntos
+const subiu = fx.floats[0].y;
+fx.update(0.5);
+assert.ok(fx.floats[0].y < subiu, 'o texto flutuante tem que subir');
+fx.update(2);
+assert.strictEqual(fx.waves.length, 0, 'a onda tem que expirar sozinha');
+assert.strictEqual(fx.floats.length, 0, 'o texto tem que expirar sozinho');
+fx.wave(1, 1, '#fff'); fx.float(1, 1, 'x', '#fff'); fx.burst(1, 1, '#fff', 2);
+fx.clear();
+assert.deepStrictEqual([fx.list.length, fx.waves.length, fx.floats.length], [0, 0, 0],
+  'clear() tem que limpar os três, senão sobra lixo entre partidas');
+
+// pausar também ao perder o foco da janela, não só ao trocar de aba
+assert.match(core, /window\.addEventListener\('blur', fn\)/,
+  'onHide precisa pausar no blur, senão o jogo roda atrás de outra janela');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

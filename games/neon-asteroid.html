@@ -160,6 +160,8 @@
     score += pts;
     rocksKilled++;
     particles.burst(hitX, hitY, '#ff8c1a', r.r / 3 + 8, 180, 3);
+    particles.wave(hitX, hitY, '#ff8c1a', r.r * 4);
+    particles.float(hitX, hitY, '+' + pts, '#ffd700');
     Neon.audio.sfx.boom();
     Neon.popEl(els.score);
     if (r.r > 14) {
