@@ -165,7 +165,7 @@
       state = 'playing-won';
       Neon.toast('🏆 2048! Continue se quiser.');
       Neon.audio.sfx.record();
-      flash = { t: 400, color: 'rgba(255, 215, 0,' };
+      if (!Neon.motion.reduced) flash = { t: 400, color: 'rgba(255, 215, 0,' };
     }
     if (!canMove()) gameOver(big);
   }

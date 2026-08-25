@@ -198,6 +198,15 @@ window.Neon = (function () {
     music: MUSIC,
   };
 
+  // ── movimento reduzido ─────────────────────────────
+  // O CSS ja zera as animacoes da pagina. Isto e pro canvas: tremida de tela
+  // e flash de tela cheia nao passam por CSS, entao cada jogo consulta aqui
+  // antes de disparar. Getter, nao valor: a preferencia muda sem recarregar.
+  const reducedMQ = window.matchMedia
+    ? window.matchMedia('(prefers-reduced-motion: reduce)')
+    : { matches: false };
+  const motion = { get reduced() { return reducedMQ.matches; } };
+
   // ── partículas ─────────────────────────────────────
   class Particles {
     constructor() { this.list = []; }
@@ -322,7 +331,7 @@ window.Neon = (function () {
     rand, clamp, choice, $, EMOJI,
     best, popEl, toast,
     overlay, audio,
-    Particles, circle, glow, onHide, fitCanvas,
+    Particles, circle, glow, onHide, fitCanvas, motion,
     initPage,
   };
 })();

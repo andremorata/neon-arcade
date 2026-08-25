@@ -176,8 +176,8 @@
     Neon.audio.sfx.boost();
     shakeAt(5, 160);
   }
-  function shakeAt(power, ms) { shake = { t: ms, max: ms, power }; }
-  function flashAt(color, ms) { flash = { t: ms, color }; }
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
 
   function currentSpeed() {
     let s = baseSpeed;
