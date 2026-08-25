@@ -176,6 +176,8 @@
       if (fire === 3) { Neon.audio.sfx.boost(); Neon.toast('🔥 EM CHAMAS! Próximo swish vale 5'); }
     }
     score += pts;
+    particles.wave(BALL_X, ball.y, h.touched ? '#ffffff' : '#ffd000', 120);
+    particles.float(BALL_X, ball.y, '+' + pts, h.touched ? '#ffffff' : '#ffd000');
     speed = Math.min(SPEED_MAX, speed + SPEED_INC);
     els.score.textContent = score;
     els.fire.textContent = fire;

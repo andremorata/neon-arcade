@@ -75,6 +75,27 @@ body::before {
   z-index: 1;
 }
 
+/* Nevoa: manchas borradas que derivam devagar. z-index 0, nao negativo: o body
+   tem fundo proprio, e -1 pintaria atras dele e sumiria. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: -30%;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(70px);
+  opacity: 0.5;
+  background:
+    radial-gradient(38vmax 38vmax at 18% 22%, rgba(155, 48, 255, 0.27), transparent 62%),
+    radial-gradient(34vmax 34vmax at 84% 18%, rgba(0, 240, 255, 0.20), transparent 62%),
+    radial-gradient(40vmax 40vmax at 78% 84%, rgba(255, 43, 214, 0.23), transparent 62%);
+  animation: haze-drift 30s ease-in-out infinite alternate;
+}
+@keyframes haze-drift {
+  from { transform: translate3d(-4%, -3%, 0) scale(1); }
+  to   { transform: translate3d(5%, 4%, 0) scale(1.15); }
+}
+
 .app {
   position: relative;
   z-index: 2;
@@ -229,6 +250,38 @@ header { display: flex; justify-content: center; text-align: center; }
 }
 
 canvas { display: block; width: 100%; height: 100%; }
+
+/* Varredura: uma faixa de luz que desce o quadro. */
+.stage::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 34%;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(0, 240, 255, 0.06) 45%,
+              rgba(255, 255, 255, 0.055) 50%, rgba(0, 240, 255, 0.06) 55%, transparent);
+  animation: stage-sweep 7s linear infinite;
+}
+@keyframes stage-sweep {
+  from { transform: translateY(-120%); }
+  to   { transform: translateY(320%); }
+}
+
+/* Scanlines finas e vinheta, por cima do canvas e por baixo do overlay. */
+.stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0.28;                            /* o tema ja e escuro; mais que isso apaga o jogo */
+  background:
+    repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, 0.35) 2px 3px),
+    radial-gradient(120% 100% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.4));
+}
 
 /* ── Sound toggle ─────────────────────────────────── */
 .sound-toggle {

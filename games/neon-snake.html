@@ -102,7 +102,7 @@
   };
 
   let snake = [], snakePrev = [], direction = { x: 1, y: 0 }, inputQueue = [];
-  let food, golden = null, boosts = [], scorePopups = [], pendingBursts = [], dyingState = { t: 0 };
+  let food, golden = null, boosts = [], pendingBursts = [], dyingState = { t: 0 };
   let score = 0, hi = 0, startHi = 0, baseSpeed = SPEED_START;
   let lastTick = 0, lastIntervalMs = 150, startTime = 0;
   let lastBoostSpawn = 0, nextBoostDelay = 0, nextGoldSpawn = 0;
@@ -154,7 +154,7 @@
     activeBoosts = {};
     combo = { streak: 0, lastEat: 0, best: 1 };
     stats = { food: 0, golden: 0, boosts: { turbo: 0, slow: 0, frenzy: 0, phantom: 0 }, maxSpeed: SPEED_START, maxCombo: 1, timeMs: 0 };
-    particles.clear(); boosts = []; scorePopups = []; pendingBursts = [];
+    particles.clear(); boosts = []; pendingBursts = [];
     golden = null; dyingState = { t: 0 };
     recordToastShown = hi > 0 ? false : true; startHi = hi;
     shake = { t: 0, max: 1, power: 0 }; flash = { t: 0, color: '' }; eatWave = { t: 0 };
@@ -197,7 +197,7 @@
   const totalMult = () => Math.min(9, comboMult() * boostMult());
 
   function popup(gx, gy, text, color) {
-    scorePopups.push({ x: gx * CELL + CELL / 2, y: gy * CELL + CELL / 2, text, color, age: 0 });
+    particles.float(gx * CELL + CELL / 2, gy * CELL + CELL / 2, text, color);
   }
   function burstGrid(gx, gy, color, count, speed) {
     particles.burst(gx * CELL + CELL / 2, gy * CELL + CELL / 2, color, count, speed || 140);
@@ -373,14 +373,6 @@
     }
   }
 
-  function updateExtra(dt) {
-    for (let i = scorePopups.length - 1; i >= 0; i--) {
-      const p = scorePopups[i];
-      p.age += dt; p.y -= 42 * dt;
-      if (p.age > 0.8) scorePopups.splice(i, 1);
-    }
-  }
-
   // ── render ─────────────────────────────────────────
   function segPos(i, progress) {
     const a = snakePrev[i] || snakePrev[snakePrev.length - 1];
@@ -516,18 +508,6 @@
 
     drawSnake(progress, dying, now);
     particles.draw(ctx);
-    for (const p of scorePopups) {
-      const a = Math.max(0, 1 - p.age / 0.8);
-      ctx.globalAlpha = a;
-      ctx.font = `700 15px Orbitron, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      Neon.glow(ctx, p.color, 12);
-      ctx.fillStyle = p.color;
-      ctx.fillText(p.text, p.x, p.y);
-    }
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
 
     if (flash.t > 0) {
       ctx.fillStyle = `${flash.color} ${Math.min(0.45, flash.t / 260)})`;
@@ -735,10 +715,7 @@
       particles.update(dt * 0.55);
       if (dyingState.t >= 1000) finishGameOver();
     } else {
-      if (state === 'playing' || state === 'gameover') {
-        particles.update(dt);
-        updateExtra(dt);
-      }
+      if (state === 'playing' || state === 'gameover') particles.update(dt);
     }
     if (shake.t > 0) shake.t -= dt * 1000;
     if (flash.t > 0) flash.t -= dt * 1000;
