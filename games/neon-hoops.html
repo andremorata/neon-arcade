@@ -63,9 +63,11 @@
   const KX = W / 900;
   const G = 1500, IMPULSE = -400, R = 15, RIM_R = 6;
   const BALL_X = Math.round(230 * KX);
-  // 104 e a janela util (o vao menos as duas pontas do rim). Escala a janela e
-  // devolve as pontas, senao o RIM_R fixo comeria tempo de passagem em tela estreita.
-  const GAP_W = Math.round(104 * KX) + 2 * RIM_R;
+  // 74 e o corredor livre: o vao menos o espaco que a bola precisa pra nao
+  // raspar em nenhuma das duas pontas do rim. E ele que decide o tempo de
+  // travessia, entao e ele que escala. A bola e as pontas nao encolhem junto
+  // com a tela, entao a folga delas entra de volta como constante.
+  const GAP_W = Math.round(74 * KX) + 2 * (R + RIM_R);
   const SPACING = Math.round(380 * KX);
   const SPEED0 = 210 * KX, SPEED_INC = 2 * KX, SPEED_MAX = 270 * KX;
   const CYAN = '#00f0ff', MAGENTA = '#ff2bd6';

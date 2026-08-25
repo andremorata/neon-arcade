@@ -276,6 +276,21 @@ for (const [nome, w] of [['deitado', deitado], ['em pé', emPe]]) {
     `${nome}: --arw/--arh tem que bater com o canvas, senão o quadro estica`);
 }
 
+// Hoops: o que decide se dá pra passar é o corredor livre entre as pontas do
+// rim, não o vão inteiro. A bola e as pontas têm tamanho fixo, então escalar o
+// vão inteiro encolhe o corredor mais do que devia e o aro fica apertado.
+const gapSrc = games.hoops.match(/const GAP_W = ([^;]+);/)[1];
+const travessia = (W, speed) => {
+  const R = 15, RIM_R = 6, KX = W / 900;
+  const GAP_W = new Function('KX', 'R', 'RIM_R', `return ${gapSrc};`)(KX, R, RIM_R);
+  return (GAP_W - 2 * (R + RIM_R)) / speed;
+};
+const tDeitado = travessia(900, 210), tEmPe = travessia(450, 105);
+assert.ok(Math.abs(tDeitado - tEmPe) < 0.01,
+  `Hoops: travessia de ${tDeitado.toFixed(3)}s deitado contra ${tEmPe.toFixed(3)}s em pé; o aro em pé fica apertado`);
+assert.ok(Math.abs(travessia(900, 270) - travessia(450, 135)) < 0.01,
+  'Hoops: na velocidade máxima a travessia também tem que bater nos dois formatos');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');
