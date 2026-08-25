@@ -182,6 +182,100 @@ assert.ok(comFx >= 20, `Esperava tremida/flash em pelo menos 20 lugares, achei $
 assert.match(games['2048'], /if \(!Neon\.motion\.reduced\) flash = \{ t: 400/,
   'O 2048 seta o flash direto e também precisa do guarda');
 
+// Flappy: todo vao gerado precisa ser alcancavel a partir do anterior. Batendo
+// asa sem parar o passaro sobe |FLAP|/2 px/s, e o pilar seguinte chega em
+// VAO_X/speed segundos. Em tela alta (450x800) sortear o vao livre estouraria isso.
+const spawnSrc = block(games.flappy, '  function spawnPipe()');
+function piorDegrau(W, H, speed, n = 300) {
+  const FLAP = -390, GAP = 160, MARGEM = 90, VAO_X = Math.round(320 * (W / 900));
+  const pipes = [];
+  let semente = 7;
+  const sorteio = () => (semente = (semente * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const Neon = {
+    rand: (a, b) => (sorteio() < 0.5 ? a : b),       // sempre um dos extremos: pior caso
+    clamp: (v, a, b) => Math.max(a, Math.min(b, v)),
+  };
+  const spawnPipe = new Function(
+    'Neon', 'pipes', 'W', 'H', 'MARGEM', 'GAP', 'FLAP', 'VAO_X', 'speed',
+    `${spawnSrc}; return spawnPipe;`)(Neon, pipes, W, H, MARGEM, GAP, FLAP, VAO_X, speed);
+  for (let i = 0; i < n; i++) spawnPipe();
+  let pior = 0;
+  for (let i = 1; i < pipes.length; i++) pior = Math.max(pior, Math.abs(pipes[i].gapY - pipes[i - 1].gapY));
+  const dentroDoQuadro = pipes.every(p => p.gapY >= MARGEM && p.gapY + GAP <= H - MARGEM);
+  return { pior, subidaMax: (Math.abs(FLAP) / 2) * (VAO_X / speed), dentroDoQuadro };
+}
+for (const [nome, W, H, speed] of [
+  ['deitado, velocidade inicial', 900, 600, 260],
+  ['deitado, velocidade máxima', 900, 600, 390],
+  ['em pé, velocidade inicial', 450, 800, 130],
+  ['em pé, velocidade máxima', 450, 800, 195],
+]) {
+  const r = piorDegrau(W, H, speed);
+  assert.ok(r.pior <= r.subidaMax,
+    `Flappy ${nome}: degrau de ${Math.round(r.pior)}px, mas dá pra subir só ${Math.round(r.subidaMax)}px entre pilares`);
+  assert.ok(r.dentroDoQuadro, `Flappy ${nome}: vão nasceu fora do quadro`);
+}
+
+// Hoops: mesmo problema do Flappy. Todo aro perdido é fim de jogo, então o aro
+// seguinte tem que estar ao alcance, contando a oscilação dos dois.
+const spawnHoopSrc = block(games.hoops, '  function spawnHoop(x)');
+function piorSaltoHoops(W, H, speed, n = 300) {
+  const IMPULSE = -400, SPACING = Math.round(380 * (W / 900));
+  const hoops = [];
+  let semente = 7, spawned = 0;
+  const sorteio = () => (semente = (semente * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const Neon = {
+    rand: (a, b) => (sorteio() < 0.5 ? a : b),       // sempre um dos extremos: pior caso
+    choice: arr => arr[0],
+    clamp: (v, a, b) => Math.max(a, Math.min(b, v)),
+  };
+  const spawnHoop = new Function('Neon', 'hoops', 'H', 'IMPULSE', 'SPACING', 'speed', 'spawned',
+    `${spawnHoopSrc}; return spawnHoop;`)(Neon, hoops, H, IMPULSE, SPACING, speed, spawned);
+  const randomOriginal = Math.random;
+  Math.random = () => 0;                             // força a oscilação a existir
+  try { for (let i = 0; i < n; i++) spawnHoop(0); } finally { Math.random = randomOriginal; }
+  let pior = 0;
+  for (let i = 1; i < hoops.length; i++) {
+    const a = hoops[i - 1], b = hoops[i];
+    pior = Math.max(pior, Math.abs(b.baseY - a.baseY) + a.amp + b.amp);
+  }
+  const dentroDoQuadro = hoops.every(h => h.baseY - h.amp >= 40 && h.baseY + h.amp <= H - 40);
+  return { pior, subidaMax: (Math.abs(IMPULSE) / 2) * (SPACING / speed), dentroDoQuadro };
+}
+for (const [nome, W, H, speed] of [
+  ['deitado, velocidade inicial', 900, 600, 210],
+  ['deitado, velocidade máxima', 900, 600, 270],
+  ['em pé, velocidade inicial', 450, 800, 105],
+  ['em pé, velocidade máxima', 450, 800, 135],
+]) {
+  const r = piorSaltoHoops(W, H, speed);
+  assert.ok(r.pior <= r.subidaMax,
+    `Hoops ${nome}: salto de ${Math.round(r.pior)}px, mas dá pra subir só ${Math.round(r.subidaMax)}px entre aros`);
+  assert.ok(r.dentroDoQuadro, `Hoops ${nome}: aro nasceu fora do quadro`);
+}
+
+// Neon.world escolhe o formato do mundo e escreve --arw/--arh, que é o que o
+// CSS usa pro aspect-ratio do quadro. Se os dois discordarem, o canvas estica.
+const worldSrc = block(core, '  function world(canvas, deitado, emPe)');
+function chamaWorld(retrato) {
+  const props = {};
+  const stage = { style: { setProperty: (k, v) => { props[k] = v; } } };
+  const canvas = { width: 0, height: 0, closest: () => stage };
+  const world = new Function('window', 'RETRATO', `${worldSrc}; return world;`)(
+    { matchMedia: () => ({ matches: retrato }) }, 'mq');
+  const r = world(canvas, [900, 600], [450, 800]);
+  return { r, canvas: [canvas.width, canvas.height], props };
+}
+const deitado = chamaWorld(false), emPe = chamaWorld(true);
+assert.deepStrictEqual(deitado.canvas, [900, 600], 'Deitado o mundo é 900x600');
+assert.deepStrictEqual(emPe.canvas, [450, 800], 'Em pé o mundo é 450x800');
+assert.strictEqual(deitado.r.retrato, false, 'Deitado não é retrato');
+assert.strictEqual(emPe.r.retrato, true, 'Em pé é retrato');
+for (const [nome, w] of [['deitado', deitado], ['em pé', emPe]]) {
+  assert.strictEqual(+w.props['--arw'] / +w.props['--arh'], w.canvas[0] / w.canvas[1],
+    `${nome}: --arw/--arh tem que bater com o canvas, senão o quadro estica`);
+}
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');
