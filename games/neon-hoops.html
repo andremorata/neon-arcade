@@ -56,10 +56,18 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  const W = 900, H = 600;
-  const G = 1500, IMPULSE = -400, BALL_X = 230, R = 15;
-  const RIM_R = 6, GAP_W = 116, SPACING = 380;
-  const SPEED0 = 210, SPEED_INC = 2, SPEED_MAX = 270;
+  // Em pe o mundo fica 450x800. O salto e identico (gravidade, impulso e bola
+  // nao mudam); encolhe so o eixo horizontal, na proporcao da largura. Assim o
+  // tempo entre aros e a janela de passagem ficam iguais nos dois formatos.
+  const { W, H } = Neon.world(canvas, [900, 600], [450, 800]);
+  const KX = W / 900;
+  const G = 1500, IMPULSE = -400, R = 15, RIM_R = 6;
+  const BALL_X = Math.round(230 * KX);
+  // 104 e a janela util (o vao menos as duas pontas do rim). Escala a janela e
+  // devolve as pontas, senao o RIM_R fixo comeria tempo de passagem em tela estreita.
+  const GAP_W = Math.round(104 * KX) + 2 * RIM_R;
+  const SPACING = Math.round(380 * KX);
+  const SPEED0 = 210 * KX, SPEED_INC = 2 * KX, SPEED_MAX = 270 * KX;
   const CYAN = '#00f0ff', MAGENTA = '#ff2bd6';
   const EMBER = ['#fff2a8', '#ffd000', '#ff8c1a', '#ff4d00', '#ff2bd6'];
 
@@ -98,9 +106,19 @@
       amp = n >= 15 ? Neon.rand(40, 90) : Neon.rand(30, 70);
       freq = Neon.rand(1.2, 2.0);
     }
+    // Degrau que cabe no tempo ate o proximo aro. Subindo sem parar a bola faz
+    // |IMPULSE|/2 px/s, e o aro seguinte chega em SPACING/speed segundos. Tira
+    // as amplitudes das duas oscilacoes, que ja mexem o alvo sozinhas.
+    // Sem isto, em tela alta o aro seguinte nasce longe demais pra alcancar.
+    const ant = hoops[hoops.length - 1];
+    const lo0 = 150 + amp, hi0 = H - 170 - amp;
+    const anterior = ant ? ant.baseY : (lo0 + hi0) / 2;
+    const degrau = Math.max(60,
+      (Math.abs(IMPULSE) / 2) * (SPACING / speed) * 0.8 - amp - (ant ? ant.amp : 0));
     hoops.push({
       x, dir, amp, freq,
-      baseY: Neon.rand(150 + amp, H - 170 - amp),
+      baseY: Neon.rand(Neon.clamp(anterior - degrau, lo0, hi0),
+                       Neon.clamp(anterior + degrau, lo0, hi0)),
       phase: Neon.rand(0, Math.PI * 2),
       scored: false, touched: false,
     });
@@ -428,7 +446,7 @@
     }
     ctx.fillStyle = '#05001a';
     ctx.fillRect(0, 0, W, H);
-    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 620);
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.8);
     g.addColorStop(0, 'rgba(80, 0, 160, 0.32)');
     g.addColorStop(1, 'rgba(4, 0, 26, 0)');
     ctx.fillStyle = g;

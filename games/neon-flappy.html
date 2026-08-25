@@ -55,9 +55,16 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  const W = 900, H = 600;
-  const GRAVITY = 1500, FLAP = -390, BIRD_X = 230;
-  const PIPE_W = 66, GAP = 160;
+  // Em pe o mundo fica 450x800. O voo e identico (gravidade, impulso e vao nao
+  // mudam); o que encolhe e o eixo horizontal, na mesma proporcao da largura.
+  // Assim o passaro atravessa a tela na mesma fracao por segundo nos dois.
+  const { W, H } = Neon.world(canvas, [900, 600], [450, 800]);
+  const KX = W / 900;
+  const GRAVITY = 1500, FLAP = -390, GAP = 160;
+  const BIRD_X = Math.round(230 * KX), PIPE_W = Math.round(66 * KX);
+  const VAO_X = Math.round(320 * KX);                       // distancia entre pilares
+  const VEL0 = 260 * KX, VEL_MAX = 390 * KX, VEL_PASSO = 5 * KX;
+  const MARGEM = 90;
 
   const els = {
     score: Neon.$('score'), best: Neon.$('best'),
@@ -75,7 +82,7 @@
     bird = { x: BIRD_X, y: H / 2, vy: 0 };
     pipes = [];
     passed = 0;
-    speed = 260;
+    speed = VEL0;
     groundHit = false;
     particles.clear();
     els.score.textContent = '0';
@@ -83,8 +90,16 @@
   }
 
   function spawnPipe() {
-    const gapY = Neon.rand(90, H - 90 - GAP);
-    pipes.push({ x: W + 40, gapY, scored: false });
+    const lo0 = MARGEM, hi0 = H - MARGEM - GAP;
+    const anterior = pipes.length ? pipes[pipes.length - 1].gapY : (lo0 + hi0) / 2;
+    // Degrau que cabe no tempo ate o proximo pilar. Batendo asa sem parar o
+    // passaro sobe |FLAP|/2 px/s, e o pilar seguinte chega em VAO_X/speed
+    // segundos. Os 0.8 sao folga, pra nao exigir voo perfeito.
+    // Sem isto, em tela alta o vao seguinte nasce longe demais pra alcancar.
+    const degrau = (Math.abs(FLAP) / 2) * (VAO_X / speed) * 0.8;
+    const lo = Neon.clamp(anterior - degrau, lo0, hi0);
+    const hi = Neon.clamp(anterior + degrau, lo0, hi0);
+    pipes.push({ x: W + 40, gapY: Neon.rand(lo, hi), scored: false });
   }
 
   function startGame() {
@@ -93,7 +108,7 @@
     resetRun();
     spawnPipe();
     spawnPipe();
-    pipes[1].x = W + 340;
+    pipes[1].x = W + VAO_X + 20;
     state = 'playing';
     Neon.overlay.hide();
     Neon.audio.music.start();
@@ -126,7 +141,7 @@
     if (isRecord) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
     els.fsScore.textContent = passed;
     els.fsPipes.textContent = passed;
-    els.fsSpeed.textContent = speed;
+    els.fsSpeed.textContent = Math.round(speed / KX);
     Neon.$('finalStats').style.display = 'grid';
     Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'CRASH!',
       `Você superou ${passed} ${passed === 1 ? 'pilar' : 'pilares'}.`,
@@ -203,18 +218,18 @@
       if (!p.scored && p.x + PIPE_W < bird.x - 11) {
         p.scored = true;
         passed++;
-        speed = Math.min(390, speed + 5);
+        speed = Math.min(VEL_MAX, speed + VEL_PASSO);
         els.score.textContent = passed;
         Neon.audio.sfx.point();
         Neon.popEl(els.score);
         if (pb > 0 && passed === pb + 1) { Neon.toast('🏆 NOVO RECORDE!'); Neon.audio.sfx.record(); flashAt('rgba(255, 215, 0,', 220); }
-        if (passed % 10 === 0) Neon.toast(`VELOCIDADE ${speed}!`);
+        if (passed % 10 === 0) Neon.toast(`VELOCIDADE ${Math.round(speed / KX)}!`);
       }
     }
 
     // spawn
     const last = pipes[pipes.length - 1];
-    if (!last || last.x < W - 320) spawnPipe();
+    if (!last || last.x < W - VAO_X) spawnPipe();
 
     // chão e teto
     if (bird.y + 12 >= H - 8) {
@@ -236,7 +251,7 @@
     }
     ctx.fillStyle = '#05001a';
     ctx.fillRect(0, 0, W, H);
-    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 620);
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.8);
     g.addColorStop(0, 'rgba(80, 0, 160, 0.32)');
     g.addColorStop(1, 'rgba(4, 0, 26, 0)');
     ctx.fillStyle = g;

@@ -293,6 +293,27 @@ window.Neon = (function () {
     });
   }
 
+  // ── formato do mundo por orientacao ────────────────
+  // O jogo passa os dois tamanhos e recebe o que vale agora. Quem escreve
+  // --arw/--arh e daqui, entao o breakpoint mora num lugar so, em vez de
+  // repetido no <style> de cada jogo.
+  // Girar o aparelho troca o formato do mundo. Recarrega em vez de esticar o
+  // quadro: partida distorcida e pior do que partida perdida.
+  const RETRATO = '(max-width: 560px) and (orientation: portrait)';
+  function world(canvas, deitado, emPe) {
+    const mq = window.matchMedia ? window.matchMedia(RETRATO) : { matches: false };
+    if (mq.addEventListener) mq.addEventListener('change', () => location.reload());
+    const [W, H] = mq.matches ? emPe : deitado;
+    canvas.width = W;
+    canvas.height = H;
+    const stage = canvas.closest('.stage');
+    if (stage) {
+      stage.style.setProperty('--arw', String(W));   // setProperty pede string
+      stage.style.setProperty('--arh', String(H));
+    }
+    return { W, H, retrato: !!mq.matches };
+  }
+
   // ── dica de girar o telefone ───────────────────────
   // Em retrato todo jogo trava na largura da tela, entao o quadro de um jogo
   // deitado vira uma faixa fina. Girar troca 373x249 por 412x275 e ocupa a
@@ -331,7 +352,7 @@ window.Neon = (function () {
     rand, clamp, choice, $, EMOJI,
     best, popEl, toast,
     overlay, audio,
-    Particles, circle, glow, onHide, fitCanvas, motion,
+    Particles, circle, glow, onHide, fitCanvas, motion, world,
     initPage,
   };
 })();
