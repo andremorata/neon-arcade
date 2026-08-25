@@ -63,7 +63,16 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  const W = 900, H = 600;
+  // Em pe o campo fica 450x800. Ele da a volta nas bordas, entao nao tem eixo
+  // preferido: basta reescalar. K e a escala linear (raiz da razao de area),
+  // que mantem duas coisas iguais nos dois formatos: o tamanho da rocha em
+  // relacao ao campo, e o tempo que ela leva pra atravessar.
+  const { W, H } = Neon.world(canvas, [900, 600], [450, 800]);
+  const K = Math.sqrt((W * H) / (900 * 600));
+  const R0 = 36 * K;                          // raio da rocha grande
+  // A quantidade de rochas NAO escala. Com o raio ja em K, a area ocupada por
+  // rocha cai junto com a area do campo, entao a mesma contagem da a mesma
+  // fracao de tela ocupada. Escalar os dois contaria a area duas vezes.
 
   const els = {
     score: Neon.$('score'), best: Neon.$('best'), lives: Neon.$('lives'), wave: Neon.$('wave'),
@@ -79,7 +88,7 @@
   pb = Neon.best.get('asteroid');
 
   function makeRock(x, y, r) {
-    const speed = Neon.rand(40, 130);
+    const speed = Neon.rand(40 * K, 130 * K);
     const a = Math.random() * Math.PI * 2;
     const pts = [];
     const n = 9;
@@ -96,10 +105,10 @@
     for (let i = 0; i < n; i++) {
       let x, y;
       do {
-        x = Neon.rand(60, W - 60);
-        y = Neon.rand(60, H - 60);
-      } while (Math.hypot(x - ship.x, y - ship.y) < 220);
-      rocks.push(makeRock(x, y, 36));
+        x = Neon.rand(60 * K, W - 60 * K);
+        y = Neon.rand(60 * K, H - 60 * K);
+      } while (Math.hypot(x - ship.x, y - ship.y) < 220 * K);
+      rocks.push(makeRock(x, y, R0));
     }
     els.wave.textContent = wave;
   }
@@ -156,7 +165,7 @@
 
   function destroyRock(idx, hitX, hitY) {
     const r = rocks[idx];
-    const pts = r.r >= 34 ? 20 : r.r >= 22 ? 50 : 100;
+    const pts = r.r >= R0 * 0.75 ? 20 : r.r >= R0 * 0.4 ? 50 : 100;
     score += pts;
     rocksKilled++;
     particles.burst(hitX, hitY, '#ff8c1a', r.r / 3 + 8, 180, 3);
@@ -164,9 +173,9 @@
     particles.float(hitX, hitY, '+' + pts, '#ffd700');
     Neon.audio.sfx.boom();
     Neon.popEl(els.score);
-    if (r.r > 14) {
+    if (r.r > R0 * 0.35) {
       for (let d = -1; d <= 1; d += 2) {
-        const speed = Math.hypot(r.vx, r.vy) * 1.25 + 30;
+        const speed = Math.hypot(r.vx, r.vy) * 1.25 + 30 * K;
         const a = Math.atan2(r.vy, r.vx) + d * 0.9;
         rocks.push({
           x: r.x, y: r.y,
@@ -291,10 +300,10 @@
       if (kLeft) ship.angle -= 3.6 * dt;
       if (kRight) ship.angle += 3.6 * dt;
       if (kThrust) {
-        ship.vx += Math.cos(ship.angle) * 420 * dt;
-        ship.vy += Math.sin(ship.angle) * 420 * dt;
+        ship.vx += Math.cos(ship.angle) * 420 * K * dt;
+        ship.vy += Math.sin(ship.angle) * 420 * K * dt;
         const sp = Math.hypot(ship.vx, ship.vy);
-        if (sp > 330) { ship.vx *= 330 / sp; ship.vy *= 330 / sp; }
+        if (sp > 330 * K) { ship.vx *= 330 * K / sp; ship.vy *= 330 * K / sp; }
         particles.emit(ship.x - Math.cos(ship.angle) * 16, ship.y - Math.sin(ship.angle) * 16,
           -Math.cos(ship.angle) * 60 + Neon.rand(-25, 25), -Math.sin(ship.angle) * 60 + Neon.rand(-25, 25),
           '#ff8c1a', 2.6, 0.3);
@@ -308,10 +317,10 @@
       // tiro
       if (kFire && shootCd <= 0) {
         bullets.push({
-          x: ship.x + Math.cos(ship.angle) * 18,
-          y: ship.y + Math.sin(ship.angle) * 18,
-          vx: Math.cos(ship.angle) * 560 + ship.vx,
-          vy: Math.sin(ship.angle) * 560 + ship.vy,
+          x: ship.x + Math.cos(ship.angle) * 18 * K,
+          y: ship.y + Math.sin(ship.angle) * 18 * K,
+          vx: Math.cos(ship.angle) * 560 * K + ship.vx,
+          vy: Math.sin(ship.angle) * 560 * K + ship.vy,
         });
         Neon.audio.sfx.shoot();
         shootCd = 0.24;
@@ -326,7 +335,7 @@
       if (b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20) { bullets.splice(i, 1); continue; }
       let hit = -1;
       for (let j = rocks.length - 1; j >= 0; j--) {
-        if (Math.hypot(b.x - rocks[j].x, b.y - rocks[j].y) < rocks[j].r + 3) { hit = j; break; }
+        if (Math.hypot(b.x - rocks[j].x, b.y - rocks[j].y) < rocks[j].r + 3 * K) { hit = j; break; }
       }
       if (hit >= 0) {
         destroyRock(hit, b.x, b.y);
@@ -345,7 +354,7 @@
     // colisão nave × rocha
     if (ship && invuln <= 0) {
       for (let j = 0; j < rocks.length; j++) {
-        if (Math.hypot(ship.x - rocks[j].x, ship.y - rocks[j].y) < rocks[j].r + 11) {
+        if (Math.hypot(ship.x - rocks[j].x, ship.y - rocks[j].y) < rocks[j].r + 11 * K) {
           hitShip();
           break;
         }

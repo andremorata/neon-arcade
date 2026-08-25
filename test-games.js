@@ -379,6 +379,46 @@ assert.match(css, /content: attr\(data-glitch\)/, 'O tema precisa do ::after com
 assert.match(core, /h1\.dataset\.glitch = h1\.textContent\.trim\(\)/,
   'O core precisa preencher data-glitch, senão o ::after fica vazio');
 
+// Asteroid em pé: o campo dá a volta, então o que tem que ficar igual é a fração
+// de tela ocupada por rocha. E os limiares de ponto são relativos ao raio grande;
+// com número fixo, a rocha encolhida cairia na faixa de pontuação errada.
+const asteroid = games.asteroid;
+const ptsSrc = asteroid.match(/const pts = (r\.r >= [^;]+);/)[1];
+const splitSrc = asteroid.match(/if \((r\.r > R0 \* [\d.]+)\)/)[1];
+function rochas(W, H) {
+  const K = Math.sqrt((W * H) / (900 * 600)), R0 = 36 * K;
+  const ponto = new Function('r', 'R0', `return ${ptsSrc};`);
+  const racha = new Function('r', 'R0', `return ${splitSrc};`);
+  const tamanhos = [R0, R0 / 2, R0 / 4];
+  return {
+    telaOcupada: 4 * Math.PI * R0 * R0 / (W * H),
+    pontos: tamanhos.map(r => ponto({ r }, R0)),
+    racham: tamanhos.map(r => racha({ r }, R0)),
+  };
+}
+const rochaDeitado = rochas(900, 600), rochaEmPe = rochas(450, 800);
+assert.ok(Math.abs(rochaDeitado.telaOcupada - rochaEmPe.telaOcupada) < 1e-9,
+  `Asteroid: ${(rochaDeitado.telaOcupada * 100).toFixed(2)}% de tela ocupada deitado contra ${(rochaEmPe.telaOcupada * 100).toFixed(2)}% em pé`);
+for (const [nome, r] of [['deitado', rochaDeitado], ['em pé', rochaEmPe]]) {
+  assert.deepStrictEqual(r.pontos, [20, 50, 100], `Asteroid ${nome}: grande/média/pequena têm que valer 20/50/100`);
+  assert.deepStrictEqual(r.racham, [true, true, false], `Asteroid ${nome}: só grande e média racham`);
+}
+
+// Snake em pé: a grade muda de forma, mas o número de células quase não muda,
+// senão o recorde de um formato não seria comparável com o do outro.
+const mundosSnake = games.snake.match(/Neon\.world\(canvas, \[([^\]]+)\], \[([^\]]+)\]\)/);
+const celulas = lado => {
+  const [a, b] = lado.split(',').map(x => Number(x.trim().replace(/\s*\*\s*CELL/, '')));
+  return { cols: a, rows: b, total: a * b };
+};
+const gradeDeitado = celulas(mundosSnake[1]), gradeEmPe = celulas(mundosSnake[2]);
+assert.ok(Math.abs(gradeDeitado.total - gradeEmPe.total) / gradeDeitado.total < 0.05,
+  `Snake: ${gradeDeitado.total} células deitado contra ${gradeEmPe.total} em pé; o recorde deixa de ser comparável`);
+assert.ok(gradeEmPe.rows > gradeEmPe.cols, 'Snake em pé precisa ser mais alto que largo');
+assert.ok(gradeDeitado.cols > gradeDeitado.rows, 'Snake deitado precisa ser mais largo que alto');
+assert.match(games.snake, /const emPe = ROWS > COLS;/,
+  'O Snake precisa nascer descendo na grade alta, senão sai de lado e bate na parede');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

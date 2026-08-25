@@ -81,8 +81,12 @@
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
 
-  const COLS = 36, ROWS = 24, CELL = 24;
-  const W = COLS * CELL, H = ROWS * CELL;
+  // Em pe a grade vira 22x39. A celula continua 24px, e a contagem total quase
+  // nao muda (864 contra 858), entao o placar de um formato continua comparavel
+  // com o do outro: o bicho tem praticamente o mesmo espaco pra crescer.
+  const CELL = 24;
+  const { W, H } = Neon.world(canvas, [36 * CELL, 24 * CELL], [22 * CELL, 39 * CELL]);
+  const COLS = W / CELL, ROWS = H / CELL;
   const SPEED_START = 8, SPEED_MAX = 22, SPEED_RAMP = 0.35, SPEED_RAMP_MS = 12000;
   const COMBO_WINDOW = 4000;
   const GOLD_SPAWN_MIN = 18000, GOLD_SPAWN_MAX = 24000, GOLD_LIFE = 6000;
@@ -144,9 +148,11 @@
 
   function reset() {
     const cx = (COLS / 2) | 0, cy = (ROWS / 2) | 0;
-    snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
+    const emPe = ROWS > COLS;
+    const d = emPe ? { x: 0, y: 1 } : { x: 1, y: 0 };   // grade alta: nasce descendo
+    snake = [0, 1, 2].map(i => ({ x: cx - d.x * i, y: cy - d.y * i }));
     snakePrev = snake.map(s => ({ ...s }));
-    direction = { x: 1, y: 0 }; inputQueue = [];
+    direction = { x: d.x, y: d.y }; inputQueue = [];
     score = 0; baseSpeed = SPEED_START;
     lastTick = performance.now(); lastIntervalMs = 150; startTime = performance.now();
     lastBoostSpawn = startTime; nextBoostDelay = Neon.rand(BOOST_SPAWN_MIN, BOOST_SPAWN_MAX);
