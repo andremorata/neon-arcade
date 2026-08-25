@@ -150,6 +150,21 @@ assert.strictEqual(fitAt(4).width, 2700, 'O teto de 3x segura o custo em telas m
 assert.strictEqual(fitAt(2, 450).width, 900, 'Metade do tamanho em dpr 2 continua 1:1');
 assert.strictEqual(fitAt(2, 200).width, 900, 'A escala nunca cai abaixo de 1');
 
+// dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
+const hintSrc = block(core, '  function addRotateHint()');
+const makeHint = new Function('document', 'getComputedStyle', `${hintSrc}; return addRotateHint;`);
+const hintFor = (arw, arh) => {
+  const filhos = [];
+  const stage = { querySelector: () => filhos[0] || null, appendChild: c => filhos.push(c) };
+  const doc = { querySelector: () => stage, createElement: () => ({}) };
+  makeHint(doc, () => ({ getPropertyValue: k => (k === '--arw' ? arw : arh) }))();
+  return filhos.length;
+};
+assert.strictEqual(hintFor(3, 2), 1, 'Jogo 3:2 deve pedir pra girar o telefone');
+assert.strictEqual(hintFor(1, 1), 0, 'Jogo quadrado cabe em pé, não pede giro');
+assert.strictEqual(hintFor(4, 3), 0, 'Em 4:3 girar quase não muda a área, não pede giro');
+assert.strictEqual(hintFor(16, 26), 0, 'Jogo em pé não pede giro');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

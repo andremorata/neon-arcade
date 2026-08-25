@@ -284,12 +284,31 @@ window.Neon = (function () {
     });
   }
 
+  // ── dica de girar o telefone ───────────────────────
+  // Em retrato todo jogo trava na largura da tela, entao o quadro de um jogo
+  // deitado vira uma faixa fina. Girar troca 373x249 por 412x275 e ocupa a
+  // tela toda. Quem decide e o jogador; isto so avisa, e o CSS so mostra em
+  // celular em pe e antes da partida comecar.
+  function addRotateHint() {
+    const stage = document.querySelector('.stage');
+    if (!stage || stage.querySelector('.rotate-hint')) return;
+    const cs = getComputedStyle(stage);
+    const arw = parseFloat(cs.getPropertyValue('--arw'));
+    const arh = parseFloat(cs.getPropertyValue('--arh'));
+    if (!(arw / arh >= 1.4)) return; // 4:3 pra baixo girar nao compensa
+    const hint = document.createElement('div');
+    hint.className = 'rotate-hint';
+    hint.textContent = '↻ gire o telefone para um quadro maior';
+    stage.appendChild(hint);
+  }
+
   // ── inicialização de página padrão ─────────────────
   // Espera DOM pronto e aplica: fontes, sound toggle, best keys.
   function initPage() {
     bindSoundToggle();
     const cv = $('game');
     if (cv && cv.getContext) fitCanvas(cv);
+    addRotateHint();
     const tag = $('best');
     if (tag) tag.textContent = best.get(tag.dataset.key || 'none');
   }
