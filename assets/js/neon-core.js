@@ -474,6 +474,10 @@ window.Neon = (function () {
     bindSoundToggle();
     const cv = $('game');
     if (cv && cv.getContext) fitCanvas(cv);
+    // O glitch do logo e uma copia do titulo em outra cor. attr() precisa do
+    // dado no elemento, entao copia daqui em vez de repetir em 14 arquivos.
+    const h1 = document.querySelector('.brand h1');
+    if (h1) h1.dataset.glitch = h1.textContent.trim();
     addRotateHint();
     const tag = $('best');
     if (tag) tag.textContent = best.get(tag.dataset.key || 'none');

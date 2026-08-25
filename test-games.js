@@ -356,6 +356,29 @@ assert.deepStrictEqual([fx.list.length, fx.waves.length, fx.floats.length], [0, 
 assert.match(core, /window\.addEventListener\('blur', fn\)/,
   'onHide precisa pausar no blur, senão o jogo roda atrás de outra janela');
 
+// pele da cobra: um boost por vez manda na cor, e a ordem importa quando dois
+// estao ligados juntos. Phantom tem que ganhar, senao a cobra atravessa parede
+// pintada de turbo e o jogador nao ve que esta invulneravel.
+const pele = new Function(`${block(games.snake, '  function peleDaCobra(')}; return peleDaCobra;`)();
+assert.strictEqual(pele(true, true, true, true).glow, '#00f0ff', 'Phantom manda na cor acima de tudo');
+assert.strictEqual(pele(false, true, true, true).glow, '#ffb300', 'Turbo vem depois do phantom');
+assert.strictEqual(pele(false, false, true, true).glow, '#ff8c1a', 'Frenzy vem depois do turbo');
+assert.strictEqual(pele(false, false, false, true).glow, '#5b8cff', 'Slow é o último boost');
+const padrao = pele(false, false, false, false);
+assert.ok(padrao.a && padrao.b && padrao.glow, 'Sem boost nenhum a cobra ainda tem cor');
+for (const [nome, p] of [['phantom', pele(true)], ['turbo', pele(0, 1)], ['padrão', padrao]]) {
+  assert.notStrictEqual(p.a, p.b, `${nome}: as duas pontas do gradiente não podem ser iguais`);
+}
+
+// swipe encadeado: sem reancorar a origem, um gesto vira uma curva só
+assert.match(games.snake, /swipe\.x = e\.clientX; swipe\.y = e\.clientY;/,
+  'O swipe do Snake precisa reancorar a origem a cada curva');
+
+// o glitch do logo lê o texto de um data-, preenchido pelo core em vez de 14 arquivos
+assert.match(css, /content: attr\(data-glitch\)/, 'O tema precisa do ::after com attr(data-glitch)');
+assert.match(core, /h1\.dataset\.glitch = h1\.textContent\.trim\(\)/,
+  'O core precisa preencher data-glitch, senão o ::after fica vazio');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

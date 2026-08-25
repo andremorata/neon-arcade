@@ -516,103 +516,106 @@
     ctx.restore();
   }
 
+  // Pele por boost. A cobra inteira troca de cor quando um poder liga.
+  function peleDaCobra(phantom, turbo, frenzy, slow) {
+    if (phantom) return { a: '#ffffff', b: '#00f0ff', glow: '#00f0ff' };
+    if (turbo)   return { a: '#fff200', b: '#ff3d00', glow: '#ffb300' };
+    if (frenzy)  return { a: '#ffd08a', b: '#ff8c1a', glow: '#ff8c1a' };
+    if (slow)    return { a: '#a8f3ff', b: '#3b5bff', glow: '#5b8cff' };
+    return { a: '#00f5d4', b: '#9b30ff', glow: '#00f0ff' };
+  }
+
   function drawSnake(progress, dying, now) {
-    const phantom = !!activeBoosts.phantom, turbo = !!activeBoosts.turbo, frenzy = !!activeBoosts.frenzy;
-    const t = now;
+    const phantom = !!activeBoosts.phantom, turbo = !!activeBoosts.turbo;
+    const frenzy = !!activeBoosts.frenzy, slow = !!activeBoosts.slow;
     const fade = dying ? Math.max(0, 1 - dyingState.t / 700) : 1;
-    if (fade <= 0.01) return;
+    if (fade <= 0.01 || !snake.length) return;
 
-    let headGlow = '#00f0ff';
-    if (turbo) headGlow = '#ffe600';
-    else if (frenzy) headGlow = '#ff8c1a';
-
-    let waveP = -1, bodyPulse = 0;
+    // Pulso de comer: clareia a fita inteira por um instante.
+    let pulse = 0;
     if (eatWave.t) {
-      const age = (t - eatWave.t) / 600;
-      if (age <= 1.1) { waveP = age; bodyPulse = Math.max(0, 1 - age / 0.75) * 0.4; }
+      const age = (now - eatWave.t) / 600;
+      if (age <= 1.1) pulse = Math.max(0, 1 - age / 0.75) * 0.5;
       else eatWave.t = 0;
     }
 
-    for (let i = snake.length - 1; i >= 0; i--) {
+    const pts = [];
+    for (let i = 0; i < snake.length; i++) {
       const p = segPos(i, progress);
-      if (!p) continue;
-      const h = (i * 22 + (t / 600) * 40) % 360;
-      ctx.globalAlpha = 0.35 * fade;
-      Neon.glow(ctx, phantom ? '#00f0ff' : `hsl(${h}, 100%, 60%)`, 26);
-      ctx.fillStyle = `hsl(${h}, 100%, 50%)`;
-      Neon.circle(ctx, p.x * CELL + CELL / 2, p.y * CELL + CELL / 2, CELL / 2 - 1);
+      if (p) pts.push({ x: p.x * CELL + CELL / 2, y: p.y * CELL + CELL / 2 });
     }
-    ctx.shadowBlur = 0;
+    if (!pts.length) return;
 
-    for (let i = snake.length - 1; i >= 0; i--) {
-      const p = segPos(i, progress);
-      if (!p) continue;
-      const h = (i * 22 + (t / 600) * 40) % 360;
-      const isHead = i === 0;
-      const cx = p.x * CELL + CELL / 2, cy = p.y * CELL + CELL / 2;
-      const r = CELL / 2 - 2.5;
-      ctx.globalAlpha = fade;
-      if (isHead) {
-        ctx.fillStyle = bodyPulse > 0 ? `hsl(0, 0%, ${100 - bodyPulse * 18}%)` : '#ffffff';
-        Neon.glow(ctx, headGlow, 20 + bodyPulse * 14);
-        Neon.circle(ctx, cx, cy, r);
-      } else {
-        const wf = waveP >= 0 ? Math.max(0, 1 - Math.abs(i - waveP * snake.length) / 2.5) : 0;
-        const lift = bodyPulse * 32 + wf * 30;
-        const g = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.1, cx, cy, r);
-        g.addColorStop(0,    `hsl(${h}, 100%, ${Math.min(92, 82 + lift)}%)`);
-        g.addColorStop(0.55, `hsl(${(h + 35) % 360}, 100%, ${Math.min(88, 60 + lift)}%)`);
-        g.addColorStop(1,    `hsl(${(h + 70) % 360}, 100%, ${Math.min(82, 47 + lift)}%)`);
-        ctx.fillStyle = g;
-        Neon.glow(ctx, `hsl(${h}, 100%, 65%)`, 9);
-        Neon.circle(ctx, cx, cy, r);
+    // Corta a fita onde ela atravessa a tela (phantom), senao vira um risco
+    // de ponta a ponta do quadro.
+    const trechos = [[pts[0]]];
+    for (let i = 1; i < pts.length; i++) {
+      if (Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y) > CELL * 1.6) trechos.push([]);
+      trechos[trechos.length - 1].push(pts[i]);
+    }
+    const tracar = () => {
+      ctx.beginPath();
+      for (const t of trechos) {
+        if (t.length < 2) continue;
+        ctx.moveTo(t[0].x, t[0].y);
+        for (let i = 1; i < t.length; i++) ctx.lineTo(t[i].x, t[i].y);
       }
-    }
-    ctx.shadowBlur = 0;
+      // trecho de um ponto so ainda precisa aparecer
+      for (const t of trechos) if (t.length === 1) { ctx.moveTo(t[0].x, t[0].y); ctx.lineTo(t[0].x + 0.01, t[0].y); }
+    };
 
-    if (waveP >= 0 && snake.length > 1) {
-      for (let i = 1; i < snake.length; i++) {
-        const p = segPos(i, progress);
-        if (!p) continue;
-        const wf = Math.max(0, 1 - Math.abs(i - waveP * snake.length) / 2.5);
-        if (wf <= 0.02) continue;
-        ctx.globalAlpha = wf * 0.75 * fade;
-        ctx.fillStyle = '#ffffff';
-        Neon.glow(ctx, '#ffffff', 20);
-        Neon.circle(ctx, p.x * CELL + CELL / 2, p.y * CELL + CELL / 2, CELL / 2 - 1.5);
-      }
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-    }
+    const pele = peleDaCobra(phantom, turbo, frenzy, slow);
+    const cauda = pts[pts.length - 1];
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    for (let i = snake.length - 1; i >= 0; i--) {
-      const p = segPos(i, progress);
-      if (!p) continue;
-      const isHead = i === 0;
-      const cx = p.x * CELL + CELL / 2, cy = p.y * CELL + CELL / 2;
-      const r = CELL / 2 - 2.5;
-      ctx.globalAlpha = fade * (isHead ? 0.9 : 0.55);
-      ctx.fillStyle = '#ffffff';
-      Neon.glow(ctx, '#ffffff', 6);
-      Neon.circle(ctx, cx - r * 0.35, cy - r * 0.42, r * (isHead ? 0.32 : 0.26));
-    }
+    ctx.globalAlpha = (phantom ? 0.35 : 0.55) * fade;
+    Neon.glow(ctx, pele.glow, 26);
+    ctx.strokeStyle = pele.glow;
+    ctx.lineWidth = CELL * 0.92;
+    tracar(); ctx.stroke();
+
+    const g = ctx.createLinearGradient(pts[0].x, pts[0].y, cauda.x, cauda.y);
+    g.addColorStop(0, pele.a);
+    g.addColorStop(1, pele.b);
+    ctx.globalAlpha = (phantom ? 0.55 : 1) * fade;
+    ctx.shadowBlur = 14;
+    ctx.strokeStyle = g;
+    ctx.lineWidth = CELL * 0.74;
+    if (phantom) ctx.setLineDash([CELL * 0.8, CELL * 0.35]);
+    tracar(); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.globalAlpha = (0.3 + pulse) * fade;
     ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = CELL * 0.12;
+    tracar(); ctx.stroke();
+    ctx.restore();
+
+    // cabeca
+    const h = pts[0], prox = pts[1] || { x: h.x - direction.x * CELL, y: h.y - direction.y * CELL };
+    const ang = Math.atan2(h.y - prox.y, h.x - prox.x);
+    ctx.save();
+    ctx.translate(h.x, h.y);
+    ctx.rotate(ang);
+    ctx.globalAlpha = (phantom ? 0.8 : 1) * fade;
+    Neon.glow(ctx, pele.glow, 22 + pulse * 16);
+    const hg = ctx.createLinearGradient(-CELL * 0.5, 0, CELL * 0.5, 0);
+    hg.addColorStop(0, pele.b);
+    hg.addColorStop(1, pele.a);
+    ctx.fillStyle = hg;
+    Neon.circle(ctx, 0, 0, CELL * 0.46);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#02040a';
+    Neon.circle(ctx, CELL * 0.13, -CELL * 0.17, CELL * 0.1);
+    Neon.circle(ctx, CELL * 0.13,  CELL * 0.17, CELL * 0.1);
+    ctx.fillStyle = '#ffffff';
+    Neon.circle(ctx, CELL * 0.17, -CELL * 0.17, CELL * 0.04);
+    Neon.circle(ctx, CELL * 0.17,  CELL * 0.17, CELL * 0.04);
+    ctx.restore();
     ctx.globalAlpha = 1;
-
-    const hp = segPos(0, progress);
-    if (hp) {
-      const hx = hp.x * CELL + CELL / 2, hy = hp.y * CELL + CELL / 2;
-      ctx.globalAlpha = fade;
-      Neon.glow(ctx, '#ffffff', 10);
-      ctx.fillStyle = '#0a0028';
-      const er = 3, off = 5;
-      if (direction.x === 1)       { Neon.circle(ctx, hx + off, hy - 5, er); Neon.circle(ctx, hx + off, hy + 5, er); }
-      else if (direction.x === -1) { Neon.circle(ctx, hx - off, hy - 5, er); Neon.circle(ctx, hx - off, hy + 5, er); }
-      else if (direction.y === -1) { Neon.circle(ctx, hx - 5, hy - off, er); Neon.circle(ctx, hx + 5, hy - off, er); }
-      else                         { Neon.circle(ctx, hx - 5, hy + off, er); Neon.circle(ctx, hx + 5, hy + off, er); }
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-    }
   }
 
   // ── input ──────────────────────────────────────────
@@ -667,19 +670,33 @@
     else if (key === 'arrowright' || key === 'd'){ e.preventDefault(); queueDir(1, 0); }
   });
 
-  let swipeStart = null;
+  // Swipe encadeado: vira durante o arrasto e reancora a origem a cada curva,
+  // entao um gesto so faz varias curvas. Antes era uma curva por gesto, e no
+  // celular isso obriga a levantar o dedo pra cada esquina.
+  const PASSO_SWIPE = 26, TOQUE_MAX = 12;
+  let swipe = null;
   els.stage.addEventListener('pointerdown', (e) => {
     if (e.target.closest('.dpad, .sound-toggle')) return;
-    swipeStart = { x: e.clientX, y: e.clientY };
+    swipe = { x: e.clientX, y: e.clientY, ox: e.clientX, oy: e.clientY };
   });
-  els.stage.addEventListener('pointerup', (e) => {
-    if (!swipeStart) return;
-    const dx = e.clientX - swipeStart.x, dy = e.clientY - swipeStart.y;
-    swipeStart = null;
-    if (Math.abs(dx) < 26 && Math.abs(dy) < 26) return;
+  els.stage.addEventListener('pointermove', (e) => {
+    if (!swipe) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    if (Math.hypot(dx, dy) < PASSO_SWIPE) return;
     if (Math.abs(dx) > Math.abs(dy)) queueDir(dx > 0 ? 1 : -1, 0);
     else queueDir(0, dy > 0 ? 1 : -1);
+    swipe.x = e.clientX; swipe.y = e.clientY;
   });
+  els.stage.addEventListener('pointerup', (e) => {
+    if (!swipe) return;
+    const andou = Math.hypot(e.clientX - swipe.ox, e.clientY - swipe.oy);
+    swipe = null;
+    if (andou > TOQUE_MAX) return;                  // foi arrasto, ja virou
+    if (state === 'menu' || state === 'gameover') startGame();
+    else if (state === 'playing') pauseGame();
+    else if (state === 'paused') resumeGame();
+  });
+  els.stage.addEventListener('pointercancel', () => { swipe = null; });
 
   document.querySelectorAll('.dpad button').forEach(btn => {
     btn.addEventListener('pointerdown', (e) => {
