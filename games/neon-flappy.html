@@ -135,6 +135,7 @@
 
   function gameOver() {
     state = 'gameover';
+    Neon.audio.music.down();
     pb = Neon.best.update('flappy', passed);
     els.best.textContent = pb;
     const isRecord = startHi === 0 ? passed > 0 : passed > startHi;
@@ -194,6 +195,7 @@
   // ── update ────────────────────────────────────────
   function update(dt) {
     if (state !== 'playing') return;
+    Neon.audio.music.intensity((speed - VEL0) / (VEL_MAX - VEL0));
 
     bird.vy += GRAVITY * dt;
     bird.y += bird.vy * dt;

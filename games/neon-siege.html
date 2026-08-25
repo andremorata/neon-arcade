@@ -602,6 +602,7 @@
 
   function gameOver() {
     state = 'gameover';
+    Neon.audio.music.down();
     pb = Neon.best.update('siege', score);
     els.best.textContent = pb;
     const isRecord = startHi === 0 ? score > 0 : score > startHi;
@@ -695,6 +696,7 @@
   // ── update ────────────────────────────────────────
   function update(dt) {
     if (state !== 'playing') return;
+    Neon.audio.music.intensity((level - 1) / 9);
     tPlay += dt;
     updateProjs(dt);
     updateBlocks(dt);

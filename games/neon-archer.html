@@ -384,6 +384,7 @@
 
   function gameOver() {
     state = 'gameover';
+    Neon.audio.music.down();
     pb = Neon.best.update('archer', youScore);
     els.best.textContent = pb;
     const won = youScore > botScore, tie = youScore === botScore;

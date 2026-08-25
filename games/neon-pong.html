@@ -190,6 +190,7 @@
 
   function endMatch() {
     state = 'gameover';
+    Neon.audio.music.down();
     const win = you > ai;
     Neon.best.update('pong', you);
     const rec = Neon.best.get('pong');

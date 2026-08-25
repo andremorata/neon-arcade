@@ -160,6 +160,7 @@
 
   function endRound() {
     state = 'gameover';
+    Neon.audio.music.down();
     const maxCombo = Math.min(3, 1 + Math.floor(Math.max(0, combo) / 3));
     Neon.best.update('whack', score);
     els.best.textContent = Neon.best.get('whack');

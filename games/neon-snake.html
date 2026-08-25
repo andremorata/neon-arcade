@@ -206,6 +206,7 @@
   // ── game loop ──────────────────────────────────────
   function tick(now) {
     if (state !== 'playing') return;
+    Neon.audio.music.intensity((baseSpeed - SPEED_START) / (SPEED_MAX - SPEED_START));
     const interval = 1000 / currentSpeed();
     const elapsed = now - lastTick;
     if (elapsed < interval) return;
@@ -310,6 +311,7 @@
 
   function gameOver() {
     state = 'dying';
+    Neon.audio.music.down();
     dyingState = { t: 0 };
     shakeAt(14, 500);
     flashAt('rgba(255, 43, 214,', 320);
@@ -325,6 +327,7 @@
 
   function finishGameOver() {
     state = 'gameover';
+    Neon.audio.music.down();
     Neon.best.update('snake', score);
     els.best.textContent = Neon.best.get('snake');
 

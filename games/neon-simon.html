@@ -136,6 +136,7 @@
 
   function gameOver() {
     state = 'gameover';
+    Neon.audio.music.down();
     const bestRound = Math.max(pb, round - 1);
     Neon.best.update('simon', bestRound);
     els.best.textContent = Neon.best.get('simon');
@@ -152,6 +153,7 @@
 
   function win() {
     state = 'gameover';
+    Neon.audio.music.down();
     Neon.best.update('simon', WIN_ROUNDS);
     els.best.textContent = Neon.best.get('simon');
     Neon.audio.sfx.record();
