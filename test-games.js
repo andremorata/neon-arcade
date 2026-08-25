@@ -291,6 +291,22 @@ assert.ok(Math.abs(tDeitado - tEmPe) < 0.01,
 assert.ok(Math.abs(travessia(900, 270) - travessia(450, 135)) < 0.01,
   'Hoops: na velocidade máxima a travessia também tem que bater nos dois formatos');
 
+// mobile: página de jogo é quadro travado. Sem zoom de dois toques, sem menu de
+// seleção, sem scroll. O menu (index.html) fica de fora, lá dá pra ampliar texto.
+for (const [name, html] of Object.entries(games)) {
+  assert.match(html, /<meta name="viewport"[^>]*user-scalable=no/,
+    `${name}: viewport precisa travar o zoom`);
+}
+assert.ok(!/user-scalable=no/.test(menu), 'O menu não deve travar o zoom, é texto pra ler');
+for (const regra of ['touch-action: manipulation', 'user-select: none', '-webkit-touch-callout: none']) {
+  assert.ok(css.includes(regra), `O tema precisa de "${regra}" em html, body`);
+}
+const travaMobile = block(css, '@media (max-width: 700px), (orientation: landscape) and (max-height: 520px)');
+assert.match(travaMobile, /body:has\(\.stage\)[\s\S]*touch-action: none/,
+  'Em celular a página de jogo precisa de touch-action: none, senão a pinça passa no iOS');
+assert.match(travaMobile, /position: fixed/,
+  'Em celular a página de jogo precisa ser fixa, senão a tela rola durante o jogo');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');
