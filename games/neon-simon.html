@@ -161,8 +161,8 @@
     Neon.overlay.show('SIMON MESTRE!', 'Você dominou as 15 rodadas da sequência perfeita.', 'JOGAR DE NOVO', 'record');
   }
 
-  function shakeAt(power, ms) { shake = { t: ms, max: ms, power }; }
-  function flashAt(color, ms) { flash = { t: ms, color }; }
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
 
   // ── input ─────────────────────────────────────────
   function padAt(x, y) {

@@ -165,6 +165,23 @@ assert.strictEqual(hintFor(1, 1), 0, 'Jogo quadrado cabe em pé, não pede giro'
 assert.strictEqual(hintFor(4, 3), 0, 'Em 4:3 girar quase não muda a área, não pede giro');
 assert.strictEqual(hintFor(16, 26), 0, 'Jogo em pé não pede giro');
 
+// movimento reduzido: tremida de tela e flash sao canvas, o CSS nao alcanca.
+// Cada jogo que tem o efeito precisa consultar Neon.motion.reduced antes de disparar.
+assert.match(css, /@media \(prefers-reduced-motion: reduce\)/,
+  'O tema precisa respeitar prefers-reduced-motion');
+let comFx = 0;
+for (const [name, html] of Object.entries(games)) {
+  for (const fx of ['shakeAt', 'flashAt']) {
+    if (!html.includes(`function ${fx}(`)) continue;
+    comFx++;
+    assert.match(html, new RegExp(`function ${fx}\\([^)]*\\) \\{ if \\(!Neon\\.motion\\.reduced\\)`),
+      `${name}: ${fx} tem que respeitar Neon.motion.reduced`);
+  }
+}
+assert.ok(comFx >= 20, `Esperava tremida/flash em pelo menos 20 lugares, achei ${comFx}`);
+assert.match(games['2048'], /if \(!Neon\.motion\.reduced\) flash = \{ t: 400/,
+  'O 2048 seta o flash direto e também precisa do guarda');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

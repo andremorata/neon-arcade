@@ -204,8 +204,8 @@
       'NOVA PARTIDA', win ? 'record' : 'go');
   }
 
-  function shakeAt(power, ms) { shake = { t: ms, max: ms, power }; }
-  function flashAt(color, ms) { flash = { t: ms, color }; }
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
 
   // ── simulação ─────────────────────────────────────
   function updateBall(dt) {

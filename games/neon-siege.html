@@ -119,8 +119,8 @@
   const particles = new Neon.Particles();
   pb = Neon.best.get('siege');
 
-  function shakeAt(power, ms) { shake = { t: ms, max: ms, power }; }
-  function flashAt(color, ms) { flash = { t: ms, color }; }
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
 
   const targetsAlive = () => targets.reduce((n, t) => n + (t.alive ? 1 : 0), 0);
   const allResting = () => blocks.every(b => b.resting) && targets.every(t => !t.alive || t.vy === 0);

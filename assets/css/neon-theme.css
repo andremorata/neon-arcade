@@ -697,3 +697,18 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
   }
   .rotate-hint { display: block; }
 }
+
+/* ── Movimento reduzido ─────────────────────────────────────────────
+   Duracao quase zero em vez de `animation: none`: quem usa `forwards`
+   (o toast) mantem o estado final, so nao desliza. O delay continua
+   valendo, entao o toast ainda some depois dos 3s.
+   Tremida de tela e flash sao canvas, nao passam por aqui. Quem cuida
+   deles e o Neon.motion.reduced dentro de cada jogo. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
