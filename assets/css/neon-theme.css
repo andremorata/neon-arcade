@@ -55,6 +55,9 @@ html, body {
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
+  touch-action: manipulation;               /* mata o zoom de dois toques */
+  user-select: none;                        /* mata o menu copiar/selecionar */
+  -webkit-user-select: none;
 }
 
 button, a { touch-action: manipulation; }
@@ -712,4 +715,19 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ── Celular numa pagina de jogo: quadro travado na tela ────────────
+   Sem scroll, sem repique de borda, sem pinca. O menu (index.html) fica
+   de fora: la o texto ainda da pra ampliar.
+   touch-action: none no body mata a pinca ate no iOS, que ignora o
+   user-scalable=no do meta viewport. */
+@media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
+  body:has(.stage) {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    touch-action: none;
+  }
+  body:has(.stage) .app { height: 100%; overflow: hidden; }
 }
