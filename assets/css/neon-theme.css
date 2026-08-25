@@ -518,6 +518,25 @@ canvas { display: block; width: 100%; height: 100%; }
 .dpad .down  { top: calc(var(--k) * 2); left: var(--k); }
 @media (pointer: coarse) { .dpad { --k: 52px; } }
 
+/* ── Dica de girar ────────────────────────────────── */
+/* Ligada pelo neon-core so em jogo deitado. Some quando a partida comeca. */
+.rotate-hint {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 10px;
+  z-index: 16;                              /* acima do overlay (10) */
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 12px rgba(0, 240, 255, 0.7);
+  pointer-events: none;
+}
+.overlay.hidden ~ .rotate-hint { display: none; }
+
 /* ── Arcade hub ───────────────────────────────────── */
 .arcade-tiles {
   display: grid;
@@ -639,4 +658,42 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
   .overlay p { font-size: 11px; line-height: 1.4; margin-bottom: 8px; }
   .final-stats { margin-bottom: 10px; }
   .controls-hint { margin-top: 8px; }
+}
+
+/* ── Celular em pe: so o placar e o quadro ──────────────────────────
+   Vale so em pagina de jogo (:has(.stage)); o menu continua igual.
+   Em retrato TODO jogo do arcade trava na largura, nao na altura, entao
+   esconder cromo nao aumenta o quadro. O que aumenta e colar nas bordas:
+   o quadro sai de 373px pra 393px num iPhone. O resto e pra tirar o
+   scroll e centralizar o jogo na tela em vez de grudar no topo.
+   ponytail: --chrome de 112px e constante, nao medida. Se o topo cortar
+   em algum aparelho, suba o numero aqui. */
+@media (max-width: 560px) and (orientation: portrait) {
+  .app:has(.stage) {
+    padding: 8px 0 10px;
+    gap: 8px;
+    min-height: 100dvh;
+    justify-content: center;
+  }
+  .app:has(.stage) .brand h1 { font-size: 20px; }
+  .app:has(.stage) .brand .tag,
+  .app:has(.stage) footer,
+  .app:has(.stage) .legend { display: none; }
+  .app:has(.stage) .dashboard {
+    padding: 2px 12px;
+    gap: 2px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .app:has(.stage) .stat .val { font-size: 17px; }
+  .app:has(.stage) .stat .lbl { font-size: 7px; margin-bottom: 1px; }
+  .app:has(.stage) .stage {
+    --chrome: 112px;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+  .rotate-hint { display: block; }
 }
