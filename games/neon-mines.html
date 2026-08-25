@@ -226,6 +226,7 @@
     }
     setTimeout(() => {
       state = 'gameover';
+      Neon.audio.music.down();
       els.fsTime.textContent = fmt(seconds);
       els.fsOpen.textContent = opened;
       els.fsRec.textContent = '—';
@@ -243,6 +244,7 @@
         }
       }
       state = 'gameover';
+      Neon.audio.music.down();
       const rec = Neon.best.update('mines', seconds);
       els.best.textContent = pb || rec ? fmt(rec) : '—';
       const isRecord = seconds > 0 && (pb === 0 || seconds < pb);

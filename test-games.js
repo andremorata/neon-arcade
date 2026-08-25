@@ -307,6 +307,24 @@ assert.match(travaMobile, /body:has\(\.stage\)[\s\S]*touch-action: none/,
 assert.match(travaMobile, /position: fixed/,
   'Em celular a página de jogo precisa ser fixa, senão a tela rola durante o jogo');
 
+// a trilha tem que desligar quando a partida acaba. Antes ela seguia tocando
+// por cima do fim de jogo, em todos os 13.
+for (const [name, html] of Object.entries(games)) {
+  assert.ok(html.includes('Neon.audio.music.down()'),
+    `${name}: precisa chamar music.down() quando a partida acaba`);
+}
+for (const metodo of ['start()', 'stop(fade)', 'down()', 'intensity(k)']) {
+  assert.ok(core.includes('    ' + metodo), `O MUSIC precisa expor ${metodo}`);
+}
+// intensity é o que liga o jogo ao andamento e ao filtro; fora de 0..1 desafina
+const intensitySrc = core.match(/intensity\(k\) \{ ([^}]+) \}/)[1];
+const setIntensity = new Function('clamp', 'musIntensity', 'k', `
+  ${intensitySrc}; return musIntensity;`);
+assert.strictEqual(setIntensity(clampFn, 0, 2), 1, 'intensity acima de 1 tem que grudar em 1');
+assert.strictEqual(setIntensity(clampFn, 0, -3), 0, 'intensity abaixo de 0 tem que grudar em 0');
+assert.strictEqual(setIntensity(clampFn, 0, undefined), 0, 'intensity sem valor é 0, não NaN');
+assert.strictEqual(setIntensity(clampFn, 0, 0.5), 0.5, 'intensity no meio passa direto');
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

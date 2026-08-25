@@ -64,7 +64,8 @@ window.Neon = (function () {
 
   // ── áudio (WebAudio, tudo sintetizado) ─────────────
   let AC = null, sndGain = null, musGain = null, noiseBuf = null;
-  let musicTimer = null, musicStep = 0, musicNext = 0;
+  let musFilter = null, musDelay = null;
+  let musicTimer = null, musicStep = 0, musicNext = 0, musIntensity = 0;
   let soundOn = localStorage.getItem('neon-sound') !== 'off';
 
   function ensureAudio() {
@@ -73,6 +74,14 @@ window.Neon = (function () {
       AC = new Ctx();
       sndGain = AC.createGain(); sndGain.gain.value = 0.6; sndGain.connect(AC.destination);
       musGain = AC.createGain(); musGain.gain.value = 0.2; musGain.connect(AC.destination);
+      // Corte compartilhado da trilha: abre conforme o jogo esquenta e despenca na morte.
+      musFilter = AC.createBiquadFilter();
+      musFilter.type = 'lowpass'; musFilter.frequency.value = 900; musFilter.Q.value = 0.7;
+      musFilter.connect(musGain);
+      // Eco com realimentacao, so pro arpejo.
+      musDelay = AC.createDelay(1); musDelay.delayTime.value = 0.27;
+      const fb = AC.createGain(); fb.gain.value = 0.33;
+      musDelay.connect(fb); fb.connect(musDelay); musDelay.connect(musFilter);
       const len = AC.sampleRate * 0.2;
       noiseBuf = AC.createBuffer(1, len, AC.sampleRate);
       const d = noiseBuf.getChannelData(0);
@@ -144,29 +153,121 @@ window.Neon = (function () {
   };
   const g = () => soundOn && AC;
 
-  // trilha synthwave procedural
+  // ── trilha synthwave procedural ────────────────────
+  // Progressao Am-F-C-G em la menor. Andamento e corte do filtro sobem com
+  // music.intensity(k), que cada jogo alimenta com o proprio 0..1. Quem nao
+  // chamar roda no piso, entao nenhum jogo precisa mudar pra funcionar.
+  const CHORDS = [
+    { root: 110.00, notes: [440.00, 523.25, 659.25] },  // Am
+    { root:  87.31, notes: [349.23, 440.00, 523.25] },  // F
+    { root: 130.81, notes: [392.00, 523.25, 659.25] },  // C
+    { root:  98.00, notes: [392.00, 493.88, 587.33] },  // G
+  ];
+  const BASS = [1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 2, 0];  // 0 pausa · 1 tonica · 2 oitava
+  const KICK = [0, 8, 11], CLAP = [4, 12], ARP = [2, 7, 10, 15];
+  const bpm = () => 92 + musIntensity * 52;
+
+  function mKick(t) {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(44, t + 0.14);
+    g.gain.setValueAtTime(0.9, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g); g.connect(musFilter);
+    o.start(t); o.stop(t + 0.25);
+  }
+  function mNoise(t, dur, freq, q, vol, type) {
+    const src = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+    src.buffer = noiseBuf;
+    f.type = type; f.frequency.value = freq; f.Q.value = q;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f); f.connect(g); g.connect(musFilter);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+  function mBass(t, f, dur) {
+    const o = AC.createOscillator(), g = AC.createGain(), lp = AC.createBiquadFilter();
+    o.type = 'sawtooth'; o.frequency.setValueAtTime(f, t);
+    lp.type = 'lowpass'; lp.Q.value = 7;
+    lp.frequency.setValueAtTime(340, t);
+    lp.frequency.exponentialRampToValueAtTime(110, t + dur);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.3, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(lp); lp.connect(g); g.connect(musFilter);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function mArp(t, f) {
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'triangle'; o.frequency.setValueAtTime(f, t);
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.linearRampToValueAtTime(0.12, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    o.connect(g); g.connect(musDelay); g.connect(musFilter);
+    o.start(t); o.stop(t + 0.4);
+  }
+  function mPad(t, ch, dur) {
+    for (const f of ch.notes) {
+      const o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'sawtooth'; o.frequency.value = f / 2;
+      o.detune.value = rand(-7, 7);                 // desafina de leve, engorda o acorde
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.045, t + 0.6);
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(musFilter);
+      o.start(t); o.stop(t + dur + 0.05);
+    }
+  }
+
   const MUSIC = {
-    bass: [45, 45, 48, 45, 52, 45, 48, 52],
-    lead: [57, 60, 64, 69, 64, 60, 57, 45],
     start() {
       if (!soundOn || !AC || musicTimer) return;
-      musicStep = 0; musicNext = AC.currentTime + 0.08;
-      musicTimer = setInterval(() => this.sched(), 100);
+      const t = AC.currentTime;
+      musicStep = 0; musicNext = t + 0.08;
+      musFilter.frequency.cancelScheduledValues(t);
+      musFilter.frequency.setValueAtTime(420, t);
+      musGain.gain.cancelScheduledValues(t);
+      musGain.gain.setValueAtTime(musGain.gain.value, t);
+      musGain.gain.linearRampToValueAtTime(0.2, t + 1.2);
+      musicTimer = setInterval(() => this.sched(), 50);
+      this.sched();
     },
-    stop() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } },
+    stop(fade) {
+      if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+      if (!AC) return;
+      const t = AC.currentTime;
+      musGain.gain.cancelScheduledValues(t);
+      musGain.gain.setValueAtTime(musGain.gain.value, t);
+      musGain.gain.linearRampToValueAtTime(0, t + (fade === undefined ? 0.25 : fade));
+    },
+    // Morte: derruba o corte e desliga junto com o jogador.
+    down() {
+      if (!AC || !musicTimer) return;
+      const t = AC.currentTime;
+      musFilter.frequency.cancelScheduledValues(t);
+      musFilter.frequency.setValueAtTime(Math.max(200, musFilter.frequency.value), t);
+      musFilter.frequency.exponentialRampToValueAtTime(150, t + 0.7);
+      this.stop(0.8);
+    },
+    // 0..1: o quanto a partida esta pegando fogo. Mexe andamento e brilho.
+    intensity(k) { musIntensity = clamp(+k || 0, 0, 1); },
     sched() {
-      const spb = 60 / 112 / 2;
-      while (musicNext < AC.currentTime + 0.3) {
-        const s = musicStep, t = musicNext, bar = s % 8;
-        if (s % 4 === 0) tone(130, 42, t - AC.currentTime, 0.16, 'sine', 0.5, musGain);
-        if (s % 2 === 1) noise(t - AC.currentTime, 0.03, 0.05, musGain, 7000);
-        tone(this.midi(this.bass[bar]), 0, t - AC.currentTime, 0.22, 'sawtooth', 0.1, musGain);
-        if (s % 8 === 4) tone(this.midi(this.lead[bar % 8] + 12), 0, t - AC.currentTime + spb * 0.5, 0.3, 'triangle', 0.09, musGain);
-        musicStep++;
+      const spb = 60 / bpm() / 4;                  // um passo = semicolcheia
+      const ate = AC.currentTime + 0.25;
+      let guard = 0;
+      while (musicNext < ate && guard++ < 48) {
+        const s = musicStep, bar = (s >> 4) & 3, st = s & 15, ch = CHORDS[bar], t = musicNext;
+        if (KICK.includes(st)) mKick(t);
+        if (CLAP.includes(st)) mNoise(t, 0.16, 1800, 1.2, 0.22, 'bandpass');
+        mNoise(t, st % 2 ? 0.045 : 0.028, 7500, 0.8, st % 2 ? 0.05 : 0.03, 'highpass');
+        if (BASS[st]) mBass(t, ch.root * BASS[st], spb * 1.6);
+        if (ARP.includes(st)) mArp(t, ch.notes[(st + bar) % 3]);
+        if (st === 0 && bar % 2 === 0) mPad(t, ch, spb * 32);
+        musicStep = (s + 1) & 63;
         musicNext = t + spb;
       }
+      musFilter.frequency.setTargetAtTime(700 + musIntensity * 1600, AC.currentTime, 0.6);
     },
-    midi(n) { return 440 * Math.pow(2, (n - 69) / 12); },
   };
 
   function setSound(on) {

@@ -192,6 +192,7 @@
 
   function gameOver() {
     state = 'gameover';
+    Neon.audio.music.down();
     pb = Neon.best.update('hoops', score);
     els.best.textContent = pb;
     const isRecord = startHi === 0 ? score > 0 : score > startHi;
@@ -250,6 +251,7 @@
   // ── update ────────────────────────────────────────
   function update(dt) {
     if (state !== 'playing') return;
+    Neon.audio.music.intensity((speed - SPEED0) / (SPEED_MAX - SPEED0));
     tPlay += dt;
 
     const prevY = ball.y;

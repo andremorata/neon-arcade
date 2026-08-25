@@ -140,6 +140,7 @@
 
   function gameOver() {
     state = 'gameover';
+    Neon.audio.music.down();
     Neon.best.update('asteroid', score);
     els.best.textContent = Neon.best.get('asteroid');
     const isRecord = startHi === 0 ? score > 0 : score > startHi;
@@ -279,6 +280,7 @@
   // ── update ────────────────────────────────────────
   function update(dt, now) {
     if (state !== 'playing') return;
+    Neon.audio.music.intensity((wave - 1) / 9);
     if (invuln > 0) invuln -= dt;
     if (shootCd > 0) shootCd -= dt;
 
