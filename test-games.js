@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score' };
 // o breach grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.breach, /pb = Neon\.best\.update\('breach', score\)/, 'O Breach precisa gravar o recorde');
 for (const [key, variable] of Object.entries(BEST)) {
@@ -450,6 +450,39 @@ assert.strictEqual(comChefe[0], salasBreach.SALAS.at(-1), 'O chefe e a ultima sa
 assert.ok(salasBreach.PONTOS.chefe > salasBreach.PONTOS.tanque, 'O chefe vale mais que o tanque');
 assert.ok(salasBreach.TIPOS.chefe.vida > salasBreach.TIPOS.tanque.vida * 3,
   'O chefe precisa aguentar bem mais que o tanque, senao nao e chefe');
+
+// Caixa de marchas do Racha: e o jogo inteiro. A punicao por trocar cedo tem que
+// nascer da curva de torque, nao de uma regra inventada, senao o jogador nao
+// aprende nada olhando o conta-giros.
+const racha = games.racha;
+const caixa = new Function('Neon',
+  racha.slice(racha.indexOf('  const MARCHAS = ['), racha.indexOf('  // A cor do rival avisa')) +
+  '; return { MARCHAS, JANELA, CORTE, torque, naJanela };')({ clamp: clampFn });
+assert.strictEqual(caixa.MARCHAS.length, 6, 'Sao 6 marchas');
+let topoAnterior = 0, torqueAnterior = Infinity;
+for (const m of caixa.MARCHAS) {
+  assert.ok(m.topo > topoAnterior, 'Marcha mais alta tem que correr mais');
+  assert.ok(m.torque < torqueAnterior, 'Marcha mais alta tem que empurrar menos');
+  topoAnterior = m.topo; torqueAnterior = m.torque;
+}
+assert.strictEqual(caixa.MARCHAS.at(-1).topo, 1, 'A ultima marcha chega no teto de velocidade');
+// a faixa verde fica antes do corte, senao acertar a troca exigiria estourar o motor
+assert.ok(caixa.JANELA[0] < caixa.JANELA[1], 'A faixa verde precisa ter largura');
+assert.ok(caixa.JANELA[1] <= caixa.CORTE, 'A faixa verde nao pode passar do corte');
+assert.ok(caixa.naJanela(caixa.JANELA[0]) && !caixa.naJanela(caixa.JANELA[1]),
+  'A faixa inclui o inicio e exclui o fim');
+assert.ok(!caixa.naJanela(caixa.JANELA[0] - 0.01) && !caixa.naJanela(1.05),
+  'Fora da faixa, dos dois lados, nao vale troca perfeita');
+// o torque tem que premiar quem gira alto e punir quem troca cedo ou estoura
+const noPico = caixa.torque(0.75);
+assert.ok(noPico > caixa.torque(0.2) * 1.5, 'Girar alto tem que empurrar bem mais que giro baixo');
+assert.ok(caixa.torque(0.2) < caixa.torque(0.5), 'Trocar cedo joga o giro onde o torque some');
+assert.ok(caixa.torque(1.02) < caixa.torque(0.2), 'Depois do corte o motor para de empurrar');
+for (let r = 0; r <= 1.08; r += 0.01) {
+  assert.ok(caixa.torque(r) > 0, `Torque nunca zera nem fica negativo (rpm ${r.toFixed(2)})`);
+}
+// na faixa verde o torque ainda esta perto do pico: e por isso que ela e o alvo
+assert.ok(caixa.torque(caixa.JANELA[0]) > noPico * 0.7, 'A faixa verde fica na parte boa da curva');
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
