@@ -528,6 +528,18 @@ assert.match(travaMobile, /body:has\(\.stage\)[\s\S]*touch-action: none/,
 assert.match(travaMobile, /position: fixed/,
   'Em celular a página de jogo precisa ser fixa, senão a tela rola durante o jogo');
 
+// iPhone com notch/Dynamic Island: viewport-fit=cover cola o layout no topo da
+// tela, entao todo padding de topo/base do .app precisa somar a safe area,
+// senao o titulo e o placar ficam embaixo da ilha.
+for (const [name, html] of Object.entries({ ...games, menu })) {
+  assert.match(html, /<meta name="viewport"[^>]*viewport-fit=cover/,
+    `${name}: viewport precisa de viewport-fit=cover`);
+}
+for (const [, decl] of css.matchAll(/\.app(?::has\([^)]*\))?\s*\{[^}]*?padding:([^;]*);/g)) {
+  assert.ok(/safe-area-inset-top/.test(decl) && /safe-area-inset-bottom/.test(decl),
+    `.app com "padding:${decl}" ignora a safe area do iPhone`);
+}
+
 // a trilha tem que desligar quando a partida acaba. Antes ela seguia tocando
 // por cima do fim de jogo, em todos os 13.
 for (const [name, html] of Object.entries(games)) {

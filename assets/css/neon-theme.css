@@ -101,7 +101,11 @@ body::after {
   z-index: 2;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding:
+    calc(32px + env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    calc(64px + env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -708,12 +712,16 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
 
 @media (max-width: 700px) {
   .app {
-    padding: 10px max(10px, env(safe-area-inset-right)) 24px max(10px, env(safe-area-inset-left));
+    padding:
+      calc(10px + env(safe-area-inset-top))
+      max(10px, env(safe-area-inset-right))
+      calc(24px + env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
     gap: 12px;
   }
   .brand h1 { font-size: clamp(24px, 7vw, 34px); }
   .brand .tag { font-size: 10px; letter-spacing: 0.2em; }
-  .stage { --chrome: 200px; }
+  .stage { --chrome: calc(200px + env(safe-area-inset-top) + env(safe-area-inset-bottom)); }
   .sound-toggle { width: 48px; height: 48px; font-size: 19px; }
   .overlay { padding: 14px 12px; }
   .overlay h2 { font-size: clamp(22px, 6.5vw, 30px); margin-bottom: 8px; }
@@ -732,13 +740,20 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
 
 /* ── Celular deitado: o cromo some pra sobrar tela pro jogo ─────────── */
 @media (orientation: landscape) and (max-height: 520px) {
-  .app { padding: 6px max(8px, env(safe-area-inset-right)) 8px max(8px, env(safe-area-inset-left)); gap: 8px; }
+  .app {
+    padding:
+      calc(6px + env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      calc(8px + env(safe-area-inset-bottom))
+      max(8px, env(safe-area-inset-left));
+    gap: 8px;
+  }
   .brand h1 { font-size: 20px; }
   .brand .tag, footer, .legend { display: none; }
   .dashboard { padding: 5px 10px; }
   .stat .val { font-size: 15px; }
   .stat .lbl { font-size: 7px; margin-bottom: 1px; }
-  .stage { --chrome: 118px; }
+  .stage { --chrome: calc(118px + env(safe-area-inset-top) + env(safe-area-inset-bottom)); }
   .overlay { padding: 10px; }
   .overlay h2 { font-size: 26px; margin-bottom: 6px; }
   .overlay p { font-size: 11px; line-height: 1.4; margin-bottom: 8px; }
@@ -756,7 +771,7 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
    em algum aparelho, suba o numero aqui. */
 @media (max-width: 560px) and (orientation: portrait) {
   .app:has(.stage) {
-    padding: 8px 0 10px;
+    padding: calc(8px + env(safe-area-inset-top)) 0 calc(10px + env(safe-area-inset-bottom));
     gap: 8px;
     min-height: 100dvh;
     justify-content: center;
@@ -776,7 +791,7 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
   .app:has(.stage) .stat .val { font-size: 17px; }
   .app:has(.stage) .stat .lbl { font-size: 7px; margin-bottom: 1px; }
   .app:has(.stage) .stage {
-    --chrome: 112px;
+    --chrome: calc(112px + env(safe-area-inset-top) + env(safe-area-inset-bottom));
     border-radius: 0;
     border-left: 0;
     border-right: 0;
