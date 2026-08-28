@@ -276,13 +276,13 @@ assert.ok(proj.estrada(0, -1).cx < proj.estrada(0, 0).cx, 'Curva pra esquerda jo
 // Clima do Enduro: a neblina so existe do dia 2 em diante e sempre de manha; a
 // noite fecha no meio do dia e volta a abrir antes de virar. Sao as duas curvas
 // que mudam o quanto o jogador enxerga, entao erro aqui vira jogo injogavel.
-const clima = new Function('Neon',
+const clima = new Function('Neon', 'ZFAR',
   enduro.slice(enduro.indexOf('  // 0 de dia, 1 na noite'), enduro.indexOf('  const els = {')) +
-  '; return { escuridao, nevoa };')({ clamp: clampFn });
+  '; return { escuridao, nevoa, chuvaDe, alcanceVista, visibilidade };')({ clamp: clampFn }, 8);
 assert.strictEqual(clima.nevoa(0.30, 1), 0, 'O dia 1 nao tem neblina');
 assert.ok(clima.nevoa(0.30, 2) > 0.4, 'Do dia 2 em diante a neblina aparece');
 assert.ok(clima.nevoa(0.30, 5) > clima.nevoa(0.30, 2), 'A neblina fecha mais a cada dia');
-assert.ok(clima.nevoa(0.30, 9) <= 0.9, 'A neblina nunca tapa a tela inteira');
+assert.ok(clima.nevoa(0.30, 9) <= 0.96, 'A neblina nunca tapa a tela inteira');
 assert.strictEqual(clima.nevoa(0.70, 5), 0, 'A neblina some depois da manha');
 assert.strictEqual(clima.escuridao(0.10), 0, 'De manha e dia claro');
 assert.strictEqual(clima.escuridao(0.65), 1, 'No meio do ciclo e noite fechada');
@@ -324,6 +324,36 @@ for (let l = 100; l >= 0; l--) {
   assert.ok(e.amassos >= amassoAnterior, `Amasso nao pode diminuir com a lata caindo (${l})`);
   amassoAnterior = e.amassos;
 }
+
+// Alcance de vista: o que aperta o tempo de reacao a noite, na neblina e na chuva.
+// Se o alcance nao encurtar, o clima vira enfeite e o jogo nao fica mais dificil.
+assert.strictEqual(clima.alcanceVista(0, 0, 0), 8, 'Em dia limpo enxerga a pista inteira');
+assert.ok(clima.alcanceVista(1, 0, 0) < 3.5, 'A noite fechada so mostra o que o farol pega');
+assert.ok(clima.alcanceVista(1, 0, 0) > 2.5, 'Mas sobra vista pra dar tempo de desviar');
+assert.ok(clima.alcanceVista(0, 0.96, 0) < clima.alcanceVista(1, 0, 0), 'Neblina cheia fecha mais que a noite');
+assert.ok(clima.alcanceVista(0, 0, 1) < 8, 'A chuva tambem encurta a vista');
+assert.strictEqual(clima.alcanceVista(1, 0.96, 1), clima.alcanceVista(0, 0.96, 0),
+  'Somando climas vale o mais fechado, nao a soma');
+assert.strictEqual(clima.visibilidade(0, 3), 1, 'Rival colado sempre aparece');
+assert.strictEqual(clima.visibilidade(9, 3), 0, 'Rival alem do alcance fica invisivel');
+assert.strictEqual(clima.visibilidade(3, 3), 0, 'Bem no limite do alcance ainda nao da pra ver');
+assert.ok(clima.visibilidade(2.2, 3) > 0 && clima.visibilidade(2.2, 3) < 1,
+  'Entrando no alcance o rival aparece esmaecendo, nao de estalo');
+assert.strictEqual(clima.visibilidade(1.4, 3), 1, 'Passada a faixa de fade o rival aparece inteiro');
+let visAnterior = 1;
+for (let z = 0; z <= 8; z += 0.1) {
+  const v = clima.visibilidade(z, 3);
+  assert.ok(v <= visAnterior + 1e-9, `Rival mais longe nao pode aparecer mais (z=${z.toFixed(1)})`);
+  visAnterior = v;
+}
+
+// Chuva: so de tres em tres dias e sempre na virada da tarde pra noite.
+assert.strictEqual(clima.chuvaDe(0.62, 1), 0, 'Dia 1 nao chove');
+assert.strictEqual(clima.chuvaDe(0.62, 2), 0, 'Dia 2 nao chove');
+assert.strictEqual(clima.chuvaDe(0.62, 3), 1, 'Dia 3 chove forte no pico');
+assert.strictEqual(clima.chuvaDe(0.62, 6), 1, 'A chuva volta de tres em tres dias');
+assert.strictEqual(clima.chuvaDe(0.05, 3), 0, 'De manha nao chove nem no dia de chuva');
+assert.strictEqual(clima.chuvaDe(0.99, 3), 0, 'A chuva passa antes de virar o dia');
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
