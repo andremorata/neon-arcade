@@ -6,6 +6,8 @@
 <title>NEON HOOPS — Arcade</title>
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#04001a">
 <link rel="stylesheet" href="../assets/css/neon-theme.css">
 <style>
@@ -62,12 +64,16 @@
   // tempo entre aros e a janela de passagem ficam iguais nos dois formatos.
   const { W, H } = Neon.world(canvas, [900, 600], [450, 800]);
   const KX = W / 900;
-  const G = 1500, IMPULSE = -400, R = 15, RIM_R = 6;
+  const G = 1500, IMPULSE = -400;
+  // A bola e as pontas do rim escalam com o eixo horizontal, igual ao resto do
+  // percurso. Sem isso elas ficavam do tamanho de sempre num mundo com metade
+  // da largura e o aro virava uma fresta: 7 unidades de folga em pe contra 44
+  // deitado. Agora em pe o desenho e o mesmo do deitado, so que menor.
+  const R = 15 * KX, RIM_R = 6 * KX;
   const BALL_X = Math.round(230 * KX);
   // 74 e o corredor livre: o vao menos o espaco que a bola precisa pra nao
   // raspar em nenhuma das duas pontas do rim. E ele que decide o tempo de
-  // travessia, entao e ele que escala. A bola e as pontas nao encolhem junto
-  // com a tela, entao a folga delas entra de volta como constante.
+  // travessia, entao e ele que escala.
   const GAP_W = Math.round(74 * KX) + 2 * (R + RIM_R);
   const SPACING = Math.round(380 * KX);
   const SPEED0 = 210 * KX, SPEED_INC = 2 * KX, SPEED_MAX = 270 * KX;
@@ -348,10 +354,10 @@
     ctx.strokeStyle = color;
     ctx.globalAlpha = 0.35;
     ctx.lineWidth = 1.5;
-    const netH = 34 * h.dir, inset = 14;
+    const netH = 34 * h.dir, inset = 14 * KX;   // horizontal: escala com o mundo
     ctx.beginPath();
     for (const [x0, x1] of [[h.x, h.x + inset], [h.x + GAP_W, h.x + GAP_W - inset],
-                            [h.x + GAP_W * 0.33, h.x + inset + 12], [h.x + GAP_W * 0.67, h.x + GAP_W - inset - 12]]) {
+                            [h.x + GAP_W * 0.33, h.x + inset + 12 * KX], [h.x + GAP_W * 0.67, h.x + GAP_W - inset - 12 * KX]]) {
       ctx.moveTo(x0, ry);
       ctx.lineTo(x1, ry + netH);
     }

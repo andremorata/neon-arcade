@@ -733,14 +733,23 @@ for (const [nome, w] of [['deitado', deitado], ['em pé', emPe]]) {
 }
 
 // Hoops: o que decide se dá pra passar é o corredor livre entre as pontas do
-// rim, não o vão inteiro. A bola e as pontas têm tamanho fixo, então escalar o
-// vão inteiro encolhe o corredor mais do que devia e o aro fica apertado.
+// rim, não o vão inteiro. Duas coisas têm que bater nos dois formatos: o tempo
+// de travessia e a folga medida em bolas. A segunda é o que quebrava quando a
+// bola não escalava junto — em pé sobravam 7 unidades contra 44 deitado.
 const gapSrc = games.hoops.match(/const GAP_W = ([^;]+);/)[1];
-const travessia = (W, speed) => {
-  const R = 15, RIM_R = 6, KX = W / 900;
+const raioSrc = games.hoops.match(/const R = ([^,]+), RIM_R = ([^;]+);/);
+const aro = W => {
+  const KX = W / 900;
+  const ev = src => new Function('KX', `return ${src};`)(KX);
+  const R = ev(raioSrc[1]), RIM_R = ev(raioSrc[2]);
   const GAP_W = new Function('KX', 'R', 'RIM_R', `return ${gapSrc};`)(KX, R, RIM_R);
-  return (GAP_W - 2 * (R + RIM_R)) / speed;
+  return { corredor: GAP_W - 2 * (R + RIM_R), R };
 };
+const travessia = (W, speed) => aro(W).corredor / speed;
+const folga = W => aro(W).corredor / (2 * aro(W).R);   // corredor medido em bolas
+assert.ok(Math.abs(folga(900) - folga(450)) < 0.01,
+  `Hoops: folga de ${folga(900).toFixed(2)} bolas deitado contra ${folga(450).toFixed(2)} em pé; ` +
+  'em pé o aro fica apertado porque a bola não escala junto com o mundo');
 const tDeitado = travessia(900, 210), tEmPe = travessia(450, 105);
 assert.ok(Math.abs(tDeitado - tEmPe) < 0.01,
   `Hoops: travessia de ${tDeitado.toFixed(3)}s deitado contra ${tEmPe.toFixed(3)}s em pé; o aro em pé fica apertado`);
@@ -769,6 +778,13 @@ assert.match(travaMobile, /position: fixed/,
 for (const [name, html] of Object.entries({ ...games, menu })) {
   assert.match(html, /<meta name="viewport"[^>]*viewport-fit=cover/,
     `${name}: viewport precisa de viewport-fit=cover`);
+}
+// viewport-fit=cover so vale no PWA do iOS com a barra de status translucida.
+// Sem esta meta o iOS abre a pagina numa viewport 93px menor e depois estica:
+// o quadro cresce sozinho e o toque continua caindo no lugar antigo.
+for (const [name, html] of Object.entries({ ...games, menu })) {
+  assert.match(html, /apple-mobile-web-app-status-bar-style"\s+content="black-translucent"/,
+    `${name}: falta a meta apple-mobile-web-app-status-bar-style=black-translucent`);
 }
 for (const [, decl] of css.matchAll(/\.app(?::has\([^)]*\))?\s*\{[^}]*?padding:([^;]*);/g)) {
   assert.ok(/safe-area-inset-top/.test(decl) && /safe-area-inset-bottom/.test(decl),
