@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score' };
 for (const [key, variable] of Object.entries(BEST)) {
   assert.match(games[key], new RegExp(`pb\\s*=\\s*Neon\\.best\\.update\\('${key}', ${variable}\\)`),
     `O ${key} deve atualizar o recorde em memória`);
@@ -248,6 +248,82 @@ for (let i = 0; i < 120; i++) { fb.soltarBombas(); fb.mover(heroi, -1, 0, 1 / 60
 assert.ok(xIni - heroi.x > 80, `Quem larga a bomba tem que conseguir fugir dela (andou ${(xIni - heroi.x).toFixed(1)}px)`);
 for (let i = 0; i < 120; i++) { fb.soltarBombas(); fb.mover(heroi, 1, 0, 1 / 60); }
 assert.ok(!fb.encostaNaCasa(heroi, 5, 5), 'Depois de sair, a bomba vira parede e o jogador nao volta pra cima dela');
+
+// Projecao do Enduro: pDeZ e zDeP tem que ser uma o inverso da outra, senao o
+// carro rival aparece numa profundidade e a pista desenha noutra. E a pista
+// precisa abrir do horizonte pro para-choque, com a curva zerada embaixo.
+const enduro = games.enduro;
+const proj = new Function('Neon',
+  enduro.slice(enduro.indexOf('  const W = 600'), enduro.indexOf('  // ── céu')) +
+  '; return { pDeZ, zDeP, yDeP, estrada, ZFAR, HY };')({ clamp: clampFn });
+for (const z of [0, 0.5, 1, 3, 6, proj.ZFAR]) {
+  assert.ok(Math.abs(proj.zDeP(proj.pDeZ(z)) - z) < 1e-9, `Enduro: ida e volta de z quebra em ${z}`);
+}
+assert.strictEqual(proj.pDeZ(proj.ZFAR), 0, 'No horizonte p tem que ser 0');
+assert.strictEqual(proj.pDeZ(0), 1, 'No para-choque p tem que ser 1');
+assert.strictEqual(proj.pDeZ(proj.ZFAR * 2), 0, 'Alem do horizonte p continua 0, nao vira negativo');
+assert.ok(proj.yDeP(0) === proj.HY && proj.yDeP(1) === 800, 'p mapeia do horizonte ao fim do quadro');
+let larguraAnterior = -1;
+for (let p = 0; p <= 1.0001; p += 0.05) {
+  const { meia } = proj.estrada(p, 0);
+  assert.ok(meia > larguraAnterior, `A pista tem que abrir vindo do horizonte (p=${p.toFixed(2)})`);
+  larguraAnterior = meia;
+}
+assert.strictEqual(proj.estrada(1, 1).cx, 300, 'A curva nao desloca o para-choque, so o longe');
+assert.ok(proj.estrada(0, 1).cx > proj.estrada(0, 0).cx, 'Curva pra direita joga o horizonte pra direita');
+assert.ok(proj.estrada(0, -1).cx < proj.estrada(0, 0).cx, 'Curva pra esquerda joga o horizonte pra esquerda');
+
+// Clima do Enduro: a neblina so existe do dia 2 em diante e sempre de manha; a
+// noite fecha no meio do dia e volta a abrir antes de virar. Sao as duas curvas
+// que mudam o quanto o jogador enxerga, entao erro aqui vira jogo injogavel.
+const clima = new Function('Neon',
+  enduro.slice(enduro.indexOf('  // 0 de dia, 1 na noite'), enduro.indexOf('  const els = {')) +
+  '; return { escuridao, nevoa };')({ clamp: clampFn });
+assert.strictEqual(clima.nevoa(0.30, 1), 0, 'O dia 1 nao tem neblina');
+assert.ok(clima.nevoa(0.30, 2) > 0.4, 'Do dia 2 em diante a neblina aparece');
+assert.ok(clima.nevoa(0.30, 5) > clima.nevoa(0.30, 2), 'A neblina fecha mais a cada dia');
+assert.ok(clima.nevoa(0.30, 9) <= 0.9, 'A neblina nunca tapa a tela inteira');
+assert.strictEqual(clima.nevoa(0.70, 5), 0, 'A neblina some depois da manha');
+assert.strictEqual(clima.escuridao(0.10), 0, 'De manha e dia claro');
+assert.strictEqual(clima.escuridao(0.65), 1, 'No meio do ciclo e noite fechada');
+assert.strictEqual(clima.escuridao(0.99), 0, 'Antes de virar o dia ja amanheceu');
+for (let p = 0; p <= 1; p += 0.02) {
+  const e = clima.escuridao(p);
+  assert.ok(e >= 0 && e <= 1, `A escuridao tem que ficar entre 0 e 1 (p=${p.toFixed(2)}, deu ${e})`);
+}
+
+// Cada rival do Enduro conta uma ultrapassagem so. Andando na mesma velocidade do
+// carro do lado, z fica oscilando em volta do zero; sem a marca o placar dispara.
+const passarRival = new Function(block(enduro, '  function passarRival(r, antes)') + '; return passarRival;')();
+const rival = { z: 0.4, passado: false };
+let contou = 0;
+for (const z of [0.2, -0.1, 0.1, -0.2, 0.3, -0.4]) {
+  const antes = rival.z;
+  rival.z = z;
+  if (passarRival(rival, antes)) contou++;
+}
+assert.strictEqual(contou, 1, `Rival que balanca em volta do zero vale 1 ultrapassagem, contou ${contou}`);
+assert.strictEqual(passarRival({ z: 3, passado: false }, 4), false, 'Rival longe do carro nao conta');
+assert.strictEqual(passarRival({ z: -0.1, passado: false }, -0.2), false, 'Quem ja estava atras nao conta de novo');
+
+// Lata do Enduro: as tres faixas tem que cobrir 0..100 sem buraco e sem inverter.
+// A cor e o numero de amassos sao o unico aviso de saude que o jogador ve na pista.
+const lataEnduro = new Function(
+  enduro.slice(enduro.indexOf('  const ESTADOS = ['), enduro.indexOf('  // ── projeção')) +
+  '; return { estadoLata, ESTADOS };')();
+assert.strictEqual(lataEnduro.estadoLata(100).amassos, 0, 'Carro inteiro nao tem amasso');
+assert.strictEqual(lataEnduro.estadoLata(67).amassos, 0, 'A faixa de cima comeca em 67');
+assert.strictEqual(lataEnduro.estadoLata(66).amassos, 2, 'Abaixo de 67 o carro fica amassado');
+assert.strictEqual(lataEnduro.estadoLata(34).amassos, 2, 'A faixa do meio vai ate 34');
+assert.strictEqual(lataEnduro.estadoLata(33).amassos, 4, 'Abaixo de 34 e sucata');
+assert.strictEqual(lataEnduro.estadoLata(0).amassos, 4, 'Lata zerada ainda cai numa faixa');
+let amassoAnterior = -1;
+for (let l = 100; l >= 0; l--) {
+  const e = lataEnduro.estadoLata(l);
+  assert.ok(e && e.cor, `Toda lata de 0 a 100 precisa de estado (${l})`);
+  assert.ok(e.amassos >= amassoAnterior, `Amasso nao pode diminuir com a lata caindo (${l})`);
+  amassoAnterior = e.amassos;
+}
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
