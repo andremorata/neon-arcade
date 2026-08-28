@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score' };
 for (const [key, variable] of Object.entries(BEST)) {
   assert.match(games[key], new RegExp(`pb\\s*=\\s*Neon\\.best\\.update\\('${key}', ${variable}\\)`),
     `O ${key} deve atualizar o recorde em memória`);
@@ -149,6 +149,16 @@ assert.strictEqual(fitAt(1).width, 900, 'Em dpr 1 o canvas fica no tamanho decla
 assert.strictEqual(fitAt(4).width, 2700, 'O teto de 3x segura o custo em telas muito densas');
 assert.strictEqual(fitAt(2, 450).width, 900, 'Metade do tamanho em dpr 2 continua 1:1');
 assert.strictEqual(fitAt(2, 200).width, 900, 'A escala nunca cai abaixo de 1');
+
+// velocidade do Piano: sobe com o placar e trava no teto. Sem o teto a tecla
+// cruzaria o quadro em menos tempo do que da pra reagir.
+const speedAt = new Function('return ' + games.piano.match(/const speedAt = [^;]+/)[0].replace('const speedAt = ', ''))();
+assert.strictEqual(speedAt(0), 240, 'O Piano comeca em 240 px/s');
+assert.ok(speedAt(50) > speedAt(0), 'A velocidade do Piano tem que subir com as notas');
+assert.strictEqual(speedAt(10000), 1000, 'A velocidade do Piano trava em 1000 px/s');
+for (let s = 0; s < 300; s += 7) {
+  assert.ok(speedAt(s + 7) >= speedAt(s), `A velocidade do Piano nao pode cair (${s})`);
+}
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');

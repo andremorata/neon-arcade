@@ -146,6 +146,7 @@ window.Neon = (function () {
     whack()       { if (!g()) return; noise(0, 0.12, 0.22, null, 2000); tone(180, 60, 0, 0.12, 'triangle', 0.25); },
     sizzle()      { if (!g()) return; tone(900, 2600, 0, 0.3, 'sawtooth', 0.09); },
     beep()        { if (!g()) return; tone(784, 0, 0, 0.08, 'square', 0.1); },
+    note(f)       { if (!g()) return; tone(f, 0, 0, 0.55, 'triangle', 0.24); tone(f * 2, 0, 0, 0.22, 'sine', 0.07); },
     level()       { if (!g()) return; [523, 659, 784].forEach((f, i) => tone(f, 0, i * 0.08, 0.12, 'triangle', 0.18)); },
     record()      { if (!g()) return; [523, 659, 784, 1046].forEach((f, i) => tone(f, 0, i * 0.09, 0.12, 'triangle', 0.2)); },
     death()       { if (!g()) return; noise(0, 0.35, 0.3, null, 700); tone(300, 45, 0, 0.55, 'sawtooth', 0.22); },
