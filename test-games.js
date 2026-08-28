@@ -355,6 +355,22 @@ assert.strictEqual(clima.chuvaDe(0.62, 6), 1, 'A chuva volta de tres em tres dia
 assert.strictEqual(clima.chuvaDe(0.05, 3), 0, 'De manha nao chove nem no dia de chuva');
 assert.strictEqual(clima.chuvaDe(0.99, 3), 0, 'A chuva passa antes de virar o dia');
 
+// Pausa por botao: no celular nao existe tecla P, entao jogo sem o botao e jogo
+// que nao pausa no toque. Vale pra todos, inclusive os que ainda vao nascer.
+for (const [name, html] of Object.entries(games)) {
+  assert.ok(html.includes('id="pauseToggle"'), `${name}: falta o botao de pausa no stage`);
+  assert.match(html, /=== 'p'|=== 'P'/,
+    `${name}: o botao de pausa dispara a tecla P, entao o jogo precisa tratar 'p'`);
+}
+assert.match(core, /function bindPauseToggle\(btn\)/, 'O nucleo precisa ligar o botao de pausa');
+// O toque no botao nao pode chegar no stage: jogo que trata toque como pausa
+// despausava no mesmo clique que acabou de pausar. Aconteceu no Snake.
+assert.match(core, /\['pointerdown', 'pointerup', 'click'\]/,
+  'O botao de pausa tem que segurar o evento antes de chegar no stage');
+assert.ok(core.indexOf('bindPauseToggle();') > core.indexOf('bindSoundToggle();'),
+  'initPage tem que ligar o botao de pausa junto com o do som');
+assert.ok(css.includes('.pause-toggle { right: 58px; }'), 'O tema posiciona a pausa ao lado do som');
+
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
 const makeHint = new Function('document', 'getComputedStyle', `${hintSrc}; return addRotateHint;`);

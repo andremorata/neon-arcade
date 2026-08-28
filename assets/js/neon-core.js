@@ -281,6 +281,21 @@ window.Neon = (function () {
     if (!on) MUSIC.stop(); else if (AC) MUSIC.start();
   }
 
+  // Todo jogo ja pausa no P. Em vez de 16 ligacoes diferentes, o botao dispara a
+  // propria tecla: uma funcao aqui e nenhuma linha de logica dentro dos jogos.
+  function bindPauseToggle(btn) {
+    btn = btn || $('pauseToggle');
+    if (!btn) return;
+    // Varios jogos tratam toque no quadro como pausa ou como jogada. Sem segurar o
+    // evento aqui, o mesmo toque pausa no botao e despausa no stage logo atras.
+    for (const t of ['pointerdown', 'pointerup', 'click']) {
+      btn.addEventListener(t, e => e.stopPropagation());
+    }
+    btn.addEventListener('click', () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }));
+    });
+  }
+
   function bindSoundToggle(btn) {
     btn = btn || $('soundToggle');
     if (!btn) return;
@@ -473,6 +488,7 @@ window.Neon = (function () {
   // Espera DOM pronto e aplica: fontes, sound toggle, best keys.
   function initPage() {
     bindSoundToggle();
+    bindPauseToggle();
     const cv = $('game');
     if (cv && cv.getContext) fitCanvas(cv);
     // O glitch do logo e uma copia do titulo em outra cor. attr() precisa do
@@ -493,7 +509,7 @@ window.Neon = (function () {
     rand, clamp, choice, $, EMOJI,
     best, popEl, toast,
     overlay, audio,
-    Particles, circle, glow, onHide, fitCanvas, motion, world,
+    Particles, circle, glow, onHide, fitCanvas, motion, world, bindPauseToggle,
     initPage,
   };
 })();

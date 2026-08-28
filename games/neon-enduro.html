@@ -11,7 +11,8 @@
 <style>
   .stage { --arw: 3; --arh: 4; --maxw: 480px; }
   /* segundo botao redondo, ao lado do som */
-  #autoToggle { right: 58px; }
+  /* som fica em 10, a pausa do tema em 58, entao o automatico vai pro terceiro lugar */
+  #autoToggle { right: 106px; }
 </style>
 </head>
 <body>
@@ -35,6 +36,7 @@
 
   <div class="stage" id="stage">
     <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
     <button class="sound-toggle" id="autoToggle" title="Acelerador automático">⏩</button>
     <div class="toast" id="toast">META BATIDA!</div>
     <canvas id="game" width="600" height="800"></canvas>
