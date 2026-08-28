@@ -53,6 +53,8 @@ assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
 const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score' };
+// o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
+assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o breach grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.breach, /pb = Neon\.best\.update\('breach', score\)/, 'O Breach precisa gravar o recorde');
 for (const [key, variable] of Object.entries(BEST)) {
@@ -483,6 +485,48 @@ for (let r = 0; r <= 1.08; r += 0.01) {
 }
 // na faixa verde o torque ainda esta perto do pico: e por isso que ela e o alvo
 assert.ok(caixa.torque(caixa.JANELA[0]) > noPico * 0.7, 'A faixa verde fica na parte boa da curva');
+
+// Fases do Slug: sao tiras de texto. Linha de tamanho diferente vira buraco
+// invisivel no chao, e chefe fora da ultima fase quebra o final do jogo.
+const slug = games.slug;
+const fasesSlug = new Function(
+  slug.slice(slug.indexOf('  const FASES = ['), slug.indexOf('  const SOLIDO =')) +
+  '; return FASES;')();
+assert.strictEqual(fasesSlug.length, 3, 'O Slug tem 3 fases');
+for (const [i, f] of fasesSlug.entries()) {
+  const larg = f.mapa[0].length;
+  for (const [j, linha] of f.mapa.entries())
+    assert.strictEqual(linha.length, larg, `fase ${i + 1}: a linha ${j} tem largura diferente do resto`);
+  assert.ok(f.mapa.length === 12, `fase ${i + 1}: as fases precisam ter 12 linhas`);
+  // o jogador nasce em x=90, entao a coluna 1 nao pode estar tapada
+  for (let y = 0; y < 6; y++)
+    assert.ok(!'#='.includes(f.mapa[y][1]), `fase ${i + 1}: o ponto de entrada nasce dentro de bloco`);
+  // tem que existir chao no fim da fase, senao nao da pra chegar na saida
+  const ultima = larg - 1;
+  assert.ok(f.mapa.some(l => l[ultima] === '#'), `fase ${i + 1}: falta chao na saida`);
+  assert.ok([...f.mapa.join('')].some(c => c === 'E' || c === 'F' || c === 'X'),
+    `fase ${i + 1}: fase sem inimigo nenhum`);
+}
+const comChefeSlug = fasesSlug.filter(f => f.mapa.join('').includes('X'));
+assert.strictEqual(comChefeSlug.length, 1, 'O chefe do Slug aparece em uma fase so');
+assert.strictEqual(comChefeSlug[0], fasesSlug.at(-1), 'O chefe do Slug e a ultima fase');
+
+// Mira automatica: e ela que faz o jogo funcionar sem mouse. Tem que pegar quem
+// esta na frente, dentro do cone, e ignorar quem esta atras ou fora dele.
+const mirarSlug = new Function('jog', 'inimigos', 'Math',
+  block(slug, '  function mirar()') + '; return mirar;');
+const alvo = (px, olha, lista) => mirarSlug({ x: px, y: 300, olha }, lista, Math)();
+const soFrente = alvo(100, 1, [{ x: 400, y: 300 }]);
+assert.ok(soFrente.dx > 0.9, 'Inimigo na frente puxa a mira pra frente');
+const soAtras = alvo(100, 1, [{ x: -300, y: 300 }]);
+assert.strictEqual(soAtras.dx, 1, 'Inimigo atras nao rouba a mira');
+assert.strictEqual(soAtras.dy, 0, 'Sem alvo valido o tiro sai reto');
+const foraDoCone = alvo(100, 1, [{ x: 160, y: 900 }]);
+assert.strictEqual(foraDoCone.dy, 0, 'Alvo muito acima ou abaixo fica fora do cone');
+const doisAlvos = alvo(100, 1, [{ x: 600, y: 300 }, { x: 200, y: 300 }]);
+assert.ok(Math.abs(doisAlvos.dx - 1) < 1e-9, 'Com dois na mesma linha a mira vai no mais proximo');
+const muitoLonge = alvo(100, 1, [{ x: 5000, y: 300 }]);
+assert.strictEqual(muitoLonge.dx, 1, 'Alvo alem do alcance nao conta');
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
