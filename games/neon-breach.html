@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON BREACH — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  .stage { --arw: 8; --arh: 5; --maxw: 940px; }
+  /* FPS não cabe em pé: em vez de espremer o quadro, exige girar o telefone. */
+  #gire {
+    display: none; position: absolute; inset: 0; z-index: 30;
+    background: rgba(5, 0, 26, 0.97);
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 20px; gap: 14px;
+  }
+  #gire .icone { font-size: 46px; animation: gira 2s ease-in-out infinite; }
+  @keyframes gira { 0%, 40% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (prefers-reduced-motion: reduce) { #gire .icone { animation: none; } }
+  #gire p {
+    font-family: 'Orbitron', sans-serif; font-size: 13px; letter-spacing: 0.2em;
+    color: var(--neon-cyan); text-transform: uppercase; margin: 0;
+  }
+  @media (pointer: coarse) and (orientation: portrait) { #gire { display: flex; } }
+
+  /* Modo imersivo: durante a partida some tudo que nao e jogo e o quadro cresce
+     ate o limite da janela. Vida e municao passam pra uma faixa dentro do canvas. */
+  body.imersivo header,
+  body.imersivo .dashboard,
+  body.imersivo footer { display: none; }
+  body.imersivo .app { padding: 0; gap: 0; max-width: none; min-height: 100dvh; justify-content: center; }
+  body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-width: 0; }
+
+  /* a faixa de HUD ocupa os 30px do topo do quadro; o toast desce pra nao cobrir */
+  .toast { top: 52px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON BREACH</h1></a>
+      <div class="tag">// | Limpe a sala, ache a arma, encare o chefe | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="breach">0</span></div>
+    <div class="stat"><span class="lbl">Sala</span><span class="val" id="sala">1</span></div>
+    <div class="stat"><span class="lbl">Vida</span><span class="val" id="vida">100</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">SALA LIMPA!</div>
+    <canvas id="game" width="800" height="500"></canvas>
+    <div id="gire"><span class="icone">📱</span><p>Gire o telefone</p><p style="color:var(--text-dim);letter-spacing:0.1em">FPS só funciona deitado</p></div>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON BREACH</h2>
+      <p id="overlayText">Cinco salas, uma horda em cada. Comece só com a pistola e ache o resto no chão. No computador: WASD anda, mouse gira, clique atira. No celular deitado: manche à esquerda, arraste à direita para girar, botão vermelho atira.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Salas</span><b id="fsSalas">1</b></div>
+        <div class="fstat"><span>Precisão</span><b id="fsMira">0%</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">WASD anda</span><span class="key">Mouse gira</span><span class="key">Clique atira</span><span class="key">1 2 3 arma</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · <b>1</b> pistola · <b>2</b> escopeta · <b>3</b> metralhadora · ❤️ vida · 🔫 munição · 📦 arma nova</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 800, H = 500;
+  const COLUNAS = 200, LARG_COL = W / COLUNAS;   // 200 raios, cada um com 4px: 3x menos custo
+  const FOV = Math.PI / 3;
+  const RAIO_JOG = 0.24;
+
+  // 1 ciano, 2 rosa, 3 roxo. Parede de cor chapada com aresta acesa dispensa textura,
+  // e o repo nao pode ter imagem. A limitacao virou a estetica.
+  // Cinco plantas: quatro salas e a arena do chefe. Cada uma carrega o ponto de
+  // partida junto, senao o jogador nasce dentro de parede.
+  const SALAS = [
+    { nome: 'PÁTIO', entrada: [7.5, 12.5, -Math.PI / 2], receita: ['corredor', 'corredor', 'atirador'], planta: [
+      '1111111111111111','1..............1','1..22....33....1','1..2......3....1',
+      '1..............1','1....3....2....1','1....3....2....1','1..............1',
+      '1.......33.....1','1..22..........1','1..............1','1....2....3....1',
+      '1..............1','1..............1','1..............1','1111111111111111',
+    ] },
+    { nome: 'CORREDORES', entrada: [1.5, 1.5, 0.4], receita: ['corredor', 'atirador', 'corredor', 'atirador'], planta: [
+      '1111111111111111','1......2.......1','1.2222.2.2222..1','1......2....2..1',
+      '1.2222.2.22.2..1','1.2..........2.1','1.2.33333333.2.1','1.2.3......3...1',
+      '1...3.2222.3.2.1','1.2.3.2..2.3.2.1','1.2.3.2..2.3.2.1','1.2.3.2222.3...1',
+      '1.2.3......3.2.1','1.2.33333333.2.1','1..............1','1111111111111111',
+    ] },
+    { nome: 'DEPÓSITO', entrada: [8.5, 14.5, -Math.PI / 2], receita: ['tanque', 'corredor', 'corredor', 'atirador', 'atirador'], planta: [
+      '1111111111111111','1..3.3.3.3.3.3.1','1..............1','1.22.22.22.22..1',
+      '1..............1','1..3.3.3.3.3.3.1','1..............1','1.22.22.22.22..1',
+      '1..............1','1..3.3.3.3.3.3.1','1..............1','1.22.22.22.22..1',
+      '1..............1','1..............1','1..............1','1111111111111111',
+    ] },
+    { nome: 'REATOR', entrada: [1.5, 8.5, 0], receita: ['tanque', 'tanque', 'atirador', 'corredor', 'corredor', 'atirador'], planta: [
+      '1111111111111111','1......33......1','1..2........2..1','1..2..3333..2..1',
+      '1.....3..3.....1','1..2..3..3..2..1','1..2........2..1','1..............1',
+      '1..............1','1..2........2..1','1..2..3..3..2..1','1.....3..3.....1',
+      '1..2..3333..2..1','1..2........2..1','1......33......1','1111111111111111',
+    ] },
+    { nome: 'NÚCLEO', entrada: [8.5, 14.5, -Math.PI / 2], receita: ['chefe', 'corredor', 'corredor', 'atirador'], planta: [
+      '1111111111111111','1..............1','1..3........3..1','1..............1',
+      '1..............1','1....2....2....1','1..............1','1..............1',
+      '1..............1','1....2....2....1','1..............1','1..............1',
+      '1..3........3..1','1..............1','1..............1','1111111111111111',
+    ] },
+  ];
+  let sala = 0;
+  let MAPA = SALAS[0].planta;
+  const MAPA_L = MAPA[0].length, MAPA_A = MAPA.length;
+  const CORES = { 1: [0, 240, 255], 2: [255, 43, 214], 3: [155, 48, 255] };
+
+  const celula = (x, y) => {
+    if (x < 0 || y < 0 || x >= MAPA_L || y >= MAPA_A) return 1;
+    const c = MAPA[y][x];
+    return c === '.' ? 0 : +c;
+  };
+
+  const ARMAS = [
+    { nome: 'PISTOLA',      dano: 34, cad: 260, esp: 0.02, tiros: 1, muni: Infinity, som: 'shoot' },
+    { nome: 'ESCOPETA',     dano: 22, cad: 700, esp: 0.16, tiros: 6, muni: 24,       som: 'boom' },
+    { nome: 'METRALHADORA', dano: 14, cad: 90,  esp: 0.06, tiros: 1, muni: 120,      som: 'hit' },
+  ];
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), sala: Neon.$('sala'), vida: Neon.$('vida'),
+    fsScore: Neon.$('fsScore'), fsSalas: Neon.$('fsSalas'), fsMira: Neon.$('fsMira'), stage: Neon.$('stage'),
+  };
+
+  const jog = { x: 7.5, y: 12.5, ang: -Math.PI / 2, vida: 100, arma: 0 };
+  let inimigos = [], itens = [], recarga = 0, municao = [Infinity, 0, 0], temArma = [true, false, false];
+  let kills = 0, tiros = 0, acertos = 0, tempo = 0, score = 0, virando = 0;
+  let pb = Neon.best.get('breach'), startHi = 0;
+  els.best.textContent = pb;
+  let state = 'menu', lastFrame = performance.now(), quadros = 0, fpsT = 0;
+  let travado = false, fpsAtual = 0;
+  const zbuf = new Float32Array(COLUNAS);
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, cor: '' }, clarao = 0;
+  const particles = new Neon.Particles();
+
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(cor, ms) { if (!Neon.motion.reduced) flash = { t: ms, cor }; }
+
+  // ── raycasting ────────────────────────────────────
+  // DDA de grade: anda de borda em borda ate bater. O custo e por coluna, nao por pixel,
+  // e por isso 200 colunas rodam liso no celular.
+  function castar(px, py, ang) {
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    let mx = Math.floor(px), my = Math.floor(py);
+    const dX = Math.abs(1 / (dx || 1e-9)), dY = Math.abs(1 / (dy || 1e-9));
+    let passoX, passoY, distX, distY;
+    if (dx < 0) { passoX = -1; distX = (px - mx) * dX; } else { passoX = 1; distX = (mx + 1 - px) * dX; }
+    if (dy < 0) { passoY = -1; distY = (py - my) * dY; } else { passoY = 1; distY = (my + 1 - py) * dY; }
+    for (let i = 0; i < 64; i++) {
+      let lado;
+      if (distX < distY) { distX += dX; mx += passoX; lado = 0; }
+      else { distY += dY; my += passoY; lado = 1; }
+      const c = celula(mx, my);
+      if (c) return { dist: lado === 0 ? distX - dX : distY - dY, lado, tipo: c };
+    }
+    return { dist: 64, lado: 0, tipo: 1 };
+  }
+
+  const livre = (x, y) => !celula(Math.floor(x), Math.floor(y));
+
+  function mover(e, nx, ny, r) {
+    if (livre(nx + Math.sign(nx - e.x) * r, e.y)) e.x = nx;
+    if (livre(e.x, ny + Math.sign(ny - e.y) * r)) e.y = ny;
+  }
+
+  // ── inimigos ──────────────────────────────────────
+  const TIPOS = {
+    corredor: { vida: 40, vel: 1.6, cor: '#ff3b5c', raio: 0.3, dano: 12, alcance: 0.7, recarga: 900 },
+    atirador: { vida: 30, vel: 0.8, cor: '#ffe600', raio: 0.28, dano: 8, alcance: 7, recarga: 1600 },
+    tanque:   { vida: 110, vel: 0.55, cor: '#ff8c1a', raio: 0.42, dano: 20, alcance: 0.9, recarga: 1400 },
+    chefe:    { vida: 620, vel: 0.95, cor: '#ff2bd6', raio: 0.6, dano: 22, alcance: 8, recarga: 850, pontos: 2500, alto: 1.5 },
+  };
+  const PONTOS = { corredor: 100, atirador: 140, tanque: 260, chefe: 2500 };
+
+  // Item cai de quem morre. Sem isso o jogador trava na pistola e nunca vira o jogo.
+  const ITENS = {
+    vida:  { emoji: '❤️', cor: '#ff3b5c' },
+    muni:  { emoji: '🔫', cor: '#ffe600' },
+    arma:  { emoji: '📦', cor: '#00f0ff' },
+  };
+
+  function entrarNaSala(i) {
+    sala = i;
+    MAPA = SALAS[i].planta;
+    const [ex, ey, ea] = SALAS[i].entrada;
+    jog.x = ex; jog.y = ey; jog.ang = ea;
+    inimigos = []; itens = []; virando = 0;
+    const vagas = [];
+    for (let y = 1; y < MAPA_A - 1; y++)
+      for (let x = 1; x < MAPA_L - 1; x++)
+        if (!celula(x, y) && Math.hypot(x + 0.5 - jog.x, y + 0.5 - jog.y) > 4.5) vagas.push([x, y]);
+    for (const nome of SALAS[i].receita) {
+      if (!vagas.length) break;
+      const [x, y] = vagas.splice((Math.random() * vagas.length) | 0, 1)[0];
+      const t = TIPOS[nome];
+      inimigos.push({ x: x + 0.5, y: y + 0.5, tipo: nome, ...t, vidaMax: t.vida, cd: Neon.rand(0, 900) });
+    }
+    // A arma nova espera no chao da sala 2 e da 3: e a recompensa por chegar la.
+    if (i === 1 || i === 2) {
+      const [x, y] = vagas.splice((Math.random() * vagas.length) | 0, 1)[0];
+      itens.push({ x: x + 0.5, y: y + 0.5, tipo: 'arma' });
+    }
+    els.sala.textContent = i + 1;
+    Neon.popEl(els.sala);
+    Neon.toast(`SALA ${i + 1} · ${SALAS[i].nome}`);
+  }
+
+  // Linha de visao pela grade: o inimigo so atira se enxergar, senao ele acerta atraves da parede.
+  function enxerga(a, b) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    const passos = Math.ceil(d * 8);
+    for (let i = 1; i < passos; i++) {
+      const t = i / passos;
+      if (celula(Math.floor(a.x + (b.x - a.x) * t), Math.floor(a.y + (b.y - a.y) * t))) return false;
+    }
+    return true;
+  }
+
+  // ── tiro ──────────────────────────────────────────
+  function atirar() {
+    if (state !== 'playing' || recarga > 0) return;
+    const arma = ARMAS[jog.arma];
+    if (municao[jog.arma] <= 0) { Neon.audio.sfx.wrong(); recarga = 300; return; }
+    recarga = arma.cad;
+    if (municao[jog.arma] !== Infinity) municao[jog.arma]--;
+    Neon.audio.sfx[arma.som]();
+    shakeAt(arma.tiros > 1 ? 7 : 3, 110);
+    clarao = 90;
+    for (let t = 0; t < arma.tiros; t++) {
+      tiros++;
+      const ang = jog.ang + Neon.rand(-arma.esp, arma.esp);
+      const parede = castar(jog.x, jog.y, ang).dist;
+      let alvo = null, melhor = parede;
+      for (const e of inimigos) {
+        const d = Math.hypot(e.x - jog.x, e.y - jog.y);
+        if (d > melhor) continue;
+        let da = Math.atan2(e.y - jog.y, e.x - jog.x) - ang;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        if (Math.abs(da) * d < e.raio) { alvo = e; melhor = d; }
+      }
+      if (alvo) {
+        acertos++;
+        alvo.vida -= arma.dano;
+        particles.burst(0, 0, alvo.cor, 0);          // marcador; o sangue e desenhado na projecao
+        alvo.piscaT = 120;
+        if (alvo.vida <= 0) matar(alvo);
+      }
+    }
+  }
+
+  function matar(e) {
+    inimigos = inimigos.filter(o => o !== e);
+    kills++;
+    pontuar(PONTOS[e.tipo] || 100);
+    Neon.audio.sfx.golden();
+    if (e.tipo === 'chefe') { flashAt('rgba(255, 43, 214,', 400); shakeAt(16, 500); }
+    // 40% de chance de largar algo. Vida so cai se estiver fazendo falta.
+    if (Math.random() < 0.4) {
+      const tipo = jog.vida < 60 && Math.random() < 0.6 ? 'vida' : 'muni';
+      itens.push({ x: e.x, y: e.y, tipo });
+    }
+    if (!inimigos.length && !virando) {
+      virando = 1600;
+      Neon.audio.sfx.level();
+      Neon.toast(sala + 1 >= SALAS.length ? '🏆 NÚCLEO LIMPO!' : '✅ SALA LIMPA');
+    }
+  }
+
+  function pontuar(q) {
+    score += q;
+    els.score.textContent = score;
+    Neon.popEl(els.score);
+  }
+
+  function pegarItens() {
+    for (const it of [...itens]) {
+      if (Math.hypot(it.x - jog.x, it.y - jog.y) > 0.55) continue;
+      itens = itens.filter(o => o !== it);
+      Neon.audio.sfx.golden();
+      if (it.tipo === 'vida') { jog.vida = Math.min(100, jog.vida + 30); els.vida.textContent = jog.vida; }
+      else if (it.tipo === 'muni') {
+        // municao vai pra arma equipada, ou pra que estiver mais vazia se for a pistola
+        const alvo = jog.arma > 0 ? jog.arma : (temArma[2] ? 2 : temArma[1] ? 1 : 0);
+        if (alvo > 0) municao[alvo] += alvo === 1 ? 10 : 40;
+      } else {
+        const nova = temArma[1] ? 2 : 1;
+        temArma[nova] = true;
+        municao[nova] += nova === 1 ? 20 : 90;
+        jog.arma = nova;
+        Neon.toast(`🔓 ${ARMAS[nova].nome}!`);
+      }
+      pontuar(50);
+    }
+  }
+
+  function levarDano(q) {
+    jog.vida = Math.max(0, jog.vida - q);
+    els.vida.textContent = jog.vida;
+    flashAt('rgba(255, 59, 92,', 240);
+    shakeAt(9, 220);
+    Neon.audio.sfx.hit();
+    if (jog.vida <= 0) fim();
+  }
+
+  const imersivo = (on) => document.body.classList.toggle('imersivo', on);
+
+  function comecar() {
+    Neon.audio.ensure();
+    imersivo(true);
+    startHi = pb;
+    jog.vida = 100; jog.arma = 0;
+    municao = [Infinity, 0, 0]; temArma = [true, false, false];
+    kills = 0; tiros = 0; acertos = 0; tempo = 0; recarga = 0; score = 0;
+    particles.clear();
+    els.vida.textContent = '100';
+    els.score.textContent = '0';
+    entrarNaSala(0);
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  function fim(venceu) {
+    state = 'fim';
+    imersivo(false);
+    Neon.audio.music.down();
+    if (venceu) { score += 3000; els.score.textContent = score; }
+    pb = Neon.best.update('breach', score);
+    els.best.textContent = pb;
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord || venceu) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    els.fsScore.textContent = score;
+    els.fsSalas.textContent = venceu ? SALAS.length : sala + 1;
+    els.fsMira.textContent = `${tiros ? Math.round(acertos / tiros * 100) : 0}%`;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(
+      venceu ? 'NÚCLEO LIMPO!' : isRecord ? 'NOVO RECORDE!' : 'VOCÊ CAIU',
+      venceu
+        ? `Você atravessou as ${SALAS.length} salas e derrubou ${kills} inimigos.`
+        : `Caiu na sala ${sala + 1} depois de ${kills} ${kills === 1 ? 'abate' : 'abates'}.`,
+      'JOGAR DE NOVO', venceu || isRecord ? 'record' : 'go');
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  // ── controles: teclado e mouse ────────────────────
+  const teclas = new Set();
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if ('wasd'.includes(k) || k.startsWith('arrow')) { e.preventDefault(); teclas.add(k); }
+    if (k >= '1' && k <= '3' && temArma[+k - 1]) { jog.arma = +k - 1; Neon.audio.sfx.click(); }
+    if (k === 'p') { if (state === 'playing') pausar(); else if (state === 'pausado') retomar(); }
+    if (k === ' ' || k === 'enter') { e.preventDefault(); if (state === 'menu' || state === 'fim') Neon.$('startBtn').click(); }
+  });
+  document.addEventListener('keyup', (e) => teclas.delete(e.key.toLowerCase()));
+
+  canvas.addEventListener('click', () => {
+    if (state !== 'playing') return;
+    if (!travado) pedirMouse();
+    atirar();
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (document.pointerLockElement === canvas) jog.ang += e.movementX * 0.0025;
+  });
+  canvas.addEventListener('mousedown', (e) => { if (e.button === 0) segurandoTiro = true; });
+  document.addEventListener('mouseup', () => { segurandoTiro = false; });
+
+  // ── controles: toque em paisagem ──────────────────
+  // Manche na esquerda anda, arrasto na direita gira, botao vermelho atira.
+  // E o que PUBG e COD fazem no celular, e funciona porque cada polegar tem um trabalho so.
+  // Nao confiar so na media query: em alguns aparelhos ela mente e o jogador fica
+  // sem ver o manche mesmo com o toque funcionando. O primeiro toque decide.
+  let dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  const toques = new Map();
+  let manche = null, segurandoTiro = false;
+  const BOTAO = { x: W - 92, y: H - 88, r: 46 };
+
+  const paraQuadro = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  };
+
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle, .overlay') || state !== 'playing') return;
+    e.preventDefault();
+    if (e.pointerType === 'touch') dedo = true;
+    const p = paraQuadro(e);
+    if (Math.hypot(p.x - BOTAO.x, p.y - BOTAO.y) < BOTAO.r * 1.25) {
+      toques.set(e.pointerId, { papel: 'tiro' });
+      segurandoTiro = true;
+    } else if (p.x < W * 0.45) {
+      manche = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0, dy: 0 };
+      toques.set(e.pointerId, { papel: 'manche' });
+    } else {
+      toques.set(e.pointerId, { papel: 'olhar', x: p.x });
+    }
+  });
+  els.stage.addEventListener('pointermove', (e) => {
+    const t = toques.get(e.pointerId);
+    if (!t) return;
+    const p = paraQuadro(e);
+    if (t.papel === 'manche' && manche) {
+      manche.dx = Neon.clamp((p.x - manche.ox) / 60, -1, 1);
+      manche.dy = Neon.clamp((p.y - manche.oy) / 60, -1, 1);
+    } else if (t.papel === 'olhar') {
+      jog.ang += (p.x - t.x) * 0.006;
+      t.x = p.x;
+    }
+  });
+  const soltar = (e) => {
+    const t = toques.get(e.pointerId);
+    if (!t) return;
+    toques.delete(e.pointerId);
+    if (t.papel === 'manche') manche = null;
+    if (t.papel === 'tiro' && ![...toques.values()].some(o => o.papel === 'tiro')) segurandoTiro = false;
+  };
+  window.addEventListener('pointerup', soltar);
+  window.addEventListener('pointercancel', soltar);
+
+  function pausar() {
+    if (state !== 'playing') return;
+    state = 'pausado';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', dedo
+      ? 'Toque em RETOMAR para voltar.'
+      : 'Aperte P ou clique em RETOMAR. O mouse volta a ser capturado.', 'RETOMAR');
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+
+  // Retomar volta direto pro jogo e pede o mouse de novo por baixo. Mostrar a tela
+  // de captura aqui punia quem so queria despausar.
+  function retomar() {
+    if (state !== 'pausado') return;
+    Neon.overlay.hide();
+    lastFrame = performance.now();
+    state = 'playing';
+    imersivo(true);
+    Neon.audio.music.start();
+    pedirMouse();
+  }
+
+  // O mouse e pedido junto com o START, mas o jogo nao espera por ele. Ter um
+  // estado so pra aguardar a captura criava uma tela morta e um jeito de travar
+  // o jogo se o navegador negasse. Se o lock cair (Esc), o jogo pausa sozinho.
+  function pedirMouse() {
+    if (dedo) return;
+    const p = canvas.requestPointerLock();
+    if (p && p.catch) p.catch(() => {});
+  }
+
+  document.addEventListener('pointerlockchange', () => {
+    travado = document.pointerLockElement === canvas;
+    if (!travado && state === 'playing' && !dedo) pausar();
+  });
+
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'pausado') return retomar();
+    pedirMouse();
+    comecar();
+  });
+  Neon.onHide(() => { if (state === 'playing') pausar(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    if (state !== 'playing') return;
+    tempo += dt;
+    if (recarga > 0) recarga -= dt * 1000;
+    if (segurandoTiro) atirar();
+
+    pegarItens();
+    if (virando > 0) {
+      virando -= dt * 1000;
+      if (virando <= 0) {
+        if (sala + 1 >= SALAS.length) return fim(true);
+        pontuar(400 * (sala + 1));
+        entrarNaSala(sala + 1);
+      }
+    }
+
+    let frente = 0, lado = 0;
+    if (teclas.has('w') || teclas.has('arrowup')) frente += 1;
+    if (teclas.has('s') || teclas.has('arrowdown')) frente -= 1;
+    if (teclas.has('a')) lado -= 1;
+    if (teclas.has('d')) lado += 1;
+    if (teclas.has('arrowleft')) jog.ang -= 2.2 * dt;
+    if (teclas.has('arrowright')) jog.ang += 2.2 * dt;
+    if (manche) { frente -= manche.dy; lado += manche.dx; }
+
+    const vel = 2.9 * dt;
+    const cos = Math.cos(jog.ang), sin = Math.sin(jog.ang);
+    const nx = jog.x + (cos * frente - sin * lado) * vel;
+    const ny = jog.y + (sin * frente + cos * lado) * vel;
+    mover(jog, nx, ny, RAIO_JOG);
+
+    for (const e of inimigos) {
+      if (e.piscaT > 0) e.piscaT -= dt * 1000;
+      const d = Math.hypot(jog.x - e.x, jog.y - e.y);
+      const vendo = enxerga(e, jog);
+      if (vendo && d > e.alcance * 0.9) {
+        const a = Math.atan2(jog.y - e.y, jog.x - e.x);
+        mover(e, e.x + Math.cos(a) * e.vel * dt, e.y + Math.sin(a) * e.vel * dt, e.raio);
+      }
+      e.cd -= dt * 1000;
+      if (vendo && d < e.alcance && e.cd <= 0) { e.cd = e.recarga; levarDano(e.dano); }
+    }
+  }
+
+  // ── render ────────────────────────────────────────
+  function render(now) {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+
+    const teto = ctx.createLinearGradient(0, 0, 0, H / 2);
+    teto.addColorStop(0, '#1a0240');
+    teto.addColorStop(1, '#05001a');
+    ctx.fillStyle = teto;
+    ctx.fillRect(0, 0, W, H / 2);
+    const chao = ctx.createLinearGradient(0, H / 2, 0, H);
+    chao.addColorStop(0, '#05001a');
+    chao.addColorStop(1, '#241046');
+    ctx.fillStyle = chao;
+    ctx.fillRect(0, H / 2, W, H / 2);
+
+    // paredes, coluna por coluna
+    for (let i = 0; i < COLUNAS; i++) {
+      const camX = (2 * i) / COLUNAS - 1;
+      const ang = jog.ang + Math.atan(camX * Math.tan(FOV / 2));
+      const h = castar(jog.x, jog.y, ang);
+      const perp = Math.max(0.05, h.dist * Math.cos(ang - jog.ang));
+      zbuf[i] = perp;
+      const alt = Math.min(H * 6, (H / perp) * 0.95);
+      const y0 = (H - alt) / 2;
+      const c = CORES[h.tipo] || CORES[1];
+      // longe escurece, e a face lateral fica mais escura que a frontal: da volume sem textura
+      const k = Math.max(0.1, 1 - perp / 13) * (h.lado ? 0.62 : 1);
+      ctx.fillStyle = `rgb(${(c[0] * k * 0.5) | 0},${(c[1] * k * 0.5) | 0},${(c[2] * k * 0.5) | 0})`;
+      ctx.fillRect(i * LARG_COL, y0, LARG_COL + 1, alt);
+      // aresta acesa no topo e na base: e o que faz a parede chapada virar neon
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${Math.min(1, k * 1.6)})`;
+      ctx.fillRect(i * LARG_COL, y0, LARG_COL + 1, 2);
+      ctx.fillRect(i * LARG_COL, y0 + alt - 2, LARG_COL + 1, 2);
+    }
+
+    // inimigos como billboard, do mais longe pro mais perto, testando o z-buffer por coluna
+    const ordenados = [...inimigos].sort((a, b) =>
+      Math.hypot(b.x - jog.x, b.y - jog.y) - Math.hypot(a.x - jog.x, a.y - jog.y));
+    for (const e of ordenados) {
+      const d = Math.hypot(e.x - jog.x, e.y - jog.y);
+      let da = Math.atan2(e.y - jog.y, e.x - jog.x) - jog.ang;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      if (Math.abs(da) > FOV * 0.85 || d < 0.25) continue;
+      const sx = W / 2 + (Math.tan(da) / Math.tan(FOV / 2)) * (W / 2);
+      const alt = Math.min(H * 3, (H / d) * 0.8 * (e.alto || 1));
+      const larg = alt * 0.62;
+      const y0 = H / 2 - alt * 0.42;
+      const c0 = Math.max(0, Math.floor((sx - larg / 2) / LARG_COL));
+      const c1 = Math.min(COLUNAS - 1, Math.ceil((sx + larg / 2) / LARG_COL));
+      const k = Math.max(0.15, 1 - d / 13);
+      for (let i = c0; i <= c1; i++) {
+        if (zbuf[i] <= d) continue;                 // parede na frente: nao desenha essa fatia
+        const x = i * LARG_COL;
+        ctx.globalAlpha = k;
+        ctx.fillStyle = e.piscaT > 0 ? '#ffffff' : e.cor;
+        ctx.fillRect(x, y0, LARG_COL + 1, alt * 0.84);
+        ctx.globalAlpha = 1;
+      }
+      // olhos e barra de vida: le o estado sem HUD extra
+      if (zbuf[Math.round(sx / LARG_COL)] > d) {
+        ctx.globalAlpha = k;
+        ctx.fillStyle = '#05001a';
+        ctx.fillRect(sx - larg * 0.26, y0 + alt * 0.16, larg * 0.16, alt * 0.1);
+        ctx.fillRect(sx + larg * 0.1, y0 + alt * 0.16, larg * 0.16, alt * 0.1);
+        const vv = e.vida / e.vidaMax;
+        if (vv < 1) {
+          ctx.fillStyle = 'rgba(0,0,0,0.6)';
+          ctx.fillRect(sx - larg / 2, y0 - 9, larg, 5);
+          ctx.fillStyle = vv > 0.5 ? '#39ff7a' : '#ff3b5c';
+          ctx.fillRect(sx - larg / 2, y0 - 9, larg * vv, 5);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // itens no chao: mesma projecao dos inimigos, so que baixinhos e pulsando
+    for (const it of [...itens].sort((a, b) =>
+      Math.hypot(b.x - jog.x, b.y - jog.y) - Math.hypot(a.x - jog.x, a.y - jog.y))) {
+      const d = Math.hypot(it.x - jog.x, it.y - jog.y);
+      let da = Math.atan2(it.y - jog.y, it.x - jog.x) - jog.ang;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      if (Math.abs(da) > FOV * 0.85 || d < 0.2) continue;
+      const sx = W / 2 + (Math.tan(da) / Math.tan(FOV / 2)) * (W / 2);
+      const col = Math.round(sx / LARG_COL);
+      if (col < 0 || col >= COLUNAS || zbuf[col] <= d) continue;
+      const alt = Math.min(H, (H / d) * 0.3);
+      const y0 = H / 2 + (H / d) * 0.28 + Math.sin(now / 260) * alt * 0.12;
+      ctx.globalAlpha = Math.max(0.25, 1 - d / 13);
+      ctx.font = `${Math.max(10, alt)}px ${Neon.EMOJI}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(ITENS[it.tipo].emoji, sx, y0);
+      ctx.globalAlpha = 1;
+    }
+
+    if (clarao > 0) {
+      ctx.fillStyle = `rgba(255, 230, 180, ${clarao / 400})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // mira
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - 12, H / 2); ctx.lineTo(W / 2 - 4, H / 2);
+    ctx.moveTo(W / 2 + 4, H / 2); ctx.lineTo(W / 2 + 12, H / 2);
+    ctx.moveTo(W / 2, H / 2 - 12); ctx.lineTo(W / 2, H / 2 - 4);
+    ctx.moveTo(W / 2, H / 2 + 4); ctx.lineTo(W / 2, H / 2 + 12);
+    ctx.stroke();
+
+    // arma na mão: dois trapézios, o suficiente pra ancorar a visão
+    const recuo = recarga > 0 ? Math.min(14, recarga / 8) : 0;
+    ctx.fillStyle = '#12043a';
+    ctx.strokeStyle = CORES[1] && `rgb(${CORES[1][0]},${CORES[1][1]},${CORES[1][2]})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - 34, H + 4);
+    ctx.lineTo(W / 2 - 16, H - 96 + recuo);
+    ctx.lineTo(W / 2 + 16, H - 96 + recuo);
+    ctx.lineTo(W / 2 + 34, H + 4);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = ARMAS[jog.arma].nome === 'ESCOPETA' ? '#ff8c1a' : '#00f0ff';
+    ctx.fillRect(W / 2 - 8, H - 100 + recuo, 16, 6);
+
+    // controles de toque desenhados no quadro
+    if (dedo && state === 'playing') {
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      const base = manche ? { x: manche.ox, y: manche.oy } : { x: 110, y: H - 100 };
+      ctx.beginPath(); ctx.arc(base.x, base.y, 52, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.3)';
+      const px = base.x + (manche ? manche.dx * 40 : 0), py = base.y + (manche ? manche.dy * 40 : 0);
+      Neon.circle(ctx, px, py, 24);
+      ctx.strokeStyle = '#ff3b5c';
+      ctx.fillStyle = segurandoTiro ? 'rgba(255, 59, 92, 0.45)' : 'rgba(255, 59, 92, 0.18)';
+      ctx.beginPath(); ctx.arc(BOTAO.x, BOTAO.y, BOTAO.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#ff3b5c';
+      ctx.font = `700 13px Orbitron, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('FOGO', BOTAO.x, BOTAO.y);
+      ctx.globalAlpha = 1;
+    }
+
+    // Faixa de HUD dentro do quadro. O painel grande de fora comia metade da altura
+    // em celular deitado; aqui ele custa 30px e o jogo fica com a tela inteira.
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.55)';
+    ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
+    ctx.fillRect(0, 30, W, 1);
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 12px Orbitron, sans-serif`;
+    const campos = [
+      ['VIDA', jog.vida, jog.vida > 50 ? '#39ff7a' : jog.vida > 25 ? '#ffe600' : '#ff3b5c'],
+      [ARMAS[jog.arma].nome, municao[jog.arma] === Infinity ? '∞' : municao[jog.arma], '#ffe600'],
+      ['SALA', `${sala + 1}/${SALAS.length}`, '#00f0ff'],
+      ['RESTAM', inimigos.length, '#ff2bd6'],
+      ['PONTOS', score, '#39ff7a'],
+    ];
+    let cx = 16;
+    ctx.textAlign = 'left';
+    for (const [rot, val, cor] of campos) {
+      ctx.fillStyle = 'rgba(232, 230, 245, 0.5)';
+      ctx.font = `700 9px Orbitron, sans-serif`;
+      ctx.fillText(rot, cx, 15);
+      cx += ctx.measureText(rot).width + 8;
+      ctx.fillStyle = cor;
+      ctx.font = `700 14px Orbitron, sans-serif`;
+      ctx.fillText(String(val), cx, 15);
+      cx += ctx.measureText(String(val)).width + 26;
+    }
+    ctx.textBaseline = 'alphabetic';
+
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.cor} ${Math.min(0.4, flash.t / 200)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    quadros++; fpsT += dt;
+    if (fpsT >= 0.5) { fpsAtual = Math.round(quadros / fpsT); quadros = 0; fpsT = 0; }
+    update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    if (clarao > 0) clarao -= dt * 1000;
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

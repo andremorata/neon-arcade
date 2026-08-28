@@ -53,6 +53,8 @@ assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
 const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score' };
+// o breach grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
+assert.match(games.breach, /pb = Neon\.best\.update\('breach', score\)/, 'O Breach precisa gravar o recorde');
 for (const [key, variable] of Object.entries(BEST)) {
   assert.match(games[key], new RegExp(`pb\\s*=\\s*Neon\\.best\\.update\\('${key}', ${variable}\\)`),
     `O ${key} deve atualizar o recorde em memória`);
@@ -367,9 +369,87 @@ assert.match(core, /function bindPauseToggle\(btn\)/, 'O nucleo precisa ligar o 
 // despausava no mesmo clique que acabou de pausar. Aconteceu no Snake.
 assert.match(core, /\['pointerdown', 'pointerup', 'click'\]/,
   'O botao de pausa tem que segurar o evento antes de chegar no stage');
+// O nucleo ja liga o botao. Jogo que liga de novo pausa no clique e despausa no
+// 'p' que o nucleo dispara, e o botao vira enfeite. Aconteceu no Breach.
+for (const [name, html] of Object.entries(games)) {
+  assert.ok(!/\$\('pauseToggle'\)\s*\.addEventListener|getElementById\('pauseToggle'\)\s*\.addEventListener/.test(html),
+    `${name}: nao ligue o botao de pausa no jogo, o nucleo ja liga`);
+}
 assert.ok(core.indexOf('bindPauseToggle();') > core.indexOf('bindSoundToggle();'),
   'initPage tem que ligar o botao de pausa junto com o do som');
 assert.ok(css.includes('.pause-toggle { right: 58px; }'), 'O tema posiciona a pausa ao lado do som');
+
+// DDA do Breach: e o raycaster inteiro. Se ele erra a distancia, a parede desenha
+// na altura errada e o inimigo aparece atras do que deveria escondê-lo.
+const breach = games.breach;
+const dda = new Function('MAPA', 'celula',
+  block(breach, '  function castar(px, py, ang)') + '; return castar;');
+const planta = [
+  '11111111',
+  '1......1',
+  '1..2...1',
+  '1......1',
+  '1...3..1',
+  '1......1',
+  '11111111',
+];
+const celulaTeste = (x, y) => {
+  if (x < 0 || y < 0 || x >= planta[0].length || y >= planta.length) return 1;
+  const c = planta[y][x];
+  return c === '.' ? 0 : +c;
+};
+const castar = dda(planta, celulaTeste);
+// de (1.5, 1.5) olhando pra direita, a primeira parede e a borda em x=7
+const dir = castar(1.5, 1.5, 0);
+assert.strictEqual(dir.tipo, 1, 'Olhando pro corredor livre o raio para na borda');
+assert.ok(Math.abs(dir.dist - 5.5) < 1e-6, `A distancia ate a borda tem que ser 5.5, deu ${dir.dist}`);
+// de (1.5, 2.5) olhando pra direita, o bloco 2 em x=3 vem antes
+const bloco = castar(1.5, 2.5, 0);
+assert.strictEqual(bloco.tipo, 2, 'O raio tem que parar no bloco tipo 2, nao atravessar');
+assert.ok(Math.abs(bloco.dist - 1.5) < 1e-6, `O bloco esta a 1.5, deu ${bloco.dist}`);
+// olhando pra cima e pra baixo o lado muda, e e o lado que escurece a face
+assert.strictEqual(castar(1.5, 1.5, Math.PI / 2).lado, 1, 'Batida no eixo Y marca lado 1');
+assert.strictEqual(castar(1.5, 1.5, 0).lado, 0, 'Batida no eixo X marca lado 0');
+// raio nunca volta distancia negativa, em qualquer angulo
+for (let a = 0; a < Math.PI * 2; a += 0.05) {
+  const h = castar(3.5, 3.5, a);
+  assert.ok(h.dist > 0 && h.dist < 20, `Distancia fora de faixa no angulo ${a.toFixed(2)}: ${h.dist}`);
+  assert.ok(h.tipo > 0, `Todo raio tem que bater em alguma coisa (angulo ${a.toFixed(2)})`);
+}
+
+// Salas do Breach: planta, ponto de entrada e receita andam juntos. Se o jogador ou
+// um inimigo nascer dentro de parede, a sala trava e nao tem como terminar o jogo.
+const salasBreach = new Function('Neon',
+  breach.slice(breach.indexOf('  const SALAS = ['), breach.indexOf('  let sala = 0;')) +
+  breach.slice(breach.indexOf('  const TIPOS = {'), breach.indexOf('  function entrarNaSala')) +
+  '; return { SALAS, TIPOS, PONTOS };')({ rand: (a, b) => (a + b) / 2 });
+const paredeEm = (planta, x, y) => {
+  if (x < 0 || y < 0 || x >= planta[0].length || y >= planta.length) return true;
+  return planta[y][x] !== '.';
+};
+assert.ok(salasBreach.SALAS.length >= 4, 'O Breach precisa de pelo menos 4 salas');
+for (const [i, s] of salasBreach.SALAS.entries()) {
+  const [ex, ey] = s.entrada;
+  assert.ok(!paredeEm(s.planta, Math.floor(ex), Math.floor(ey)),
+    `sala ${i + 1} (${s.nome}): a entrada cai dentro de parede`);
+  assert.ok(s.receita.length, `sala ${i + 1}: sala sem inimigo nunca termina`);
+  for (const nome of s.receita) {
+    assert.ok(salasBreach.TIPOS[nome], `sala ${i + 1}: inimigo desconhecido "${nome}"`);
+  }
+  // tem que sobrar chao longe da entrada pra todo mundo da receita caber
+  let vagas = 0;
+  for (let y = 1; y < s.planta.length - 1; y++)
+    for (let x = 1; x < s.planta[0].length - 1; x++)
+      if (!paredeEm(s.planta, x, y) && Math.hypot(x + 0.5 - ex, y + 0.5 - ey) > 4.5) vagas++;
+  assert.ok(vagas >= s.receita.length + 1,
+    `sala ${i + 1}: só ${vagas} vagas longe da entrada para ${s.receita.length} inimigos e o item`);
+}
+const comChefe = salasBreach.SALAS.filter(s => s.receita.includes('chefe'));
+assert.strictEqual(comChefe.length, 1, 'O chefe aparece em exatamente uma sala');
+assert.strictEqual(comChefe[0], salasBreach.SALAS.at(-1), 'O chefe e a ultima sala');
+assert.ok(salasBreach.PONTOS.chefe > salasBreach.PONTOS.tanque, 'O chefe vale mais que o tanque');
+assert.ok(salasBreach.TIPOS.chefe.vida > salasBreach.TIPOS.tanque.vida * 3,
+  'O chefe precisa aguentar bem mais que o tanque, senao nao e chefe');
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');

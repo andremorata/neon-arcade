@@ -291,7 +291,13 @@ window.Neon = (function () {
     for (const t of ['pointerdown', 'pointerup', 'click']) {
       btn.addEventListener(t, e => e.stopPropagation());
     }
+    // Toque em celular chega dobrado: o click do toque mais o click de
+    // compatibilidade do mouse. Sem a carencia, um toque pausa e despausa.
+    let ultimo = 0;
     btn.addEventListener('click', () => {
+      const agora = performance.now();
+      if (agora - ultimo < 250) return;
+      ultimo = agora;
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'p', bubbles: true }));
     });
   }
