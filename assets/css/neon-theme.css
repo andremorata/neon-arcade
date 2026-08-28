@@ -340,6 +340,29 @@ canvas { display: block; width: 100%; height: 100%; }
 .pause-toggle { right: 58px; }
 .stage:has(.overlay:not(.hidden)) .pause-toggle { display: none; }
 
+/* ── Modo imersivo ────────────────────────────────── */
+/* Durante a partida some tudo que nao e jogo e o quadro cresce ate o limite da
+   janela. Quem usa move o HUD pra dentro do canvas, porque o painel de fora
+   comia metade da altura em celular deitado. Ligado pela classe no <body>. */
+body.imersivo header,
+body.imersivo .dashboard,
+body.imersivo .legend,
+body.imersivo footer { display: none; }
+body.imersivo .app {
+  /* zera o respiro do arcade mas mantem o do aparelho: no iPhone o entalhe e a
+     barra de baixo continuam comendo tela mesmo em tela cheia */
+  padding:
+    env(safe-area-inset-top)
+    env(safe-area-inset-right)
+    env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  gap: 0;
+  max-width: none;
+  min-height: 100dvh;
+  justify-content: center;
+}
+body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-width: 0; }
+
 /* ── Toast ────────────────────────────────────────── */
 .toast {
   position: absolute;

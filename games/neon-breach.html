@@ -28,14 +28,6 @@
   }
   @media (pointer: coarse) and (orientation: portrait) { #gire { display: flex; } }
 
-  /* Modo imersivo: durante a partida some tudo que nao e jogo e o quadro cresce
-     ate o limite da janela. Vida e municao passam pra uma faixa dentro do canvas. */
-  body.imersivo header,
-  body.imersivo .dashboard,
-  body.imersivo footer { display: none; }
-  body.imersivo .app { padding: 0; gap: 0; max-width: none; min-height: 100dvh; justify-content: center; }
-  body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-width: 0; }
-
   /* a faixa de HUD ocupa os 30px do topo do quadro; o toast desce pra nao cobrir */
   .toast { top: 52px; }
 </style>

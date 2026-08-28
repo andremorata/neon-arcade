@@ -11,7 +11,8 @@
 <meta name="theme-color" content="#04001a">
 <link rel="stylesheet" href="../assets/css/neon-theme.css">
 <style>
-  .stage { --arw: 3; --arh: 2; --maxw: 900px; }
+  /* 16:9: em celular deitado sobra menos tarja do que o 3:2 antigo */
+  .stage { --arw: 16; --arh: 9; --maxw: 960px; }
   /* Manche na esquerda e acoes na direita, como no Breach: um polegar so anda,
      o outro so atira e pula. O d-pad de 4 setas nao dava conta dos dois juntos. */
   .acoes { display: none; position: absolute; right: 14px; bottom: 14px; z-index: 15; gap: 10px; align-items: flex-end; }
@@ -27,6 +28,8 @@
   .acoes button:active { background: rgba(255, 59, 92, 0.28); }
   .acoes .esp { border-color: rgba(0, 240, 255, 0.6); color: var(--neon-cyan); }
   .acoes .pulo { border-color: rgba(57, 255, 122, 0.6); color: var(--neon-green); width: 74px; height: 74px; font-size: 12px; }
+  /* a faixa de HUD ocupa os 30px do topo do quadro; o toast desce pra nao cobrir */
+  .toast { top: 52px; }
 </style>
 </head>
 <body>
@@ -50,7 +53,7 @@
     <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
     <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
     <div class="toast" id="toast">FASE LIMPA!</div>
-    <canvas id="game" width="900" height="600"></canvas>
+    <canvas id="game" width="960" height="540"></canvas>
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON SLUG</h2>
       <p id="overlayText">Três fases e um chefe no fim. O tiro sai em rajada e mira sozinho no inimigo mais próximo à sua frente, então o jogo é sobre onde você se posiciona, não sobre precisão de pixel. O especial atravessa tudo, mas é contado.</p>
@@ -81,8 +84,8 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  const W = 900, H = 600;
-  const CELL = 50, LINHAS = 12;
+  const W = 960, H = 540;
+  const CELL = 45, LINHAS = 12;    // 12 linhas de 45px fecham exatos os 540 de altura
   const G = 1750, PULO = -620, VEL = 250;
 
   // Fase e uma tira de texto. '#' chao, '=' plataforma, '^' espinho, 'E' andarilho,
@@ -94,7 +97,7 @@
       '.............B..........................H.........................................',
       '..........======..............===============...........B.........................',
       '.....................F.................................====.......................',
-      '................E.............E...............F...................E...............',
+      '.........======.E.............E......=========F...................E...............',
       '...=====.................===========..................=========...................',
       '..................^^..............................^^..............................',
       '#####################.############################.###############################',
@@ -108,7 +111,7 @@
       '.....B...........................H................................B................',
       '...======..........======..............=======...........======....................',
       '................E.........................................E........................',
-      '........^^^..........===========..........................................=====....',
+      '..======^^^..........===========......=========.........======............=====....',
       '.....................................E............^^^^.............................',
       '..===========...............................================.......................',
       '#########.#########.#####################.########################.################',
@@ -122,7 +125,7 @@
       '.....H.......................................................H....................',
       '...=====.........======............=====..........======..........................',
       '..............E..........E.................E...........................X..........',
-      '.......^^^.........................^^^............................................',
+      '.......^^^......======.....^^^....===............======...........................',
       '....========...........=======.........========...................................',
       '..................................................................................',
       '#########.###############.#####################.##################################',
@@ -280,6 +283,7 @@
 
   function fim(venceu) {
     state = 'gameover';
+    imersivo(false);
     Neon.audio.music.down();
     if (venceu) score += 5000;
     els.score.textContent = score;
@@ -298,8 +302,11 @@
       'JOGAR DE NOVO', venceu || isRecord ? 'record' : 'go');
   }
 
+  const imersivo = (on) => document.body.classList.toggle('imersivo', on);
+
   function startGame() {
     Neon.audio.ensure();
+    imersivo(true);
     startHi = pb;
     score = 0; kills = 0; especiais = 3; cadencia = 0;
     jog.vida = 100;
@@ -636,17 +643,43 @@
       ctx.globalAlpha = 1;
     }
 
+    // Faixa de HUD dentro do quadro. O painel de fora comia metade da altura em
+    // celular deitado; aqui ele custa 30px e o jogo fica com a tela inteira.
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.55)';
+    ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
+    ctx.fillRect(0, 30, W, 1);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    let hx = 16;
+    for (const [rot, val, cor] of [
+      ['VIDA', jog.vida, jog.vida > 50 ? '#39ff7a' : jog.vida > 25 ? '#ffe600' : '#ff3b5c'],
+      ['FASE', `${faseAtual + 1}/${FASES.length}`, '#00f0ff'],
+      ['ESP', especiais, '#9b30ff'],
+      ['PONTOS', score, '#ffe600'],
+    ]) {
+      ctx.fillStyle = 'rgba(232, 230, 245, 0.5)';
+      ctx.font = '700 9px Orbitron, sans-serif';
+      ctx.fillText(rot, hx, 15);
+      hx += ctx.measureText(rot).width + 8;
+      ctx.fillStyle = cor;
+      ctx.font = '700 14px Orbitron, sans-serif';
+      ctx.fillText(String(val), hx, 15);
+      hx += ctx.measureText(String(val)).width + 24;
+    }
+    ctx.textBaseline = 'alphabetic';
+
     if (chefe) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(W * 0.2, 16, W * 0.6, 14);
+      ctx.fillRect(W * 0.2, 40, W * 0.6, 14);
       ctx.fillStyle = '#ff3b5c';
       Neon.glow(ctx, '#ff3b5c', 12);
-      ctx.fillRect(W * 0.2, 16, W * 0.6 * (chefe.vida / chefe.vidaMax), 14);
+      ctx.fillRect(W * 0.2, 40, W * 0.6 * (chefe.vida / chefe.vidaMax), 14);
       ctx.shadowBlur = 0;
       ctx.font = '700 11px Orbitron, sans-serif';
       ctx.fillStyle = '#fff';
       ctx.textAlign = 'center';
-      ctx.fillText('CHEFE', W / 2, 23);
+      ctx.fillText('CHEFE', W / 2, 47);
     }
 
     // trilho do progresso da fase

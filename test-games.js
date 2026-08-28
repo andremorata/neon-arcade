@@ -558,13 +558,34 @@ assert.match(slug, /if \(TECLAS\[k\] === 'pular'\) \{ if \(!e\.repeat\) pular\(\
   'Pulo e evento, nao estado: segurando a tecla o segundo pulo sairia sozinho');
 // altura alcancavel com dois pulos tem que cobrir as plataformas mais altas do mapa
 const fis = new Function(
-  slug.slice(slug.indexOf('  const CELL = 50'), slug.indexOf('  // Fase e uma tira')) +
+  slug.slice(slug.indexOf('  const CELL ='), slug.indexOf('  // Fase e uma tira')) +
   '; return { G, PULO, CELL, LINHAS };')();
 const alturaPulo = (fis.PULO * fis.PULO) / (2 * fis.G);          // altura de um pulo so
 const alturaDupla = alturaPulo + ((fis.PULO * 0.86) ** 2) / (2 * fis.G);
 assert.ok(alturaDupla > alturaPulo * 1.5, 'O segundo pulo tem que somar altura de verdade');
-assert.ok(alturaDupla > fis.CELL * 3.4,
-  `dois pulos sobem ${alturaDupla.toFixed(0)}px; as plataformas ficam a ate 3 blocos de ${fis.CELL}px`);
+// A conta que importa nao e a altura solta: e se cada plataforma desenhada tem
+// de onde ser alcancada. Sem isso sobra degrau bonito que o boneco nunca sobe.
+for (const [i, f] of fasesSlug.entries()) {
+  const L = f.mapa[0].length, A = f.mapa.length;
+  const solido = (x, y) => y >= 0 && y < A && x >= 0 && x < L && '#='.includes(f.mapa[y][x]);
+  const apoios = [];
+  for (let x = 0; x < L; x++) {
+    apoios[x] = [];
+    for (let y = 0; y < A; y++) if (solido(x, y) && !solido(x, y - 1)) apoios[x].push(y);
+  }
+  for (let x = 0; x < L; x++) {
+    for (const y of apoios[x]) {
+      let maisProximo = Infinity;
+      for (let xx = Math.max(0, x - 2); xx < Math.min(L, x + 3); xx++)
+        for (const yy of apoios[xx]) if (yy > y && yy < maisProximo) maisProximo = yy;
+      if (maisProximo === Infinity) continue;           // nada embaixo: chao ou borda
+      const salto = (maisProximo - y) * fis.CELL;
+      assert.ok(salto <= alturaDupla * 0.85,
+        `fase ${i + 1} (${f.nome}): a plataforma da coluna ${x}, linha ${y} pede ${salto}px ` +
+        `de salto e o pulo duplo sobe ${alturaDupla.toFixed(0)}px`);
+    }
+  }
+}
 
 const comChefeSlug = fasesSlug.filter(f => f.mapa.join('').includes('X'));
 assert.strictEqual(comChefeSlug.length, 1, 'O chefe do Slug aparece em uma fase so');
