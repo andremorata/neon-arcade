@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON ENDURO — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  .stage { --arw: 3; --arh: 4; --maxw: 480px; }
+  /* segundo botao redondo, ao lado do som */
+  #autoToggle { right: 58px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON ENDURO</h1></a>
+      <div class="tag">// | Bata a meta antes do dia acabar | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:5;">
+    <div class="stat"><span class="lbl">Carros</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="enduro">0</span></div>
+    <div class="stat"><span class="lbl">Dia</span><span class="val" id="dia">1</span></div>
+    <div class="stat"><span class="lbl">Faltam</span><span class="val" id="faltam">18</span></div>
+    <div class="stat"><span class="lbl">Lata</span><span class="val" id="lata">100%</span>
+      <div class="combo-bar"><div class="fill" id="lataBar" style="width:100%"></div></div>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="sound-toggle" id="autoToggle" title="Acelerador automático">⏩</button>
+    <div class="toast" id="toast">META BATIDA!</div>
+    <canvas id="game" width="600" height="800"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON ENDURO</h2>
+      <p id="overlayText">Ultrapasse a cota de carros antes do dia virar. Batida e acostamento comem a lata do carro, e lata zerada também encerra. Virou o dia, a oficina devolve parte dela e a meta sobe.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Carros</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Dias</span><b id="fsDias">1</b></div>
+        <div class="fstat"><span>Lata</span><b id="fsLata">100%</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">Toque nas laterais</span><span class="key">Base = freio</span><span class="key">← ↑ → ↓ no teclado</span><span class="key">⏩ liga o auto</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · a meta sobe a cada dia · fora da pista come lata e velocidade</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 600, H = 800;
+  const HY = 300;                  // linha do horizonte
+  const PASSO = 2;                 // altura da faixa desenhada; 1px nao paga o custo
+  const ZFAR = 8;                  // profundidade visivel da pista, em unidades de mundo
+  const P_CARRO = 0.88;            // onde o proprio carro fica na projecao
+  const VMAX = 320;                // unidades de mundo por segundo no talo
+  const DIA_SEGUNDOS = 55;         // o dia e relogio, nao odometro: corre igual pra todo mundo
+  const META_BASE = 18, META_PASSO = 6, META_TETO = 60;
+  const LATA_MAX = 100, LATA_BATIDA = 12, LATA_ACOSTAMENTO = 9, LATA_OFICINA = 30;
+
+  // Estado geral do carro. A cor e o quanto ele esta amassado saem daqui, entao
+  // o jogador le a saude olhando o proprio carro, sem tirar o olho da pista.
+  const ESTADOS = [
+    { min: 67, cor: '#00f0ff', amassos: 0 },
+    { min: 34, cor: '#ffe600', amassos: 2 },
+    { min: 0,  cor: '#ff3b5c', amassos: 4 },
+  ];
+  const estadoLata = l => ESTADOS.find(e => l >= e.min) || ESTADOS[ESTADOS.length - 1];
+
+  // ── projeção ──────────────────────────────────────
+  // Falso-3D barato: cada faixa horizontal da tela vira uma fatia da pista. p vai
+  // de 0 no horizonte a 1 no para-choque, e a curva empurra o longe pro lado.
+  const pDeZ = z => Math.pow(Math.max(0, 1 - z / ZFAR), 2.2);
+  const zDeP = p => (1 - Math.pow(Math.max(0, p), 1 / 2.2)) * ZFAR;
+  const yDeP = p => HY + p * (H - HY);
+
+  function estrada(p, curva) {
+    const longe = (1 - p) * (1 - p);
+    return { cx: W / 2 + curva * longe * 260, meia: 20 + p * 200 };
+  }
+
+  // ── céu ───────────────────────────────────────────
+  // Quatro fotos do dia; o resto e interpolacao. Mais barato que somar camadas.
+  const CEU = [
+    { t: 0.00, topo: [26, 2, 64],  baixo: [122, 24, 150] },
+    { t: 0.45, topo: [62, 8, 92],  baixo: [255, 108, 40] },
+    { t: 0.62, topo: [3, 0, 20],   baixo: [26, 0, 66] },
+    { t: 0.88, topo: [10, 2, 44],  baixo: [84, 32, 124] },
+    { t: 1.00, topo: [26, 2, 64],  baixo: [122, 24, 150] },
+  ];
+  const misturar = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+  const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+  function coresCeu(prog) {
+    let i = 0;
+    while (i < CEU.length - 2 && prog > CEU[i + 1].t) i++;
+    const a = CEU[i], b = CEU[i + 1];
+    const k = Neon.clamp((prog - a.t) / (b.t - a.t), 0, 1);
+    return { topo: misturar(a.topo, b.topo, k), baixo: misturar(a.baixo, b.baixo, k) };
+  }
+  // 0 de dia, 1 na noite fechada. Serve pro farol e pra escurecer o chão.
+  const escuridao = prog => Neon.clamp((prog - 0.46) / 0.12, 0, 1) - Neon.clamp((prog - 0.78) / 0.12, 0, 1);
+  // A neblina só aparece do dia 2 em diante, e sempre de manhã.
+  const nevoa = (prog, dia) => (dia < 2 ? 0 :
+    Math.min(0.9, 0.4 + dia * 0.07) * Neon.clamp(1 - Math.abs(prog - 0.30) / 0.2, 0, 1));
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), dia: Neon.$('dia'), faltam: Neon.$('faltam'),
+    lata: Neon.$('lata'), lataBar: Neon.$('lataBar'),
+    fsScore: Neon.$('fsScore'), fsDias: Neon.$('fsDias'), fsLata: Neon.$('fsLata'), stage: Neon.$('stage'),
+  };
+
+  let carX = 0, vel = 0, curva = 0, curvaAlvo = 0, curvaTroca = 0;
+  let dist = 0, prog = 0, dia = 1, meta = META_BASE, faltam = META_BASE, score = 0;
+  let rivais = [], pb = Neon.best.get('enduro'), startHi = 0;
+  let lata = LATA_MAX, fumacaT = 0;
+  let auto = localStorage.getItem('neon-enduro-auto') !== 'off';
+  let state = 'menu', lastFrame = performance.now(), forasT = 0, dicaT = 0;
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' };
+  const particles = new Neon.Particles();
+  els.best.textContent = pb;
+
+  function pintarLata() {
+    const k = Neon.clamp(lata / LATA_MAX, 0, 1);
+    els.lata.textContent = `${Math.ceil(lata)}%`;
+    els.lataBar.style.width = `${k * 100}%`;
+    els.lataBar.style.background = estadoLata(lata).cor;
+    els.lataBar.style.boxShadow = `0 0 8px ${estadoLata(lata).cor}`;
+  }
+
+  function bateuLata(quanto, motivo) {
+    if (state !== 'playing') return;
+    lata = Math.max(0, lata - quanto);
+    pintarLata();
+    if (lata <= 0) gameOver(motivo);
+  }
+
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
+
+  // sem amarelo nem ciano: essas duas cores sao a saude do carro do jogador
+  const CORES_RIVAL = ['#ff2bd6', '#ff8c1a', '#39ff7a', '#9b30ff'];
+  const metaBatida = () => faltam <= 0;
+
+  function nascerRival() {
+    rivais.push({
+      z: ZFAR, faixa: Neon.rand(-0.78, 0.78),
+      vel: Neon.rand(0.42, 0.72), cor: Neon.choice(CORES_RIVAL), bumpT: 0, passado: false,
+    });
+  }
+
+  function startGame() {
+    Neon.audio.ensure();
+    startHi = pb;
+    carX = 0; vel = 0; curva = 0; curvaAlvo = 0; curvaTroca = 1.5;
+    dist = 0; prog = 0; dia = 1; meta = META_BASE; faltam = META_BASE; score = 0;
+    rivais = []; forasT = 0; dicaT = 5000; lata = LATA_MAX; fumacaT = 0;
+    pintarLata();
+    particles.clear();
+    els.score.textContent = '0';
+    els.dia.textContent = '1';
+    els.faltam.textContent = meta;
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P para retomar — o dia para junto.', 'RESUME');
+  }
+  function resumeGame() {
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  function gameOver(motivo) {
+    state = 'gameover';
+    Neon.audio.music.down();
+    pb = Neon.best.update('enduro', score);
+    els.best.textContent = pb;
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    els.fsScore.textContent = score;
+    els.fsDias.textContent = dia;
+    els.fsLata.textContent = `${Math.ceil(Math.max(0, lata))}%`;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'FIM DA CORRIDA',
+      `${motivo} Você ultrapassou ${score} ${score === 1 ? 'carro' : 'carros'} em ${dia} ${dia === 1 ? 'dia' : 'dias'}.`,
+      'CORRER DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  function virarDia() {
+    dia++;
+    meta = Math.min(META_TETO, META_BASE + (dia - 1) * META_PASSO);
+    faltam = meta;
+    prog = 0;
+    lata = Math.min(LATA_MAX, lata + LATA_OFICINA);
+    pintarLata();
+    els.dia.textContent = dia;
+    els.faltam.textContent = faltam;
+    Neon.popEl(els.dia);
+    Neon.audio.sfx.level();
+    Neon.toast(`🌅 DIA ${dia} · META ${meta}`);
+  }
+
+  function ultrapassar(r) {
+    score++;
+    els.score.textContent = score;
+    Neon.popEl(els.score);
+    if (faltam > 0) {
+      faltam--;
+      els.faltam.textContent = faltam;
+      if (faltam === 0) {
+        Neon.toast('🏁 META BATIDA! SÓ CHEGAR NO FIM DO DIA');
+        Neon.audio.sfx.record();
+        flashAt('rgba(57, 255, 122,', 260);
+      } else {
+        Neon.audio.sfx.point();
+      }
+    } else {
+      Neon.audio.sfx.point();
+    }
+  }
+
+  // Um rival so conta uma vez. Quem anda na mesma velocidade que o carro do lado
+  // cruza o zero pra frente e pra tras a cada quadro, e sem a marca o placar dispara.
+  function passarRival(r, antes) {
+    if (antes > 0 && r.z <= 0 && !r.passado) { r.passado = true; return true; }
+    return false;
+  }
+
+  function bater(r) {
+    r.bumpT = 0.7;                                  // carencia: sem ela a batida repete todo quadro
+    vel *= 0.3;
+    carX += Math.sign(carX - r.faixa || 1) * 0.18;
+    Neon.audio.sfx.hit();
+    shakeAt(11, 300);
+    bateuLata(LATA_BATIDA, 'A lata acabou numa batida.');
+    flashAt('rgba(255, 59, 92,', 200);
+    const p = pDeZ(0.2), { cx, meia } = estrada(p, curva);
+    particles.burst(cx + r.faixa * meia, yDeP(p), '#ffffff', 18, 200, 3);
+  }
+
+  // ── input ─────────────────────────────────────────
+  const TECLAS = {
+    arrowleft: 'esq', a: 'esq', arrowright: 'dir', d: 'dir',
+    arrowup: 'cima', w: 'cima', arrowdown: 'baixo', s: 'baixo',
+  };
+  const preso = new Set();
+
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in TECLAS) { e.preventDefault(); preso.add(TECLAS[k]); dicaT = 0; return; }
+    if (k === ' ' || k === 'enter') {
+      e.preventDefault();
+      if (state === 'menu' || state === 'gameover') startGame();
+      else if (state === 'paused') resumeGame();
+      return;
+    }
+    if (k === 'p') {
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in TECLAS) preso.delete(TECLAS[k]);
+  });
+
+  // Toque por zona em vez de d-pad: laterais viram, base do meio freia, resto
+  // pisa fundo. O acelerador e automatico, entao um polegar so da conta e nenhum
+  // botao fica por cima da pista.
+  const toques = new Map();
+
+  function zonaDe(e) {
+    const r = els.stage.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    if (fy > 0.85 && fx > 0.34 && fx < 0.66) return 'baixo';
+    if (fx < 0.42) return 'esq';
+    if (fx > 0.58) return 'dir';
+    return 'cima';
+  }
+  // Só larga a direção quando nenhum outro dedo ainda estiver segurando ela.
+  function soltarToque(id) {
+    const z = toques.get(id);
+    if (z === undefined) return;
+    toques.delete(id);
+    if (![...toques.values()].includes(z)) preso.delete(z);
+  }
+  function pegarToque(e) {
+    const z = zonaDe(e);
+    if (toques.get(e.pointerId) === z) return;
+    soltarToque(e.pointerId);
+    toques.set(e.pointerId, z);
+    preso.add(z);
+  }
+
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle, .overlay')) return;
+    e.preventDefault();
+    pegarToque(e);
+  });
+  els.stage.addEventListener('pointermove', (e) => { if (toques.has(e.pointerId)) pegarToque(e); });
+  window.addEventListener('pointerup', (e) => soltarToque(e.pointerId));
+  window.addEventListener('pointercancel', (e) => soltarToque(e.pointerId));
+
+  function pintarAuto() {
+    const b = Neon.$('autoToggle');
+    b.classList.toggle('muted', !auto);
+    b.title = auto ? 'Acelerador automático ligado' : 'Acelerador automático desligado';
+  }
+  Neon.$('autoToggle').addEventListener('click', () => {
+    auto = !auto;
+    localStorage.setItem('neon-enduro-auto', auto ? 'on' : 'off');
+    pintarAuto();
+    Neon.audio.sfx.click();
+  });
+  pintarAuto();
+
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    if (state !== 'playing') return;
+
+    // curva: um alvo novo de tempos em tempos, o resto e interpolacao
+    curvaTroca -= dt;
+    if (curvaTroca <= 0) {
+      curvaAlvo = Math.random() < 0.32 ? 0 : Neon.rand(-1, 1);
+      curvaTroca = Neon.rand(2.2, 5);
+    }
+    curva += (curvaAlvo - curva) * Math.min(1, dt * 0.8);
+
+    const fora = Math.abs(carX) > 1;
+    const teto = fora ? 0.42 : 1;
+    // Piloto automatico: solto, o carro busca uma velocidade de cruzeiro. Sem
+    // isso o polegar do celular tinha que segurar o acelerador e virar ao mesmo
+    // tempo, e o d-pad nao deixa.
+    if (preso.has('cima')) vel += dt * 0.5;
+    else if (preso.has('baixo')) vel -= dt * 1.1;
+    else if (auto) vel += (0.9 - vel) * dt * 0.7;    // acima do rival mais rapido (0.72), senao o auto nunca ultrapassa
+    else vel -= dt * 0.35;
+    vel = Neon.clamp(vel, 0, teto);
+
+    // gelo da noite: o volante fica leve e a curva joga mais
+    const gelo = dia >= 4 ? escuridao(prog) * 0.5 : 0;
+    const manobra = 1.5 * (0.45 + vel * 0.55) * (1 - gelo * 0.35);
+    if (preso.has('esq')) carX -= manobra * dt;
+    if (preso.has('dir')) carX += manobra * dt;
+    carX -= curva * vel * (0.32 + gelo) * dt;
+    carX = Neon.clamp(carX, -1.28, 1.28);
+
+    if (fora) {
+      bateuLata(LATA_ACOSTAMENTO * dt, 'A lata acabou no acostamento.');
+      if (state !== 'playing') return;
+      forasT += dt;
+      if (forasT > 0.12) { forasT = 0; shakeAt(4, 90); Neon.audio.sfx.wall(); }
+    } else forasT = 0;
+
+    dist += vel * VMAX * dt;
+    // O dia anda no relogio, nao na distancia. Preso a distancia, quem encostava
+    // no acostamento fazia o dia durar cinco minutos e nunca perdia.
+    prog += dt / DIA_SEGUNDOS;
+    Neon.audio.music.intensity(vel);
+
+    // carro na sucata solta fumaca: o aviso de que a proxima batida encerra
+    if (lata < 34) {
+      fumacaT -= dt;
+      if (fumacaT <= 0) {
+        fumacaT = 0.22;
+        const pc = estrada(P_CARRO, curva);
+        particles.burst(pc.cx + carX * pc.meia, yDeP(P_CARRO) - 14, '#9aa0b5', 3, 60, 2.5);
+      }
+    }
+
+    if (prog >= 1) {
+      if (faltam > 0) { gameOver('O dia acabou com a meta em aberto.'); return; }
+      virarDia();
+    }
+
+    // rivais
+    for (const r of rivais) {
+      const antes = r.z;
+      if (r.bumpT > 0) r.bumpT -= dt;
+      r.z -= (vel - r.vel) * VMAX * dt / 44;
+      if (passarRival(r, antes)) ultrapassar(r);
+      if (r.bumpT <= 0 && r.z > 0 && r.z < 0.55 && Math.abs(r.faixa - carX) < 0.3) bater(r);
+    }
+    rivais = rivais.filter(r => r.z > -1.5 && r.z < ZFAR * 1.4);
+
+    const alvoNaPista = Math.min(7, 3 + ((dia / 2) | 0));
+    if (rivais.filter(r => r.z > 1).length < alvoNaPista && Math.random() < dt * 2.2) nascerRival();
+  }
+
+  // ── render ────────────────────────────────────────
+  function carro(x, y, larg, cor, farol, amassos) {
+    const alt = larg * 0.62;
+    Neon.glow(ctx, cor, larg * 0.35);
+    ctx.fillStyle = cor;
+    ctx.fillRect(x - larg / 2, y - alt, larg, alt);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.75)';
+    ctx.fillRect(x - larg * 0.34, y - alt * 0.82, larg * 0.68, alt * 0.42);
+    ctx.fillStyle = farol ? '#ffe600' : 'rgba(255,255,255,0.55)';
+    ctx.fillRect(x - larg / 2, y - alt * 0.16, larg * 0.2, alt * 0.16);
+    ctx.fillRect(x + larg * 0.3, y - alt * 0.16, larg * 0.2, alt * 0.16);
+    if (!amassos) return;
+    ctx.strokeStyle = 'rgba(5, 0, 26, 0.85)';
+    ctx.lineWidth = Math.max(1, larg * 0.05);
+    for (let i = 0; i < amassos; i++) {
+      const px = x - larg / 2 + larg * (0.16 + i * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(px, y - alt * 0.9);
+      ctx.lineTo(px + larg * 0.12, y - alt * 0.15);
+      ctx.stroke();
+    }
+  }
+
+  // Mapa das zonas de toque, nos primeiros segundos da corrida. Sem isso o
+  // jogador de celular abre o jogo e nao acha controle nenhum na tela.
+  function dicaToque() {
+    const a = Math.min(0.5, dicaT / 1400);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.16)';
+    ctx.fillRect(0, HY, W * 0.42, H - HY);
+    ctx.fillRect(W * 0.58, HY, W * 0.42, H - HY);
+    ctx.fillStyle = 'rgba(255, 43, 214, 0.2)';
+    ctx.fillRect(W * 0.34, H * 0.85, W * 0.32, H * 0.15);
+    ctx.globalAlpha = Math.min(0.9, a * 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#0af6ff';
+    ctx.font = '700 44px Orbitron, sans-serif';
+    ctx.fillText('◀', W * 0.11, H * 0.6);
+    ctx.fillText('▶', W * 0.89, H * 0.6);
+    ctx.fillStyle = '#ff2bd6';
+    ctx.font = '700 18px Orbitron, sans-serif';
+    ctx.fillText('FREIO', W / 2, H * 0.94);
+    ctx.restore();
+  }
+
+  function render(now) {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+    const noite = escuridao(prog), brilho = 1 - noite * 0.5, fog = nevoa(prog, dia);
+    const ceu = coresCeu(prog);
+
+    const g = ctx.createLinearGradient(0, 0, 0, HY);
+    g.addColorStop(0, rgb(ceu.topo));
+    g.addColorStop(1, rgb(ceu.baixo));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, HY);
+
+    // sol de dia, lua de noite, os dois presos na curva
+    const astroX = W / 2 + curva * 150;
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = noite > 0.5 ? '#e8e8ff' : '#ffe600';
+    Neon.glow(ctx, noite > 0.5 ? '#9fd8ff' : '#ff8c1a', 40);
+    Neon.circle(ctx, astroX, HY - 46 - (1 - Math.abs(prog * 2 - 1)) * 40, 30);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+
+    // pista, faixa por faixa
+    for (let y = HY; y < H; y += PASSO) {
+      const p = (y - HY) / (H - HY);
+      const z = zDeP(p) + dist / 44;
+      const { cx, meia } = estrada(p, curva);
+      const banda = ((z * 1.6) | 0) % 2;
+      const luz = brilho * (0.7 + p * 0.3);
+
+      ctx.fillStyle = banda
+        ? `rgb(${(28 * luz) | 0},${(10 * luz) | 0},${(72 * luz) | 0})`
+        : `rgb(${(20 * luz) | 0},${(6 * luz) | 0},${(56 * luz) | 0})`;
+      ctx.fillRect(0, y, W, PASSO);
+
+      ctx.fillStyle = `rgb(${(52 * luz) | 0},${(52 * luz) | 0},${(68 * luz) | 0})`;
+      ctx.fillRect(cx - meia, y, meia * 2, PASSO);
+
+      const borda = Math.max(2, meia * 0.06);
+      ctx.fillStyle = banda ? `rgb(${(255 * luz) | 0},${(60 * luz) | 0},${(110 * luz) | 0})` : `rgb(${(240 * luz) | 0},${(240 * luz) | 0},${(255 * luz) | 0})`;
+      ctx.fillRect(cx - meia, y, borda, PASSO);
+      ctx.fillRect(cx + meia - borda, y, borda, PASSO);
+
+      if (banda && p > 0.12) {
+        ctx.fillStyle = `rgba(255,255,255,${0.5 * brilho})`;
+        ctx.fillRect(cx - meia * 0.02, y, Math.max(1, meia * 0.04), PASSO);
+      }
+    }
+
+    // rivais: do fundo pra frente, senao o de tras cobre o da frente
+    for (const r of [...rivais].sort((a, b) => b.z - a.z)) {
+      if (r.z > ZFAR || r.z < -0.6) continue;
+      const p = pDeZ(r.z);
+      const { cx, meia } = estrada(p, curva);
+      carro(cx + r.faixa * meia, yDeP(p), Math.max(6, meia * 0.34), metaBatida() ? '#4d7dff' : r.cor, false, 0);
+    }
+
+    const pc = estrada(P_CARRO, curva);
+    const est = estadoLata(lata);
+    // na sucata o carro pisca: mesmo aviso do arcade antigo
+    const some = est.amassos === 4 && state === 'playing' && ((now / 140) | 0) % 2 === 0;
+    if (!some) carro(pc.cx + carX * pc.meia, yDeP(P_CARRO), pc.meia * 0.36, est.cor, noite > 0.35, est.amassos);
+
+    // farol: cone claro no escuro, some de dia
+    if (noite > 0.05) {
+      ctx.fillStyle = `rgba(6, 2, 26, ${noite * 0.4})`;
+      ctx.fillRect(0, HY, W, H - HY);
+      const fx = pc.cx + carX * pc.meia;
+      const cone = ctx.createLinearGradient(0, yDeP(P_CARRO), 0, HY + 40);
+      cone.addColorStop(0, `rgba(255, 240, 180, ${noite * 0.3})`);
+      cone.addColorStop(1, 'rgba(255, 240, 180, 0)');
+      ctx.fillStyle = cone;
+      ctx.beginPath();
+      ctx.moveTo(fx - 26, yDeP(P_CARRO));
+      ctx.lineTo(fx + 26, yDeP(P_CARRO));
+      ctx.lineTo(fx + 150, HY + 40);
+      ctx.lineTo(fx - 150, HY + 40);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    if (fog > 0) {
+      const n = ctx.createLinearGradient(0, HY - 30, 0, H * 0.82);
+      n.addColorStop(0, `rgba(214, 222, 255, ${fog})`);
+      n.addColorStop(1, 'rgba(214, 222, 255, 0)');
+      ctx.fillStyle = n;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    particles.draw(ctx);
+    if (dicaT > 0) dicaToque();
+
+    // barra do dia
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.fillRect(0, 0, W, 6);
+    ctx.fillStyle = metaBatida() ? '#39ff7a' : '#00f0ff';
+    Neon.glow(ctx, metaBatida() ? '#39ff7a' : '#00f0ff', 10);
+    ctx.fillRect(0, 0, W * Neon.clamp(prog, 0, 1), 6);
+    ctx.shadowBlur = 0;
+
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.color} ${Math.min(0.4, flash.t / 180)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    particles.update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    if (dicaT > 0 && state === 'playing') dicaT -= dt * 1000;
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
