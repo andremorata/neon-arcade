@@ -106,7 +106,7 @@
     { nome: 'CORREDORES', entrada: [1.5, 1.5, 0.4], receita: ['corredor', 'atirador', 'corredor', 'atirador'], planta: [
       '1111111111111111','1......2.......1','1.2222.2.2222..1','1......2....2..1',
       '1.2222.2.22.2..1','1.2..........2.1','1.2.33333333.2.1','1.2.3......3...1',
-      '1...3.2222.3.2.1','1.2.3.2..2.3.2.1','1.2.3.2..2.3.2.1','1.2.3.2222.3...1',
+      '1...3.2222.3.2.1','1.2......2.3.2.1','1.2.3.2..2.3.2.1','1.2.3.2222.3...1',
       '1.2.3......3.2.1','1.2.33333333.2.1','1..............1','1111111111111111',
     ] },
     { nome: 'DEPÓSITO', entrada: [8.5, 14.5, -Math.PI / 2], receita: ['tanque', 'corredor', 'corredor', 'atirador', 'atirador'], planta: [
@@ -207,16 +207,35 @@
     arma:  { emoji: '📦', cor: '#00f0ff' },
   };
 
+  // Bolsao fechado na planta poe inimigo onde o jogador nunca chega, e a sala
+  // nunca termina. Foi o que travou os CORREDORES: 24 casas ilhadas.
+  function alcancaveis(ex, ey) {
+    const vistos = new Set(), fila = [[Math.floor(ex), Math.floor(ey)]];
+    vistos.add(fila[0].join(','));
+    while (fila.length) {
+      const [x, y] = fila.pop();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, k = nx + ',' + ny;
+        if (vistos.has(k) || celula(nx, ny)) continue;
+        vistos.add(k);
+        fila.push([nx, ny]);
+      }
+    }
+    return vistos;
+  }
+
   function entrarNaSala(i) {
     sala = i;
     MAPA = SALAS[i].planta;
     const [ex, ey, ea] = SALAS[i].entrada;
     jog.x = ex; jog.y = ey; jog.ang = ea;
     inimigos = []; itens = []; virando = 0;
+    const daPraChegar = alcancaveis(ex, ey);
     const vagas = [];
     for (let y = 1; y < MAPA_A - 1; y++)
       for (let x = 1; x < MAPA_L - 1; x++)
-        if (!celula(x, y) && Math.hypot(x + 0.5 - jog.x, y + 0.5 - jog.y) > 4.5) vagas.push([x, y]);
+        if (!celula(x, y) && daPraChegar.has(x + ',' + y)
+            && Math.hypot(x + 0.5 - jog.x, y + 0.5 - jog.y) > 4.5) vagas.push([x, y]);
     for (const nome of SALAS[i].receita) {
       if (!vagas.length) break;
       const [x, y] = vagas.splice((Math.random() * vagas.length) | 0, 1)[0];
