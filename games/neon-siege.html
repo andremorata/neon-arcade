@@ -655,22 +655,27 @@
       dragP = p;
       dragId = e.pointerId;
       phase = 'drag';
-      try { els.stage.setPointerCapture(e.pointerId); } catch (err) { /* ponteiro sintético/expirado */ }
+      // Nada de setPointerCapture aqui. Com ele o arrasto no toque congelava no
+      // ponto onde o dedo encostou e o estilingue nunca esticava no celular.
+      // Toque ja tem captura implicita, e os listeners moram na janela.
     } else if (phase === 'flight') {
       activatePower();
     }
   });
-  els.stage.addEventListener('pointermove', (e) => {
+  // O arrasto segue o dedo pela janela inteira e nunca olha a forca do toque. No
+  // iOS ela vem zero em aparelho sem force touch, entao o guarda antigo
+  // descartava todo movimento e o estilingue nunca esticava no celular. Quem diz
+  // que o arrasto esta vivo e o pointerId, que so e setado no pointerdown.
+  window.addEventListener('pointermove', (e) => {
     if (state !== 'playing' || phase !== 'drag' || e.pointerId !== dragId) return;
-    if (e.pointerType !== 'mouse' && e.pressure === 0) return;
     dragP = toCanvas(e);
   });
-  els.stage.addEventListener('pointerup', (e) => {
+  window.addEventListener('pointerup', (e) => {
     if (state !== 'playing' || phase !== 'drag' || e.pointerId !== dragId) return;
     dragId = null;
     launch();
   });
-  els.stage.addEventListener('pointercancel', (e) => {
+  window.addEventListener('pointercancel', (e) => {
     if (e.pointerId !== dragId) return;
     dragId = null;
     if (phase === 'drag') phase = 'aim';

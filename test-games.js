@@ -729,6 +729,30 @@ const solta = rodar(
 assert.ok(solta.andou > apiC.VEL_POLICIA * 2,
   `em rua livre a viatura devia cobrir bastante chao, andou ${solta.andou.toFixed(0)}px`);
 
+// Nenhum jogo pode decidir se o dedo esta na tela olhando e.pressure. No iOS o
+// toque reporta pressure 0 em aparelho sem force touch: o estilingue do Siege
+// nunca esticava e a raquete do Pong nao respondia. Quem sabe se o arrasto esta
+// vivo e o pointerId guardado no pointerdown.
+// Comentario que cita a API nao pode derrubar o teste, entao ele olha so o codigo.
+const semComentarios = txt => txt
+  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+  .split('\n').map(l => l.replace(/(^|[^:'"`])\/\/.*$/, '$1')).join('\n');
+for (const [name, html] of Object.entries(games)) {
+  assert.ok(!/\.pressure/.test(semComentarios(html)),
+    `${name}: nao use e.pressure pra saber se o dedo esta na tela, no iOS ele vem 0`);
+}
+// e o arrasto do Siege precisa continuar valendo mesmo se o dedo sair do quadro
+assert.match(games.siege, /window\.addEventListener\('pointermove'/,
+  'O arrasto do Siege tem que seguir o dedo pela janela, nao so dentro do stage');
+assert.match(games.siege, /window\.addEventListener\('pointerup'/,
+  'Soltar fora do quadro tambem tem que disparar o tiro do Siege');
+// setPointerCapture congelava o arrasto no toque: a bola parava onde o dedo
+// encostou e o estilingue nunca esticava. Toque ja tem captura implicita.
+for (const [name, html] of Object.entries(games)) {
+  assert.ok(!/setPointerCapture/.test(semComentarios(html)),
+    `${name}: setPointerCapture trava o arrasto no toque, e os listeners na janela ja resolvem`);
+}
+
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
 const makeHint = new Function('document', 'getComputedStyle', `${hintSrc}; return addRotateHint;`);

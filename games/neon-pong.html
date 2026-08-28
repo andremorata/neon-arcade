@@ -160,17 +160,22 @@
     const scaleY = H / rect.height;
     playerY = Neon.clamp((y - rect.top) * scaleY, PAD_H / 2, H - PAD_H / 2);
   }
-  els.stage.addEventListener('pointermove', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    pointerControl(e.clientX, e.clientY);
-  });
+  // Mouse move a raquete sempre; dedo so enquanto estiver encostado. Quem diz que
+  // o dedo esta na tela e o pointerId guardado no pointerdown, nao a forca: no
+  // iOS o toque reporta forca zero e a raquete parava de responder.
+  let dedoAtivo = null;
   els.stage.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.sound-toggle')) return;
+    if (e.target.closest('.sound-toggle, .pause-toggle')) return;
+    if (e.pointerType !== 'mouse') dedoAtivo = e.pointerId;
     if (state === 'playing') pointerControl(e.clientX, e.clientY);
   });
   els.stage.addEventListener('pointermove', (e) => {
-    if (e.pointerType === 'touch' && state === 'playing' && e.pressure > 0) pointerControl(e.clientX, e.clientY);
+    if (state !== 'playing') return;
+    if (e.pointerType === 'mouse' || e.pointerId === dedoAtivo) pointerControl(e.clientX, e.clientY);
   });
+  for (const ev of ['pointerup', 'pointercancel']) {
+    window.addEventListener(ev, (e) => { if (e.pointerId === dedoAtivo) dedoAtivo = null; });
+  }
 
   Neon.$('startBtn').addEventListener('click', () => {
     if (state === 'paused') resumeGame();
