@@ -69,16 +69,31 @@
   // Cada marcha tem um teto de velocidade e um torque. Trocar cedo joga o giro
   // la embaixo, onde o torque some: a punicao nasce da propria caixa, sem regra
   // extra pra isso. Trocar tarde bate no corte, e ai o motor para de empurrar.
+  // Cada marcha tem seu ponto ideal, e ele sobe conforme a caixa esvazia. O
+  // jogador nao decora um lugar no mostrador: ele reaprende a cada troca.
   const MARCHAS = [
-    { topo: 0.22, torque: 2.05 },
-    { topo: 0.40, torque: 1.55 },
-    { topo: 0.57, torque: 1.20 },
-    { topo: 0.73, torque: 0.95 },
-    { topo: 0.88, torque: 0.76 },
-    { topo: 1.00, torque: 0.60 },
+    { topo: 0.22, torque: 2.05, ponto: 0.845 },
+    { topo: 0.40, torque: 1.55, ponto: 0.870 },
+    { topo: 0.57, torque: 1.20, ponto: 0.890 },
+    { topo: 0.73, torque: 0.95, ponto: 0.910 },
+    { topo: 0.88, torque: 0.76, ponto: 0.930 },
+    { topo: 1.00, torque: 0.60, ponto: 0.945 },
   ];
-  const JANELA = [0.80, 0.96];       // faixa verde do conta-giros
+  // Tres faixas em volta do ponto. Verde fininho no meio, amarelo em volta,
+  // laranja na borda. Fora das tres, a troca sai errada e cobra caro.
+  const ZONAS = [
+    { nome: 'verde',   raio: 0.022, cor: '#39ff7a', pontos: 260, boost: 1.05, rend: 1.00 },
+    { nome: 'amarelo', raio: 0.055, cor: '#ffe600', pontos: 110, boost: 1.015, rend: 0.94 },
+    { nome: 'laranja', raio: 0.100, cor: '#ff8c1a', pontos: 35,  boost: 1.0,  rend: 0.86 },
+  ];
+  const FORA = { nome: 'fora', cor: '#ff3b5c', pontos: 0, boost: 0.93, rend: 0.72 };
   const CORTE = 1.0;                 // acima disso o limitador atua
+
+  // Em que faixa caiu a troca daquela marcha.
+  function zonaDa(marcha, rpm) {
+    const d = Math.abs(rpm - MARCHAS[marcha].ponto);
+    return ZONAS.find(z => d <= z.raio) || FORA;
+  }
 
   // Curva de torque: sobe do ralenti, pico em 0.75 e despenca depois do corte.
   // E ela que faz trocar cedo custar caro sem precisar de punicao inventada.
@@ -88,7 +103,7 @@
     const k = (rpm - 0.12) / (0.75 - 0.12);
     return rpm <= 0.75 ? 0.35 + 0.65 * k : 1 - (rpm - 0.75) / (CORTE - 0.75) * 0.45;
   }
-  const naJanela = rpm => rpm >= JANELA[0] && rpm < JANELA[1];
+  const naJanela = (marcha, rpm) => zonaDa(marcha, rpm).nome === 'verde';
 
   // A cor do rival avisa o nivel que vem. Cor nao atrapalha a ultrapassagem,
   // ela ensina o jogador a temer o que esta por vir.
@@ -106,8 +121,9 @@
   };
 
   const eu = { vel: 0, marcha: 0, dist: 0, faixa: -0.42 };
-  const bot = { vel: 0, marcha: 0, dist: 0, faixa: 0.42, alvo: 0.88 };
+  const bot = { vel: 0, marcha: 0, dist: 0, faixa: 0.42, alvo: 0.845, rend: 1 };
   let nivel = 1, score = 0, perfeitas = 0, largada = 0, resultado = '';
+  let rendimento = 1;                // quanto o motor ainda entrega depois da ultima troca
   let pb = Neon.best.get('racha'), startHi = 0;
   let state = 'menu', lastFrame = performance.now(), fimT = 0, avisoT = 0, aviso = '';
   let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, cor: '' };
@@ -122,25 +138,30 @@
   function trocar() {
     if (state !== 'playing' || largada > 0) return;
     if (eu.marcha >= MARCHAS.length - 1) { Neon.audio.sfx.wrong(); return; }
-    const rpm = rpmDe(eu);
+    const antes = eu.marcha, rpm = rpmDe(eu);
+    const z = zonaDa(antes, rpm);
     eu.marcha++;
     els.marcha.textContent = eu.marcha + 1;
-    if (naJanela(rpm)) {
+    // O rendimento fica ate a proxima troca: errar uma vez custa o trecho inteiro,
+    // nao so o instante da troca. E o que faz a caixa doer.
+    rendimento = z.rend;
+    eu.vel = Math.min(1, eu.vel * z.boost);
+    if (z.pontos) { score += z.pontos; els.score.textContent = score; }
+    if (z.nome === 'verde') {
       perfeitas++;
-      score += 120;
-      els.score.textContent = score;
-      eu.vel = Math.min(1, eu.vel * 1.035);      // premio pequeno: o ganho real e nao perder giro
       Neon.audio.sfx.level();
-      mostrarAviso('TROCA PERFEITA', '#39ff7a');
-      particles.burst(W / 2 + eu.faixa * 250, H - 150, '#39ff7a', 12, 160, 3);
-    } else if (rpm >= JANELA[1]) {
-      eu.vel *= 0.94;                            // bateu no corte antes de trocar
-      Neon.audio.sfx.wall();
-      mostrarAviso('TARDE DEMAIS', '#ff3b5c');
-      shakeAt(6, 160);
+      mostrarAviso('NO PONTO', z.cor);
+      particles.burst(W / 2 + eu.faixa * 250, H - 150, z.cor, 14, 170, 3);
+    } else if (z.nome === 'amarelo') {
+      Neon.audio.sfx.point();
+      mostrarAviso('QUASE', z.cor);
+    } else if (z.nome === 'laranja') {
+      Neon.audio.sfx.drop();
+      mostrarAviso('LONGE DO PONTO', z.cor);
     } else {
-      Neon.audio.sfx.drop();                     // cedo: o giro cai e o torque some sozinho
-      mostrarAviso('CEDO DEMAIS', '#ffe600');
+      Neon.audio.sfx.wall();
+      mostrarAviso(rpm > MARCHAS[antes].ponto ? 'TARDE DEMAIS' : 'CEDO DEMAIS', z.cor);
+      shakeAt(6, 160);
     }
   }
 
@@ -150,9 +171,11 @@
   function pensarBot(dt) {
     const rpm = rpmDe(bot);
     if (rpm >= bot.alvo && bot.marcha < MARCHAS.length - 1) {
+      const z = zonaDa(bot.marcha, rpm);
       bot.marcha++;
-      if (!naJanela(rpm)) bot.vel *= 0.96;
-      bot.alvo = Neon.clamp(0.88 + Neon.rand(-erroBot(), erroBot()), 0.6, 1.02);
+      bot.vel *= z.boost;
+      bot.rend = z.rend;
+      bot.alvo = Neon.clamp(MARCHAS[bot.marcha].ponto + Neon.rand(-erroBot(), erroBot()), 0.6, 1.02);
     }
   }
   // Nivel 1 erra muito a troca, nivel 10 quase nao erra. E so isso que muda.
@@ -161,8 +184,8 @@
 
   function largar() {
     eu.vel = 0; eu.marcha = 0; eu.dist = 0;
-    bot.vel = 0; bot.marcha = 0; bot.dist = 0; bot.alvo = 0.88;
-    largada = 3200; resultado = ''; fimT = 0;
+    bot.vel = 0; bot.marcha = 0; bot.dist = 0; bot.alvo = MARCHAS[0].ponto; bot.rend = 1;
+    largada = 3200; resultado = ''; fimT = 0; rendimento = 1;
     els.marcha.textContent = '1';
     els.nivel.textContent = nivel;
   }
@@ -271,10 +294,10 @@
     }
 
     const rpmEu = rpmDe(eu);
-    eu.vel = Math.min(MARCHAS[eu.marcha].topo, eu.vel + MARCHAS[eu.marcha].torque * torque(rpmEu) * dt * 0.16);
+    eu.vel = Math.min(MARCHAS[eu.marcha].topo * rendimento, eu.vel + MARCHAS[eu.marcha].torque * torque(rpmEu) * rendimento * dt * 0.16);
     pensarBot(dt);
     const rpmBot = rpmDe(bot);
-    bot.vel = Math.min(MARCHAS[bot.marcha].topo, bot.vel + MARCHAS[bot.marcha].torque * torque(rpmBot) * potenciaBot() * dt * 0.16);
+    bot.vel = Math.min(MARCHAS[bot.marcha].topo * bot.rend, bot.vel + MARCHAS[bot.marcha].torque * torque(rpmBot) * bot.rend * potenciaBot() * dt * 0.16);
 
     const M_POR_S = 92;
     eu.dist += eu.vel * M_POR_S * dt;
@@ -304,12 +327,16 @@
     ctx.lineWidth = 13;
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.beginPath(); ctx.arc(cx, cy, r, a0, a1); ctx.stroke();
-    // faixa verde: e o alvo do jogo inteiro, entao ela fica gritando
-    ctx.strokeStyle = '#39ff7a';
-    Neon.glow(ctx, '#39ff7a', 16);
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, a0 + (a1 - a0) * JANELA[0], a0 + (a1 - a0) * JANELA[1]);
-    ctx.stroke();
+    // Alvo em camadas, de fora pra dentro: laranja, amarelo e o verde fininho no
+    // meio. Desenhar nessa ordem deixa o verde por cima e por isso ele e o alvo.
+    const ponto = MARCHAS[eu.marcha].ponto;
+    for (const z of [...ZONAS].reverse()) {
+      ctx.strokeStyle = z.cor;
+      Neon.glow(ctx, z.cor, z.nome === 'verde' ? 18 : 8);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, a0 + (a1 - a0) * (ponto - z.raio), a0 + (a1 - a0) * (ponto + z.raio));
+      ctx.stroke();
+    }
     ctx.strokeStyle = '#ff3b5c';
     ctx.shadowColor = '#ff3b5c';
     ctx.beginPath();
@@ -317,7 +344,7 @@
     ctx.stroke();
     ctx.shadowBlur = 0;
     const ang = a0 + (a1 - a0) * Neon.clamp(rpm, 0, 1.08);
-    ctx.strokeStyle = rpm >= CORTE ? '#ff3b5c' : naJanela(rpm) ? '#39ff7a' : '#00f0ff';
+    ctx.strokeStyle = rpm >= CORTE ? '#ff3b5c' : zonaDa(eu.marcha, rpm).cor;
     ctx.lineWidth = 4;
     Neon.glow(ctx, ctx.strokeStyle, 14);
     ctx.beginPath();
@@ -332,6 +359,11 @@
     ctx.font = '700 10px Orbitron, sans-serif';
     ctx.fillStyle = 'rgba(232,230,245,0.55)';
     ctx.fillText('MARCHA', cx, cy + 30);
+    if (rendimento < 1) {
+      ctx.font = '700 11px Orbitron, sans-serif';
+      ctx.fillStyle = rendimento > 0.9 ? '#ffe600' : '#ff3b5c';
+      ctx.fillText(`${Math.round(rendimento * 100)}% DE MOTOR`, cx, cy + 52);
+    }
   }
 
   function render(now) {

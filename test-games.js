@@ -446,6 +446,31 @@ for (const [i, s] of salasBreach.SALAS.entries()) {
   assert.ok(vagas >= s.receita.length + 1,
     `sala ${i + 1}: só ${vagas} vagas longe da entrada para ${s.receita.length} inimigos e o item`);
 }
+// Chao ilhado no Breach = inimigo que nasce onde o jogador nunca chega, e a sala
+// nunca termina. Foi o que travou os CORREDORES na segunda fase.
+for (const [i, s] of salasBreach.SALAS.entries()) {
+  const [ex, ey] = s.entrada;
+  const livreEm = (x, y) => !paredeEm(s.planta, x, y);
+  const inicio = `${Math.floor(ex)},${Math.floor(ey)}`;
+  const vistos = new Set([inicio]);
+  const fila = [[Math.floor(ex), Math.floor(ey)]];
+  while (fila.length) {
+    const [x, y] = fila.pop();
+    for (const [dx, dy] of DIRS4) {
+      const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
+      if (vistos.has(k) || !livreEm(nx, ny)) continue;
+      vistos.add(k);
+      fila.push([nx, ny]);
+    }
+  }
+  let chao = 0;
+  for (let y = 0; y < s.planta.length; y++)
+    for (let x = 0; x < s.planta[0].length; x++)
+      if (livreEm(x, y)) chao++;
+  assert.strictEqual(vistos.size, chao,
+    `sala ${i + 1} (${s.nome}): ${chao - vistos.size} casas de chao ilhadas da entrada`);
+}
+
 const comChefe = salasBreach.SALAS.filter(s => s.receita.includes('chefe'));
 assert.strictEqual(comChefe.length, 1, 'O chefe aparece em exatamente uma sala');
 assert.strictEqual(comChefe[0], salasBreach.SALAS.at(-1), 'O chefe e a ultima sala');
@@ -454,37 +479,53 @@ assert.ok(salasBreach.TIPOS.chefe.vida > salasBreach.TIPOS.tanque.vida * 3,
   'O chefe precisa aguentar bem mais que o tanque, senao nao e chefe');
 
 // Caixa de marchas do Racha: e o jogo inteiro. A punicao por trocar cedo tem que
-// nascer da curva de torque, nao de uma regra inventada, senao o jogador nao
-// aprende nada olhando o conta-giros.
+// nascer da curva de torque, e o alvo tem que ser estreito o bastante pra errar
+// doer. Faixa larga demais transforma o jogo em apertar botao na hora que der.
 const racha = games.racha;
 const caixa = new Function('Neon',
   racha.slice(racha.indexOf('  const MARCHAS = ['), racha.indexOf('  // A cor do rival avisa')) +
-  '; return { MARCHAS, JANELA, CORTE, torque, naJanela };')({ clamp: clampFn });
+  '; return { MARCHAS, ZONAS, FORA, CORTE, torque, zonaDa, naJanela };')({ clamp: clampFn });
 assert.strictEqual(caixa.MARCHAS.length, 6, 'Sao 6 marchas');
-let topoAnterior = 0, torqueAnterior = Infinity;
+let topoAnterior = 0, torqueAnterior = Infinity, pontoAnterior = 0;
 for (const m of caixa.MARCHAS) {
   assert.ok(m.topo > topoAnterior, 'Marcha mais alta tem que correr mais');
   assert.ok(m.torque < torqueAnterior, 'Marcha mais alta tem que empurrar menos');
-  topoAnterior = m.topo; torqueAnterior = m.torque;
+  assert.ok(m.ponto > pontoAnterior, 'O ponto de troca sobe a cada marcha, senao vira um lugar so');
+  assert.ok(m.ponto < caixa.CORTE, 'O ponto de troca fica antes do corte');
+  topoAnterior = m.topo; torqueAnterior = m.torque; pontoAnterior = m.ponto;
 }
 assert.strictEqual(caixa.MARCHAS.at(-1).topo, 1, 'A ultima marcha chega no teto de velocidade');
-// a faixa verde fica antes do corte, senao acertar a troca exigiria estourar o motor
-assert.ok(caixa.JANELA[0] < caixa.JANELA[1], 'A faixa verde precisa ter largura');
-assert.ok(caixa.JANELA[1] <= caixa.CORTE, 'A faixa verde nao pode passar do corte');
-assert.ok(caixa.naJanela(caixa.JANELA[0]) && !caixa.naJanela(caixa.JANELA[1]),
-  'A faixa inclui o inicio e exclui o fim');
-assert.ok(!caixa.naJanela(caixa.JANELA[0] - 0.01) && !caixa.naJanela(1.05),
-  'Fora da faixa, dos dois lados, nao vale troca perfeita');
-// o torque tem que premiar quem gira alto e punir quem troca cedo ou estoura
+
+// as tres faixas tem que ser concentricas e a verde a mais estreita de todas
+const [verde, amarelo, laranja] = caixa.ZONAS;
+assert.strictEqual(verde.nome, 'verde', 'A primeira faixa e a verde, e ela ganha do empate');
+assert.ok(verde.raio < amarelo.raio && amarelo.raio < laranja.raio, 'As faixas crescem de dentro pra fora');
+assert.ok(verde.raio <= 0.03, `A faixa verde precisa ser estreita, esta em ${verde.raio}`);
+assert.ok(verde.pontos > amarelo.pontos && amarelo.pontos > laranja.pontos, 'Mais perto do ponto, mais ponto');
+assert.ok(verde.rend > amarelo.rend && amarelo.rend > laranja.rend && laranja.rend > caixa.FORA.rend,
+  'Mais perto do ponto, mais motor sobra pro trecho seguinte');
+assert.strictEqual(verde.rend, 1, 'So a troca no ponto entrega o motor inteiro');
+assert.ok(caixa.FORA.rend < 0.8, 'Errar a troca tem que doer no trecho todo, nao so no instante');
+
+// a faixa cai em volta do ponto de cada marcha, e nao num lugar fixo
+for (const [i, m] of caixa.MARCHAS.entries()) {
+  assert.strictEqual(caixa.zonaDa(i, m.ponto).nome, 'verde', `marcha ${i + 1}: o proprio ponto tem que ser verde`);
+  assert.ok(caixa.naJanela(i, m.ponto), `marcha ${i + 1}: o ponto conta como troca perfeita`);
+  assert.strictEqual(caixa.zonaDa(i, m.ponto + verde.raio * 1.5).nome, 'amarelo', `marcha ${i + 1}: logo fora do verde e amarelo`);
+  assert.strictEqual(caixa.zonaDa(i, m.ponto - amarelo.raio * 1.5).nome, 'laranja', `marcha ${i + 1}: mais longe ainda e laranja`);
+  assert.strictEqual(caixa.zonaDa(i, m.ponto + 0.3).nome, 'fora', `marcha ${i + 1}: longe demais e troca errada`);
+}
+// o ponto da primeira marcha nao pode ser verde na ultima: senao decorar resolve
+assert.notStrictEqual(caixa.zonaDa(5, caixa.MARCHAS[0].ponto).nome, 'verde',
+  'O ponto da 1a marcha nao pode servir na 6a, senao o jogador decora um lugar so');
+
+// o torque continua premiando giro alto e punindo quem troca cedo ou estoura
 const noPico = caixa.torque(0.75);
 assert.ok(noPico > caixa.torque(0.2) * 1.5, 'Girar alto tem que empurrar bem mais que giro baixo');
 assert.ok(caixa.torque(0.2) < caixa.torque(0.5), 'Trocar cedo joga o giro onde o torque some');
 assert.ok(caixa.torque(1.02) < caixa.torque(0.2), 'Depois do corte o motor para de empurrar');
-for (let r = 0; r <= 1.08; r += 0.01) {
-  assert.ok(caixa.torque(r) > 0, `Torque nunca zera nem fica negativo (rpm ${r.toFixed(2)})`);
-}
-// na faixa verde o torque ainda esta perto do pico: e por isso que ela e o alvo
-assert.ok(caixa.torque(caixa.JANELA[0]) > noPico * 0.7, 'A faixa verde fica na parte boa da curva');
+for (let r = 0; r <= 1.08; r += 0.01) assert.ok(caixa.torque(r) > 0, `Torque nunca zera (rpm ${r.toFixed(2)})`);
+assert.ok(caixa.torque(caixa.MARCHAS[0].ponto) > noPico * 0.7, 'O ponto de troca fica na parte boa da curva');
 
 // Fases do Slug: sao tiras de texto. Linha de tamanho diferente vira buraco
 // invisivel no chao, e chefe fora da ultima fase quebra o final do jogo.
