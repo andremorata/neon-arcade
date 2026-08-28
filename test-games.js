@@ -592,7 +592,7 @@ assert.strictEqual(muitoLonge.dx, 1, 'Alvo alem do alcance nao conta');
 // jogador perde o tempo dele sem entender por que.
 const runner = games.runner;
 const cidade = new Function(
-  runner.slice(runner.indexOf('  const QUADRA = 220'), runner.indexOf('  const els = {')) +
+  runner.slice(runner.indexOf('  const QUADRA ='), runner.indexOf('  const els = {')) +
   '; return { livre, centroRua, QUADRA, RUA, PREDIO, QUADRAS, MUNDO };')();
 assert.strictEqual(cidade.PREDIO, cidade.QUADRA - cidade.RUA, 'O predio e a quadra menos a rua');
 assert.ok(cidade.RUA > 60, 'A rua precisa caber o carro com folga');
@@ -627,7 +627,7 @@ assert.ok(!cidade.livre(500, -10) && !cidade.livre(500, cidade.MUNDO + 10), 'Nor
 // Entrega do Runner: cada uma devolve tempo, sobe o procurado e poe mais viatura
 // na rua. Se o tempo nao tivesse teto, entregar sem parar daria noite infinita.
 const entregaRunner = new Function('Neon', 'els', 'particles', 'carro', 'W', 'H',
-  runner.slice(runner.indexOf('  const QUADRA = 220'), runner.indexOf('  // Cada quadra tem uma avenida')) +
+  runner.slice(runner.indexOf('  const QUADRA ='), runner.indexOf('  // Cada quadra tem uma avenida')) +
   block(runner, '  function livre(x, y)') +
   runner.slice(runner.indexOf('  const centroRua ='), runner.indexOf('  const els = {')) + `
   let policia = [], alvo = null, comPacote = false, entregas = 0, procurado = 0, score = 0, tempo = 60;
@@ -644,7 +644,7 @@ const rn = entregaRunner(
     audio: { sfx: new Proxy({}, { get: () => () => {} }) } },
   { score: stubEl(), entregas: stubEl(), proc: stubEl() },
   { burst() {} },
-  { x: 5 * 220 + 39, y: 5 * 220 + 39 }, 900, 600);
+  { x: 5 * 240 + 54, y: 5 * 240 + 54 }, 900, 600);
 for (let i = 0; i < 120; i++) {
   rn.sortearAlvo();
   const a = rn.estado().alvo;
@@ -664,6 +664,49 @@ const fim = rn.estado();
 assert.strictEqual(fim.procurado, 5, `o procurado trava em 5 estrelas, deu ${fim.procurado}`);
 assert.strictEqual(fim.policia, fim.procurado, 'a quantidade de viatura acompanha o procurado');
 assert.ok(fim.tempo <= 90, `o tempo precisa de teto, senao a noite nao acaba (deu ${fim.tempo})`);
+
+// Viatura do Runner: presa numa quina ela batia, desacelerava e passava a partida
+// inteira raspando a mesma parede. Perseguir pelo eixo mais distante faz ela andar
+// pela rua, e a manobra de meio segundo tira ela do canto quando trava mesmo assim.
+const perseguicao = new Function('Neon', 'carro',
+  runner.slice(runner.indexOf('  const QUADRA ='), runner.indexOf('  // Cada quadra tem uma avenida')) +
+  block(runner, '  function livre(x, y)') +
+  runner.slice(runner.indexOf('  const centroRua ='), runner.indexOf('  const els = {')) +
+  block(runner, '  function deslizar(c, nx, ny)') +
+  block(runner, '  function pensarPolicia(p, dt)') +
+  '; return { pensarPolicia, livre, centroRua, QUADRA, RUA, VEL_POLICIA };');
+
+const rodar = (viatura, alvo, segundos) => {
+  const api = perseguicao({ clamp: clampFn }, alvo);
+  const p = { travado: 0, manobra: 0, sirene: 0, vel: 0, ang: 0, ...viatura };
+  const inicio = { x: p.x, y: p.y };
+  let paradaMaisLonga = 0, parada = 0;
+  for (let i = 0; i < segundos * 60; i++) {
+    const antes = { x: p.x, y: p.y };
+    api.pensarPolicia(p, 1 / 60);
+    const andou = Math.hypot(p.x - antes.x, p.y - antes.y);
+    parada = andou < 0.4 ? parada + 1 / 60 : 0;
+    paradaMaisLonga = Math.max(paradaMaisLonga, parada);
+    assert.ok(api.livre(p.x, p.y), `viatura entrou no predio em ${p.x.toFixed(0)},${p.y.toFixed(0)}`);
+  }
+  return { andou: Math.hypot(p.x - inicio.x, p.y - inicio.y), paradaMaisLonga, fim: p };
+};
+const apiC = perseguicao({ clamp: clampFn }, { x: 0, y: 0 });
+const Q = apiC.QUADRA, RU = apiC.RUA;
+// encostada na quina de um predio, virada pra dentro dele, com o alvo do outro lado
+const encurralada = rodar(
+  { x: 3 * Q + RU - 4, y: 3 * Q + RU - 4, ang: Math.PI * 0.25 },
+  { x: 8 * Q + RU / 2, y: 8 * Q + RU / 2 }, 6);
+assert.ok(encurralada.andou > Q,
+  `viatura encurralada andou so ${encurralada.andou.toFixed(0)}px em 6s; ela precisa sair da quina`);
+assert.ok(encurralada.paradaMaisLonga < 1.2,
+  `viatura ficou ${encurralada.paradaMaisLonga.toFixed(1)}s parada de uma vez; a manobra tem que destravar antes`);
+// em rua limpa ela persegue direto, sem manobra desnecessaria
+const solta = rodar(
+  { x: 5 * Q + RU / 2, y: 5 * Q + RU / 2 },
+  { x: 5 * Q + RU / 2 + Q * 3, y: 5 * Q + RU / 2 }, 4);
+assert.ok(solta.andou > apiC.VEL_POLICIA * 2,
+  `em rua livre a viatura devia cobrir bastante chao, andou ${solta.andou.toFixed(0)}px`);
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');

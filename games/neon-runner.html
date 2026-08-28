@@ -47,7 +47,7 @@
       </div>
       <button class="btn" id="startBtn">START</button>
       <div class="controls-hint">
-        <span class="key">← → esterça</span><span class="key">↓ freia</span><span class="key">Laterais no toque</span><span class="key">P pausa</span>
+        <span class="key">← → esterça</span><span class="key">↓ freia</span><span class="key">Manche na esquerda</span><span class="key">Toque à direita freia</span><span class="key">P pausa</span>
       </div>
     </div>
   </div>
@@ -66,7 +66,9 @@
   // Cidade em grade: cada quadra tem um predio no meio e rua em volta. Gerar assim
   // garante que toda rua conecta com todas as outras, entao nunca existe entrega
   // impossivel de alcancar.
-  const QUADRA = 220, RUA = 78, PREDIO = QUADRA - RUA;
+  // Rua larga e o que compra tempo de reacao. Fazer o carro virar mais rapido
+  // resolveria no papel e pioraria na mao: reacao curta com giro nervoso.
+  const QUADRA = 240, RUA = 108, PREDIO = QUADRA - RUA;
   const QUADRAS = 11;
   const MUNDO = QUADRAS * QUADRA;
   const TEMPO_INICIAL = 60, TEMPO_ENTREGA = 26;
@@ -127,7 +129,7 @@
     let p, t = 0;
     do { p = centroRua((Math.random() * QUADRAS) | 0, (Math.random() * QUADRAS) | 0); }
     while (Math.hypot(p.x - carro.x, p.y - carro.y) < QUADRA * 3 && t++ < 40);
-    policia.push({ x: p.x, y: p.y, ang: 0, vel: 0, sirene: Neon.rand(0, 6) });
+    policia.push({ x: p.x, y: p.y, ang: 0, vel: 0, sirene: Neon.rand(0, 6), travado: 0, manobra: 0 });
   }
 
   function entregar() {
@@ -232,36 +234,40 @@
     if (k in TECLAS) preso.delete(TECLAS[k]);
   });
 
-  // Mesmo esquema do Enduro: laterais esterçam, base do meio freia. Um polegar
-  // da conta porque o acelerador e automatico.
+  // Manche horizontal na metade esquerda: o quanto voce puxa e o quanto o volante
+  // vira. Zona liga-desliga so tinha dois estados e obrigava a corrigir no zigue.
+  // Metade direita freia, porque o acelerador e automatico.
   const toques = new Map();
-  function zonaDe(e) {
+  let manche = null, dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+
+  const paraQuadro = (e) => {
     const r = els.stage.getBoundingClientRect();
-    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
-    if (fy > 0.8 && fx > 0.34 && fx < 0.66) return 'freio';
-    if (fx < 0.42) return 'esq';
-    if (fx > 0.58) return 'dir';
-    return 'gas';
-  }
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  };
   function soltarToque(id) {
-    const z = toques.get(id);
-    if (z === undefined) return;
+    const t = toques.get(id);
+    if (t === undefined) return;
     toques.delete(id);
-    if (![...toques.values()].includes(z)) preso.delete(z);
-  }
-  function pegarToque(e) {
-    const z = zonaDe(e);
-    if (toques.get(e.pointerId) === z) return;
-    soltarToque(e.pointerId);
-    toques.set(e.pointerId, z);
-    preso.add(z);
+    if (t === 'manche') manche = null;
+    else if (![...toques.values()].includes(t)) preso.delete(t);
   }
   els.stage.addEventListener('pointerdown', (e) => {
     if (e.target.closest('.sound-toggle, .pause-toggle, .overlay')) return;
     e.preventDefault();
-    pegarToque(e);
+    if (e.pointerType === 'touch') dedo = true;
+    const p = paraQuadro(e);
+    if (p.x < W * 0.5) {
+      manche = { ox: p.x, oy: p.y, dx: 0 };
+      toques.set(e.pointerId, 'manche');
+    } else {
+      toques.set(e.pointerId, 'freio');
+      preso.add('freio');
+    }
   });
-  els.stage.addEventListener('pointermove', (e) => { if (toques.has(e.pointerId)) pegarToque(e); });
+  els.stage.addEventListener('pointermove', (e) => {
+    if (toques.get(e.pointerId) !== 'manche' || !manche) return;
+    manche.dx = Neon.clamp((paraQuadro(e).x - manche.ox) / 60, -1, 1);
+  });
   window.addEventListener('pointerup', (e) => soltarToque(e.pointerId));
   window.addEventListener('pointercancel', (e) => soltarToque(e.pointerId));
 
@@ -270,6 +276,36 @@
     else startGame();
   });
   Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // IA da viatura, fora do update pra dar pra testar sozinha.
+  function pensarPolicia(p, dt) {
+    const dx = carro.x - p.x, dy = carro.y - p.y;
+    // Ir reto no jogador enfia a viatura na quina do predio e ela fica la moendo.
+    // Perseguir pelo eixo mais distante faz ela andar pela rua, como um carro.
+    const desejado = p.manobra > 0 ? p.rumo
+      : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 0 : Math.PI)
+      : (dy > 0 ? Math.PI / 2 : -Math.PI / 2);
+    let d = desejado - p.ang;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    p.ang += Neon.clamp(d, -3.4 * dt, 3.4 * dt);
+    p.vel += (VEL_POLICIA - p.vel) * dt * 1.1;
+    p.sirene += dt * 6;
+    if (p.manobra > 0) p.manobra -= dt;
+    const px = p.x + Math.cos(p.ang) * p.vel * dt, py = p.y + Math.sin(p.ang) * p.vel * dt;
+    if (deslizar(p, px, py)) p.vel *= 0.55;
+    // Presa numa quina por mais de meio segundo, ela troca de eixo e sai de la.
+    // Sem isso a viatura passava a partida inteira raspando a mesma parede.
+    p.travado = p.vel < 70 ? p.travado + dt : 0;
+    if (p.travado > 0.5) {
+      p.rumo = Math.abs(dx) > Math.abs(dy)
+        ? (dy > 0 ? Math.PI / 2 : -Math.PI / 2)
+        : (dx > 0 ? 0 : Math.PI);
+      p.manobra = 0.9;
+      p.travado = 0;
+      p.vel = 110;
+    }
+  }
 
   // ── update ────────────────────────────────────────
   // Move num eixo por vez contra o predio: resolvendo junto o carro gruda na quina.
@@ -291,8 +327,11 @@
     const alvoVel = freando ? 0 : VEL_MAX;
     carro.vel += (alvoVel - carro.vel) * dt * (freando ? 3.2 : 1.1);
     const giro = 2.6 * Math.min(1, carro.vel / 120);
-    if (preso.has('esq')) carro.ang -= giro * dt;
-    if (preso.has('dir')) carro.ang += giro * dt;
+    // O manche esterça na proporcao do quanto foi puxado; a tecla vai no talo.
+    let volante = manche ? manche.dx : 0;
+    if (preso.has('esq')) volante = -1;
+    if (preso.has('dir')) volante = 1;
+    carro.ang += giro * volante * dt;
 
     const nx = carro.x + Math.cos(carro.ang) * carro.vel * dt;
     const ny = carro.y + Math.sin(carro.ang) * carro.vel * dt;
@@ -306,16 +345,7 @@
     Neon.audio.music.intensity(carro.vel / VEL_MAX);
 
     for (const p of policia) {
-      const dx = carro.x - p.x, dy = carro.y - p.y;
-      const desejado = Math.atan2(dy, dx);
-      let d = desejado - p.ang;
-      while (d > Math.PI) d -= Math.PI * 2;
-      while (d < -Math.PI) d += Math.PI * 2;
-      p.ang += Neon.clamp(d, -2.4 * dt, 2.4 * dt);
-      p.vel += (VEL_POLICIA - p.vel) * dt * 1.1;
-      p.sirene += dt * 6;
-      const px = p.x + Math.cos(p.ang) * p.vel * dt, py = p.y + Math.sin(p.ang) * p.vel * dt;
-      if (deslizar(p, px, py)) p.vel *= 0.55;
+      pensarPolicia(p, dt);
       if (Math.hypot(carro.x - p.x, carro.y - p.y) < 34) {
         bater(4, 'rgba(0, 120, 255,');
         p.vel *= 0.3;
@@ -443,6 +473,17 @@
         ctx.fillStyle = '#fff';
         ctx.fillText(`${Math.round(Math.hypot(alvo.x - carro.x, alvo.y - carro.y) / 10)}m`, bx, by + 26);
       }
+    }
+
+    if (dedo && state === 'playing') {
+      const bx = manche ? manche.ox : W * 0.16, by = manche ? manche.oy : H * 0.78;
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(bx, by, 46, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.3)';
+      Neon.circle(ctx, bx + (manche ? manche.dx * 38 : 0), by, 21);
+      ctx.globalAlpha = 1;
     }
 
     // relogio grande: e a unica coisa que mata o jogador
