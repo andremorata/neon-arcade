@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON BOMBER — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  .stage { --arw: 15; --arh: 11; --maxw: 760px; }
+  /* o miolo do d-pad esta livre no tema: e ali que a bomba cabe sem inventar layout */
+  .dpad .bomb {
+    top: var(--k); left: var(--k);
+    border-color: rgba(255, 140, 26, 0.7);
+    color: var(--neon-orange);
+    box-shadow: 0 0 12px rgba(255, 140, 26, 0.35);
+  }
+  .dpad .bomb:active { background: rgba(255, 140, 26, 0.25); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON BOMBER</h1></a>
+      <div class="tag">// | Exploda os tijolos, limpe os bots | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="bomber">0</span></div>
+    <div class="stat"><span class="lbl">Fase</span><span class="val" id="level">1</span></div>
+    <div class="stat"><span class="lbl">Vidas</span><span class="val" id="lives">3</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <div class="toast" id="toast">FASE LIMPA!</div>
+    <canvas id="game" width="660" height="484"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON BOMBER</h2>
+      <p id="overlayText">Ande pelo labirinto, largue bombas e abra caminho nos tijolos. A explosão sai em cruz e pega você também. Limpe todos os bots para passar de fase.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Fase</span><b id="fsLevel">1</b></div>
+        <div class="fstat"><span>Bots</span><b id="fsKills">0</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">← ↑ → ↓ / WASD</span><span class="key">SPACE bomba</span><span class="key">P pausa</span>
+      </div>
+    </div>
+    <div class="dpad">
+      <button class="up" data-dir="up">▲</button>
+      <button class="left" data-dir="left">◀</button>
+      <button class="right" data-dir="right">▶</button>
+      <button class="down" data-dir="down">▼</button>
+      <button class="bomb" data-bomb="1">💣</button>
+    </div>
+  </div>
+
+  <section class="legend" style="--legend-cols:3;">
+    <div class="boost-card" style="--accent:#ff8c1a;"><span class="emoji">💣</span><div class="name">BOMBA</div><div class="desc">Mais uma bomba no chão ao mesmo tempo.</div></div>
+    <div class="boost-card" style="--accent:#ff3b5c;"><span class="emoji">🔥</span><div class="name">FOGO</div><div class="desc">Alcance da cruz cresce um bloco.</div></div>
+    <div class="boost-card" style="--accent:#39ff7a;"><span class="emoji">👟</span><div class="name">TÊNIS</div><div class="desc">Você anda mais rápido.</div></div>
+  </section>
+
+  <footer>// <a href="../index.html">← arcade</a> · bot 100 · tijolo 10 · bônus de fase 200 × nível</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const CELL = 44;
+  const { W, H } = Neon.world(canvas, [15 * CELL, 11 * CELL], [11 * CELL, 15 * CELL]);
+  const COLS = W / CELL, ROWS = H / CELL;
+
+  const VAZIO = 0, SOLIDO = 1, TIJOLO = 2;
+  const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const R = CELL * 0.34;
+  const CANTOS = [[-R, -R], [R, -R], [-R, R], [R, R]];
+  const PAVIO = 2400, LABAREDA = 450;
+  const ITENS = [
+    { tipo: 'bomba', emoji: '💣', cor: '#ff8c1a' },
+    { tipo: 'fogo',  emoji: '🔥', cor: '#ff3b5c' },
+    { tipo: 'tenis', emoji: '👟', cor: '#39ff7a' },
+  ];
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), level: Neon.$('level'), lives: Neon.$('lives'),
+    fsScore: Neon.$('fsScore'), fsLevel: Neon.$('fsLevel'), fsKills: Neon.$('fsKills'), stage: Neon.$('stage'),
+  };
+
+  let grid = [], bombas = [], fogo = [], inimigos = [], itens = new Map();
+  let jogador = null, level = 1, score = 0, vidas = 3, kills = 0;
+  let pb = Neon.best.get('bomber'), startHi = 0;
+  let state = 'menu', lastFrame = performance.now(), fimFase = 0;
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' };
+  const particles = new Neon.Particles();
+  els.best.textContent = pb;
+
+  const chave = (x, y) => x + ',' + y;
+  const lane = v => Math.floor(v / CELL) * CELL + CELL / 2;
+  const celX = e => Math.floor(e.x / CELL), celY = e => Math.floor(e.y / CELL);
+  const bombaEm = (x, y) => bombas.find(b => b.x === x && b.y === y);
+  const fogoEm = (x, y) => fogo.some(f => f.x === x && f.y === y);
+
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
+
+  // ── mapa ──────────────────────────────────────────
+  // Pilares fixos nas coordenadas pares, como no arcade: sem eles o tabuleiro
+  // vira uma sala aberta e a bomba perde a graca.
+  const CANTOS_LIVRES = [[1, 1], [2, 1], [1, 2]];
+
+  function gerarMapa() {
+    grid = [];
+    for (let y = 0; y < ROWS; y++) {
+      grid[y] = [];
+      for (let x = 0; x < COLS; x++) {
+        const borda = x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1;
+        grid[y][x] = (borda || (x % 2 === 0 && y % 2 === 0)) ? SOLIDO : VAZIO;
+      }
+    }
+    const livre = new Set();
+    for (const [ox, oy] of CANTOS_LIVRES) {
+      livre.add(chave(ox, oy));
+      livre.add(chave(COLS - 1 - ox, oy));
+      livre.add(chave(ox, ROWS - 1 - oy));
+      livre.add(chave(COLS - 1 - ox, ROWS - 1 - oy));
+    }
+    itens = new Map();
+    const tijolos = [];
+    for (let y = 1; y < ROWS - 1; y++) {
+      for (let x = 1; x < COLS - 1; x++) {
+        if (grid[y][x] !== VAZIO || livre.has(chave(x, y))) continue;
+        if (Math.random() < 0.58) { grid[y][x] = TIJOLO; tijolos.push([x, y]); }
+      }
+    }
+    // um punhado de tijolos esconde item; sem isso o alcance nunca cresce
+    for (let i = tijolos.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [tijolos[i], tijolos[j]] = [tijolos[j], tijolos[i]];
+    }
+    const quantos = Math.min(tijolos.length, 4 + level);
+    for (let i = 0; i < quantos; i++) {
+      const [x, y] = tijolos[i];
+      itens.set(chave(x, y), Neon.choice(ITENS));
+    }
+  }
+
+  // Com 58% de tijolo um bot nasce emparedado e fica tremendo no lugar a partida
+  // inteira. Abrir a cruz ao redor do ponto de nascimento garante que ele ande.
+  function abrirBolsao(x, y) {
+    for (const [dx, dy] of [[0, 0], ...DIRS]) {
+      const nx = x + dx, ny = y + dy;
+      if (grid[ny] && grid[ny][nx] === TIJOLO) {
+        grid[ny][nx] = VAZIO;
+        itens.delete(chave(nx, ny));
+      }
+    }
+  }
+
+  function nascerInimigos() {
+    inimigos = [];
+    const quantos = Math.min(8, 2 + level);
+    const vagas = [];
+    for (let y = 1; y < ROWS - 1; y++)
+      for (let x = 1; x < COLS - 1; x++)
+        if (grid[y][x] === VAZIO && Math.abs(x - 1) + Math.abs(y - 1) > 6) vagas.push([x, y]);
+    for (let i = 0; i < quantos && vagas.length; i++) {
+      const k = (Math.random() * vagas.length) | 0;
+      const [x, y] = vagas.splice(k, 1)[0];
+      abrirBolsao(x, y);
+      inimigos.push({
+        x: x * CELL + CELL / 2, y: y * CELL + CELL / 2,
+        speed: Math.min(105, 52 + level * 7), dir: Neon.choice(DIRS),
+        cel: chave(x, y), vivo: true, cor: level % 2 ? '#ff2bd6' : '#ff8c1a',
+      });
+    }
+  }
+
+  function montarFase() {
+    gerarMapa();
+    bombas = []; fogo = [];
+    jogador = jogador || { bombas: 1, alcance: 1, speed: 100 };
+    jogador.x = 1.5 * CELL; jogador.y = 1.5 * CELL;
+    jogador.cel = chave(1, 1); jogador.invuln = 1200; jogador.dir = [0, 1];
+    nascerInimigos();
+    fimFase = 0;
+    els.level.textContent = level;
+  }
+
+  // ── colisão ───────────────────────────────────────
+  // Quem larga a bomba fica em cima dela, entao ela so pode virar parede depois
+  // que o corpo inteiro saiu da casa. Testar pelo centro prendia o jogador: o
+  // centro entra na casa vizinha enquanto o rabo ainda encosta na bomba.
+  function encostaNaCasa(ent, x, y) {
+    for (const [ox, oy] of CANTOS)
+      if (Math.floor((ent.x + ox) / CELL) === x && Math.floor((ent.y + oy) / CELL) === y) return true;
+    return false;
+  }
+
+  function soltarBombas() {
+    for (const b of bombas)
+      for (const e of b.dentro)
+        if (!encostaNaCasa(e, b.x, b.y)) b.dentro.delete(e);
+  }
+
+  function podeIr(x, y, ent) {
+    for (const [ox, oy] of CANTOS) {
+      const cx = Math.floor((x + ox) / CELL), cy = Math.floor((y + oy) / CELL);
+      const c = grid[cy] && grid[cy][cx];
+      if (c !== VAZIO) return false;
+      const b = bombaEm(cx, cy);
+      if (b && !b.dentro.has(ent)) return false;
+    }
+    return true;
+  }
+
+  // Andar num eixo centraliza no outro. Sem esse encaixe o corredor de 44px
+  // vira uma agulha e o jogador trava em toda quina.
+  function mover(ent, dx, dy, dt) {
+    const sp = ent.speed * dt;
+    let andou = false;
+    if (dx) {
+      const alvo = lane(ent.y), delta = alvo - ent.y;
+      if (Math.abs(delta) > 0.5) ent.y += Math.sign(delta) * Math.min(sp, Math.abs(delta));
+      if (podeIr(ent.x + dx * sp, ent.y, ent)) { ent.x += dx * sp; andou = true; }
+    }
+    if (dy) {
+      const alvo = lane(ent.x), delta = alvo - ent.x;
+      if (Math.abs(delta) > 0.5) ent.x += Math.sign(delta) * Math.min(sp, Math.abs(delta));
+      if (podeIr(ent.x, ent.y + dy * sp, ent)) { ent.y += dy * sp; andou = true; }
+    }
+    ent.cel = chave(celX(ent), celY(ent));
+    return andou;
+  }
+
+  // ── bombas ────────────────────────────────────────
+  function largarBomba() {
+    if (state !== 'playing') return;
+    const x = celX(jogador), y = celY(jogador);
+    if (bombaEm(x, y)) return;
+    if (bombas.filter(b => b.dono === 'p').length >= jogador.bombas) return;
+    const dentro = new Set([jogador, ...inimigos].filter(e => encostaNaCasa(e, x, y)));
+    bombas.push({ x, y, t: PAVIO, alcance: jogador.alcance, dono: 'p', dentro });
+    Neon.audio.sfx.drop();
+  }
+
+  // Cruz da explosao: para no pilar, come um tijolo e morre ali.
+  function blastCells(cx, cy, alcance) {
+    const out = [{ x: cx, y: cy }];
+    for (const [dx, dy] of DIRS) {
+      for (let i = 1; i <= alcance; i++) {
+        const x = cx + dx * i, y = cy + dy * i;
+        const c = grid[y] && grid[y][x];
+        if (c === undefined || c === SOLIDO) break;
+        out.push({ x, y });
+        if (c === TIJOLO) break;
+      }
+    }
+    return out;
+  }
+
+  function detonar(b) {
+    b.t = -1;                                       // marca pra remocao e evita cadeia infinita
+    const celulas = blastCells(b.x, b.y, b.alcance);
+    Neon.audio.sfx.boom();
+    shakeAt(9, 260);
+    for (const c of celulas) {
+      fogo.push({ x: c.x, y: c.y, t: LABAREDA });
+      if (grid[c.y][c.x] === TIJOLO) {
+        grid[c.y][c.x] = VAZIO;
+        score += 10;
+        particles.burst(c.x * CELL + CELL / 2, c.y * CELL + CELL / 2, '#9b30ff', 10, 150, 3);
+      }
+      const outra = bombas.find(o => o.t > 0 && o.x === c.x && o.y === c.y);
+      if (outra) detonar(outra);
+    }
+    particles.wave(b.x * CELL + CELL / 2, b.y * CELL + CELL / 2, '#ff8c1a', CELL * b.alcance);
+    els.score.textContent = score;
+  }
+
+  function pegarItem() {
+    const k = chave(celX(jogador), celY(jogador));
+    const it = itens.get(k);
+    if (!it || grid[celY(jogador)][celX(jogador)] !== VAZIO) return;
+    itens.delete(k);
+    if (it.tipo === 'bomba') jogador.bombas = Math.min(6, jogador.bombas + 1);
+    if (it.tipo === 'fogo') jogador.alcance = Math.min(7, jogador.alcance + 1);
+    if (it.tipo === 'tenis') jogador.speed = Math.min(170, jogador.speed + 18);
+    score += 50;
+    els.score.textContent = score;
+    Neon.audio.sfx.golden();
+    particles.float(jogador.x, jogador.y - 10, it.emoji + ' +1', it.cor, 18);
+  }
+
+  function morrer() {
+    if (jogador.invuln > 0) return;
+    vidas--;
+    els.lives.textContent = vidas;
+    Neon.audio.sfx.death();
+    shakeAt(14, 400);
+    flashAt('rgba(255, 59, 92,', 260);
+    particles.burst(jogador.x, jogador.y, '#ffffff', 30, 240);
+    if (vidas <= 0) { gameOver(); return; }
+    Neon.toast(`💀 ${vidas} ${vidas === 1 ? 'VIDA' : 'VIDAS'}!`);
+    jogador.x = 1.5 * CELL; jogador.y = 1.5 * CELL;
+    jogador.cel = chave(1, 1); jogador.invuln = 2000;
+    bombas = []; fogo = [];
+  }
+
+  function proximaFase() {
+    level++;
+    score += 200 * (level - 1);
+    els.score.textContent = score;
+    Neon.audio.sfx.level();
+    Neon.toast(`✅ FASE ${level}!`);
+    Neon.audio.music.intensity(Math.min(1, level / 8));
+    montarFase();
+  }
+
+  // ── ciclo de jogo ─────────────────────────────────
+  function startGame() {
+    Neon.audio.ensure();
+    startHi = pb;
+    level = 1; score = 0; vidas = 3; kills = 0;
+    jogador = { bombas: 1, alcance: 1, speed: 100 };
+    particles.clear();
+    els.score.textContent = '0';
+    els.lives.textContent = '3';
+    montarFase();
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+    Neon.audio.music.intensity(0.1);
+  }
+  function pauseGame() {
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P para retomar — os pavios param junto.', 'RESUME');
+  }
+  function resumeGame() {
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  function gameOver() {
+    state = 'gameover';
+    Neon.audio.music.down();
+    pb = Neon.best.update('bomber', score);
+    els.best.textContent = pb;
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord) Neon.audio.sfx.record();
+    els.fsScore.textContent = score;
+    els.fsLevel.textContent = level;
+    els.fsKills.textContent = kills;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'EXPLODIU',
+      `Você limpou ${kills} ${kills === 1 ? 'bot' : 'bots'} até a fase ${level}.`,
+      'JOGAR DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  // ── input ─────────────────────────────────────────
+  const MAPA_TECLA = {
+    arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right',
+    arrowup: 'up', w: 'up', arrowdown: 'down', s: 'down',
+  };
+  const VETOR = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
+  const ordem = [];
+
+  function segurar(dir, on) {
+    const i = ordem.indexOf(dir);
+    if (i >= 0) ordem.splice(i, 1);
+    if (on) ordem.push(dir);
+  }
+  const dirAtual = () => (ordem.length ? VETOR[ordem[ordem.length - 1]] : null);
+
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in MAPA_TECLA) { e.preventDefault(); segurar(MAPA_TECLA[k], true); return; }
+    if (k === ' ' || k === 'enter') {
+      e.preventDefault();
+      if (state === 'menu' || state === 'gameover') startGame();
+      else if (state === 'paused') resumeGame();
+      else largarBomba();
+      return;
+    }
+    if (k === 'p') {
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in MAPA_TECLA) segurar(MAPA_TECLA[k], false);
+  });
+
+  document.querySelectorAll('.dpad button').forEach(btn => {
+    const dir = btn.dataset.dir;
+    const hold = on => (e) => {
+      e.preventDefault();
+      if (btn.dataset.bomb) { if (on) largarBomba(); return; }
+      segurar(dir, on);
+    };
+    btn.addEventListener('pointerdown', hold(true));
+    btn.addEventListener('pointerup', hold(false));
+    btn.addEventListener('pointerleave', hold(false));
+    btn.addEventListener('pointercancel', hold(false));
+  });
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.dpad, .sound-toggle, .overlay')) return;
+    largarBomba();
+  });
+
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function pensarInimigo(en, dt) {
+    const antes = en.cel;
+    const andou = mover(en, en.dir[0], en.dir[1], dt);
+    if (andou && en.cel === antes) return;
+    // travou ou trocou de casa: escolhe rumo entre as saidas livres
+    const cx = celX(en), cy = celY(en);
+    const saidas = DIRS.filter(([dx, dy]) => {
+      const c = grid[cy + dy] && grid[cy + dy][cx + dx];
+      return c === VAZIO && !bombaEm(cx + dx, cy + dy);
+    });
+    if (!saidas.length) return;
+    const reto = saidas.find(d => d[0] === en.dir[0] && d[1] === en.dir[1]);
+    if (andou && reto && Math.random() < 0.72) { en.dir = reto; return; }
+    // da fase 3 em diante os bots passam a fechar o cerco de vez em quando
+    if (level >= 3 && Math.random() < 0.4) {
+      const px = celX(jogador), py = celY(jogador);
+      const caca = saidas.filter(([dx, dy]) =>
+        Math.abs(cx + dx - px) + Math.abs(cy + dy - py) < Math.abs(cx - px) + Math.abs(cy - py));
+      if (caca.length) { en.dir = Neon.choice(caca); return; }
+    }
+    en.dir = Neon.choice(saidas);
+  }
+
+  function update(dt) {
+    if (state !== 'playing') return;
+
+    soltarBombas();
+    if (jogador.invuln > 0) jogador.invuln -= dt * 1000;
+    const d = dirAtual();
+    if (d && !fimFase) { mover(jogador, d[0], d[1], dt); jogador.dir = d; }
+    pegarItem();
+
+    for (const b of bombas) if (b.t > 0) { b.t -= dt * 1000; if (b.t <= 0) detonar(b); }
+    bombas = bombas.filter(b => b.t > 0);
+    for (const f of fogo) f.t -= dt * 1000;
+    fogo = fogo.filter(f => f.t > 0);
+
+    for (const en of inimigos) {
+      if (!en.vivo) continue;
+      if (!fimFase) pensarInimigo(en, dt);
+      if (fogoEm(celX(en), celY(en))) {
+        en.vivo = false; kills++; score += 100;
+        els.score.textContent = score;
+        Neon.popEl(els.score);
+        particles.burst(en.x, en.y, en.cor, 22, 200, 3.5);
+        particles.float(en.x, en.y - 14, '+100', en.cor, 16);
+        Neon.audio.sfx.hit();
+        continue;
+      }
+      if (!fimFase && Math.hypot(en.x - jogador.x, en.y - jogador.y) < CELL * 0.62) morrer();
+    }
+
+    if (state !== 'playing') return;
+    if (fogoEm(celX(jogador), celY(jogador))) morrer();
+    if (state !== 'playing') return;
+
+    if (!fimFase && inimigos.every(en => !en.vivo)) {
+      fimFase = 1200;
+      Neon.toast('💥 CAMINHO LIVRE!');
+    } else if (fimFase > 0) {
+      fimFase -= dt * 1000;
+      if (fimFase <= 0) proximaFase();
+    }
+  }
+
+  // ── render ────────────────────────────────────────
+  function quadrado(x, y, fill, stroke, blur) {
+    ctx.fillStyle = fill;
+    if (stroke) Neon.glow(ctx, stroke, blur || 8);
+    ctx.fillRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4);
+    ctx.shadowBlur = 0;
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x * CELL + 2, y * CELL + 2, CELL - 4, CELL - 4);
+    }
+  }
+
+  function desenharBoneco(e, cor, olhoDir) {
+    Neon.glow(ctx, cor, 16);
+    ctx.fillStyle = cor;
+    Neon.circle(ctx, e.x, e.y, CELL * 0.32);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#05001a';
+    Neon.circle(ctx, e.x - 5 + olhoDir[0] * 3, e.y - 3 + olhoDir[1] * 3, 3);
+    Neon.circle(ctx, e.x + 5 + olhoDir[0] * 3, e.y - 3 + olhoDir[1] * 3, 3);
+  }
+
+  function render(now) {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+
+    ctx.fillStyle = '#05001a';
+    ctx.fillRect(0, 0, W, H);
+
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const c = grid[y] ? grid[y][x] : SOLIDO;
+        if (c === SOLIDO) quadrado(x, y, 'rgba(0, 60, 90, 0.75)', '#00f0ff', 10);
+        else if (c === TIJOLO) quadrado(x, y, 'rgba(90, 20, 150, 0.6)', '#9b30ff', 8);
+        else {
+          ctx.fillStyle = (x + y) % 2 ? 'rgba(255,255,255,0.025)' : 'rgba(255,255,255,0.012)';
+          ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+        }
+      }
+    }
+
+    ctx.font = `24px ${Neon.EMOJI}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const [k, it] of itens) {
+      const [x, y] = k.split(',').map(Number);
+      if (grid[y][x] !== VAZIO) continue;                // ainda escondido no tijolo
+      ctx.globalAlpha = 0.75 + Math.sin(now / 220) * 0.25;
+      ctx.fillText(it.emoji, x * CELL + CELL / 2, y * CELL + CELL / 2 + 1);
+      ctx.globalAlpha = 1;
+    }
+
+    for (const b of bombas) {
+      const p = 1 - b.t / PAVIO;
+      const r = CELL * (0.26 + Math.sin(now / (90 - p * 50)) * 0.05 + p * 0.05);
+      Neon.glow(ctx, '#ff8c1a', 18);
+      ctx.fillStyle = '#12002a';
+      Neon.circle(ctx, b.x * CELL + CELL / 2, b.y * CELL + CELL / 2, r);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = '#ff8c1a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(b.x * CELL + CELL / 2, b.y * CELL + CELL / 2, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#ffe600';
+      Neon.circle(ctx, b.x * CELL + CELL / 2 + r * 0.6, b.y * CELL + CELL / 2 - r * 0.8, 3);
+    }
+
+    for (const f of fogo) {
+      const k = Math.min(1, f.t / LABAREDA);
+      ctx.globalAlpha = 0.35 + k * 0.55;
+      Neon.glow(ctx, '#ffe600', 22);
+      ctx.fillStyle = k > 0.6 ? '#ffe600' : '#ff8c1a';
+      const m = (1 - k) * 6;
+      ctx.fillRect(f.x * CELL + m, f.y * CELL + m, CELL - m * 2, CELL - m * 2);
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
+    for (const en of inimigos) if (en.vivo) desenharBoneco(en, en.cor, en.dir);
+    if (jogador && state !== 'menu') {
+      const piscando = jogador.invuln > 0 && ((now / 90) | 0) % 2;
+      if (!piscando) desenharBoneco(jogador, '#39ff7a', jogador.dir);
+    }
+
+    particles.draw(ctx);
+
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.color} ${Math.min(0.4, flash.t / 180)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    particles.update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  gerarMapa();
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

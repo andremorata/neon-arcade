@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON PIANO — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  .stage { --arw: 3; --arh: 4; --maxw: 440px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON PIANO</h1></a>
+      <div class="tag">// | Toque só nas teclas acesas | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Notas</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="piano">0</span></div>
+    <div class="stat"><span class="lbl">Velocidade</span><span class="val" id="speed">1.0x</span></div>
+    <div class="stat"><span class="lbl">Tempo</span><span class="val" id="time">0s</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <div class="toast" id="toast">COMBO!</div>
+    <canvas id="game" width="600" height="800"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON PIANO</h2>
+      <p id="overlayText">As teclas descem em quatro trilhas. Toque sempre na mais baixa e a melodia sai nota por nota. Errar a trilha ou deixar uma tecla passar encerra a música.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Notas</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Recorde</span><b id="fsBest">0</b></div>
+        <div class="fstat"><span>Tempo</span><b id="fsTime">0s</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">Toque na trilha</span><span class="key">A S D F</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · Für Elise sintetizada · sem trilha de fundo, a música é sua</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 600, H = 800;
+  const COLS = 4, CW = W / COLS, ROW = 200;
+  const LEAD = ROW;                // folga inicial: uma fileira de sobra antes da primeira nota
+
+  // Für Elise, mão direita. Domínio público e todo mundo reconhece na primeira frase.
+  const A3 = 220.00, C4 = 261.63, E4 = 329.63, GS4 = 415.30, A4 = 440.00,
+        B4 = 493.88, C5 = 523.25, D5 = 587.33, DS5 = 622.25, E5 = 659.25;
+  const MELODY = [
+    E5, DS5, E5, DS5, E5, B4, D5, C5,
+    A4, C4, E4, A4, B4, E4, GS4, B4,
+    C5, E4, E5, DS5, E5, DS5, E5, B4,
+    D5, C5, A4, C4, E4, A4, B4, E4,
+    C5, B4, A4, A3,
+  ];
+  const COLORS = ['#00f0ff', '#ff2bd6', '#9b30ff', '#39ff7a'];
+
+  // A velocidade sobe com a partida e trava no teto: acima disso a tecla cruza
+  // o quadro em menos tempo do que dá pra reagir.
+  const speedAt = score => Math.min(1000, 240 + score * 6);
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), speed: Neon.$('speed'), time: Neon.$('time'),
+    fsScore: Neon.$('fsScore'), fsBest: Neon.$('fsBest'), fsTime: Neon.$('fsTime'), stage: Neon.$('stage'),
+  };
+
+  let keys = [];                   // trilha sorteada de cada tecla, por índice
+  let dist = 0, next = 0, score = 0, elapsed = 0;
+  let pb = Neon.best.get('piano'), startHi = 0;
+  let state = 'menu', lastFrame = performance.now();
+  let hitFx = [], wrong = { col: -1, t: 0 };
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' };
+  const particles = new Neon.Particles();
+  els.best.textContent = pb;
+
+  const topY = i => H - ROW * (i + 1) + dist;
+
+  // Sorteia até cobrir o índice pedido. Nunca três seguidas na mesma trilha:
+  // martelar o mesmo dedo não é ritmo, é sorte.
+  function ensureKeys(upTo) {
+    while (keys.length <= upTo) {
+      let c = (Math.random() * COLS) | 0;
+      const n = keys.length;
+      if (n >= 2 && keys[n - 1] === c && keys[n - 2] === c) c = (c + 1 + ((Math.random() * (COLS - 1)) | 0)) % COLS;
+      keys.push(c);
+    }
+  }
+
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
+
+  function startGame() {
+    Neon.audio.ensure();
+    startHi = pb;
+    keys = []; ensureKeys(64);
+    dist = -LEAD; next = 0; score = 0; elapsed = 0;
+    hitFx = []; wrong = { col: -1, t: 0 };
+    particles.clear();
+    els.score.textContent = '0';
+    els.speed.textContent = '1.0x';
+    els.time.textContent = '0s';
+    state = 'playing';
+    Neon.overlay.hide();
+  }
+  function pauseGame() {
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.overlay.show('PAUSADO', 'Aperte P para retomar — a melodia continua de onde parou.', 'RESUME');
+  }
+  function resumeGame() {
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+  }
+
+  function gameOver(motivo) {
+    state = 'gameover';
+    Neon.audio.music.down();
+    pb = Neon.best.update('piano', score);
+    els.best.textContent = pb;
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    els.fsScore.textContent = score;
+    els.fsBest.textContent = pb;
+    els.fsTime.textContent = `${elapsed.toFixed(1)}s`;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'NOTA ERRADA',
+      `${motivo} Você tocou ${score} ${score === 1 ? 'nota' : 'notas'}.`,
+      'TOCAR DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  function hitKey(col) {
+    const y = topY(next);
+    hitFx.push({ col, i: next, t: 260 });
+    particles.burst(col * CW + CW / 2, y + ROW / 2, COLORS[col], 14, 180, 3);
+    particles.wave(col * CW + CW / 2, y + ROW / 2, COLORS[col], 120);
+    Neon.audio.sfx.note(MELODY[next % MELODY.length]);
+    score++;
+    next++;
+    ensureKeys(next + 32);
+    els.score.textContent = score;
+    Neon.popEl(els.score);
+    if (score % 25 === 0) Neon.toast(`🎹 ${score} NOTAS!`);
+  }
+
+  function press(col) {
+    if (state === 'menu' || state === 'gameover') return startGame();
+    if (state === 'paused') return resumeGame();
+    if (state !== 'playing') return;
+    // Nao da pra acertar o que ainda nao entrou no quadro: sem isto o jogador
+    // martela as quatro trilhas de olho fechado e o placer sobe sozinho.
+    const cedo = topY(next) + ROW < 0;
+    if (!cedo && keys[next] === col) { hitKey(col); return; }
+    wrong = { col, t: 400 };
+    Neon.audio.sfx.wrong();
+    shakeAt(10, 320);
+    flashAt('rgba(255, 59, 92,', 240);
+    gameOver(cedo ? 'Adiantou a nota.' : 'Trilha errada.');
+  }
+
+  // ── input ─────────────────────────────────────────
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const px = (e.clientX - rect.left) * (W / rect.width);
+    press(Neon.clamp((px / CW) | 0, 0, COLS - 1));
+  });
+
+  const KEYMAP = { a: 0, s: 1, d: 2, f: 3, 1: 0, 2: 1, 3: 2, 4: 3 };
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    const k = e.key.toLowerCase();
+    if (k in KEYMAP) { e.preventDefault(); press(KEYMAP[k]); return; }
+    if (k === ' ' || k === 'enter') {
+      e.preventDefault();
+      if (state === 'menu' || state === 'gameover') startGame();
+      else if (state === 'paused') resumeGame();
+      return;
+    }
+    if (k === 'p') {
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+    }
+  });
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    if (state !== 'playing') return;
+    elapsed += dt;
+    const speed = speedAt(score);
+    dist += speed * dt;
+    els.speed.textContent = `${(speed / 240).toFixed(1)}x`;
+    els.time.textContent = `${elapsed.toFixed(0)}s`;
+    Neon.audio.music.intensity((speed - 240) / 760);
+    if (topY(next) >= H) {
+      shakeAt(10, 320);
+      flashAt('rgba(255, 43, 214,', 240);
+      gameOver('Deixou uma tecla passar.');
+    }
+  }
+
+  // ── render ────────────────────────────────────────
+  function drawKey(i, x, y, col) {
+    const alvo = i === next && state === 'playing';
+    const tocada = i < next;
+    const c = COLORS[col];
+    ctx.globalAlpha = tocada ? 0.3 : 1;
+    ctx.fillStyle = tocada ? c : (alvo ? 'rgba(18, 4, 46, 0.98)' : 'rgba(10, 2, 30, 0.92)');
+    Neon.glow(ctx, c, alvo ? 26 : 10);
+    ctx.fillRect(x + 6, y + 5, CW - 12, ROW - 10);
+    ctx.shadowBlur = 0;
+    if (alvo) {                                     // tinta o alvo: sem isso a proxima tecla some entre as de cima
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = c;
+      ctx.fillRect(x + 6, y + 5, CW - 12, ROW - 10);
+    }
+    ctx.strokeStyle = c;
+    ctx.globalAlpha = tocada ? 0.3 : (alvo ? 1 : 0.32);
+    ctx.lineWidth = alvo ? 5 : 2;
+    ctx.strokeRect(x + 6, y + 5, CW - 12, ROW - 10);
+    ctx.globalAlpha = 1;
+  }
+
+  function render(now) {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+
+    ctx.fillStyle = '#05001a';
+    ctx.fillRect(0, 0, W, H);
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, 'rgba(80, 0, 160, 0.35)');
+    g.addColorStop(1, 'rgba(4, 0, 26, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // trilhas
+    for (let c = 1; c < COLS; c++) {
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.14)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(c * CW, 0); ctx.lineTo(c * CW, H); ctx.stroke();
+    }
+
+    // teclas visíveis: só a faixa que cabe no quadro
+    // comeca antes de next: as teclas ja tocadas seguem descendo e saem por baixo
+    for (let i = Math.max(0, next - 5); i < keys.length; i++) {
+      const y = topY(i);
+      if (y > H) continue;
+      if (y + ROW < 0) break;
+      drawKey(i, keys[i] * CW, y, keys[i]);
+    }
+
+    // rastro do acerto
+    for (const f of hitFx) {
+      ctx.globalAlpha = Math.max(0, f.t / 260) * 0.5;
+      ctx.fillStyle = COLORS[f.col];
+      ctx.fillRect(f.col * CW + 6, topY(f.i) + 5, CW - 12, ROW - 10);
+      ctx.globalAlpha = 1;
+    }
+
+    if (wrong.t > 0) {
+      ctx.globalAlpha = Math.min(0.5, wrong.t / 400);
+      ctx.fillStyle = '#ff3b5c';
+      ctx.fillRect(wrong.col * CW, 0, CW, H);
+      ctx.globalAlpha = 1;
+    }
+
+    particles.draw(ctx);
+
+    if (state === 'menu') {
+      ctx.font = `700 34px Orbitron, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#0af6ff';
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 18;
+      ctx.fillText('START', W / 2, H / 2);
+      ctx.shadowBlur = 0;
+    }
+
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.color} ${Math.min(0.4, flash.t / 180)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    particles.update(dt);
+    for (const f of hitFx) f.t -= dt * 1000;
+    hitFx = hitFx.filter(f => f.t > 0);
+    if (wrong.t > 0) wrong.t -= dt * 1000;
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  ensureKeys(8);
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
