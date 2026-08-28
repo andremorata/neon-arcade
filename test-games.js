@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score' };
 for (const [key, variable] of Object.entries(BEST)) {
   assert.match(games[key], new RegExp(`pb\\s*=\\s*Neon\\.best\\.update\\('${key}', ${variable}\\)`),
     `O ${key} deve atualizar o recorde em memória`);
@@ -159,6 +159,95 @@ assert.strictEqual(speedAt(10000), 1000, 'A velocidade do Piano trava em 1000 px
 for (let s = 0; s < 300; s += 7) {
   assert.ok(speedAt(s + 7) >= speedAt(s), `A velocidade do Piano nao pode cair (${s})`);
 }
+
+// cruz da explosao do Bomber: para no pilar, come um tijolo so e nao vaza pra fora
+// do mapa. Usa a funcao do proprio arquivo pra nao virar uma copia que dessincroniza.
+const bomber = games.bomber;
+const blastCells = new Function('grid', 'DIRS', 'SOLIDO', 'TIJOLO',
+  block(bomber, '  function blastCells(cx, cy, alcance)') + '; return blastCells;');
+const _ = 0, S = 1, T = 2;
+const DIRS4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const mapa = [
+  [S, S, S, S, S, S, S],
+  [S, _, _, _, _, _, S],
+  [S, _, S, _, T, _, S],
+  [S, _, _, _, _, _, S],
+  [S, S, S, S, S, S, S],
+];
+const blast = blastCells(mapa, DIRS4, S, T);
+const tem = (lista, x, y) => lista.some(c => c.x === x && c.y === y);
+const cruz = blast(3, 1, 3);
+assert.ok(tem(cruz, 3, 1), 'A celula da bomba sempre pega fogo');
+assert.ok(tem(cruz, 4, 1) && tem(cruz, 5, 1), 'A cruz avanca ate o alcance');
+assert.ok(!tem(cruz, 6, 1), 'A cruz nao passa pela borda solida');
+assert.ok(tem(cruz, 3, 2) && tem(cruz, 3, 3), 'A cruz desce pelo corredor livre');
+const parede = blast(1, 2, 3);
+assert.ok(!tem(parede, 2, 2), 'O pilar solido corta a cruz');
+assert.ok(tem(parede, 1, 1) && tem(parede, 1, 3), 'Os outros bracos continuam');
+const tijolo = blast(2, 3, 3);
+assert.ok(tem(tijolo, 4, 3), 'A cruz alcanca a coluna do tijolo');
+const naColuna = blast(4, 3, 3);
+assert.ok(tem(naColuna, 4, 2), 'O tijolo entra na cruz e explode');
+assert.ok(!tem(naColuna, 4, 1), 'Depois do tijolo a cruz para');
+
+// mapa do Bomber: o canto do jogador nasce livre, os pilares pares ficam de pe e
+// nenhum bot pode nascer emparedado — emparedado ele treme no lugar a partida toda.
+const mapaBomber = new Function('Neon', 'CELL', 'COLS', 'ROWS', 'VAZIO', 'SOLIDO', 'TIJOLO',
+  'DIRS', 'ITENS', 'chave', 'level', `
+  let grid = [], inimigos = [], itens = new Map();
+  ${block(bomber, '  function gerarMapa()')}
+  ${block(bomber, '  function abrirBolsao(x, y)')}
+  ${block(bomber, '  function nascerInimigos()')}
+  const CANTOS_LIVRES = [[1, 1], [2, 1], [1, 2]];
+  gerarMapa(); nascerInimigos();
+  return { grid, inimigos, CANTOS_LIVRES };
+`);
+for (let fase = 1; fase <= 6; fase++) {
+  const { grid, inimigos, CANTOS_LIVRES } = mapaBomber(
+    { choice: a => a[(Math.random() * a.length) | 0] },
+    44, 15, 11, 0, 1, 2, DIRS4, [{ tipo: 'fogo' }], (x, y) => x + ',' + y, fase);
+  for (const [x, y] of CANTOS_LIVRES)
+    assert.strictEqual(grid[y][x], 0, `fase ${fase}: o canto do jogador tem que nascer livre`);
+  assert.strictEqual(grid[2][2], 1, `fase ${fase}: o pilar par nao pode virar tijolo`);
+  assert.ok(inimigos.length, `fase ${fase}: fase sem bot nunca termina`);
+  for (const en of inimigos) {
+    const cx = Math.floor(en.x / 44), cy = Math.floor(en.y / 44);
+    const saidas = DIRS4.filter(([dx, dy]) => grid[cy + dy][cx + dx] === 0);
+    assert.ok(saidas.length, `fase ${fase}: bot emparedado em ${cx},${cy}`);
+  }
+}
+
+// Fuga da propria bomba: quem larga fica em cima dela e precisa sair andando.
+// Se a bomba virar parede pelo centro da casa, o corpo ainda encosta nela e o
+// jogador trava colado no pavio — que foi exatamente o bug relatado.
+const fuga = new Function('CELL', 'CANTOS', 'grid', 'bombas', 'bombaEm', 'VAZIO', 'lane', 'chave', 'celX', 'celY', `
+  ${block(bomber, '  function encostaNaCasa(ent, x, y)')}
+  ${block(bomber, '  function soltarBombas()')}
+  ${block(bomber, '  function podeIr(x, y, ent)')}
+  ${block(bomber, '  function mover(ent, dx, dy, dt)')}
+  return { encostaNaCasa, soltarBombas, mover };
+`);
+const CELLB = 44, RB = CELLB * 0.34;
+const gridB = [];
+for (let y = 0; y < 11; y++) {
+  gridB[y] = [];
+  for (let x = 0; x < 15; x++) {
+    const borda = x === 0 || y === 0 || x === 14 || y === 10;
+    gridB[y][x] = (borda || (x % 2 === 0 && y % 2 === 0)) ? 1 : 0;
+  }
+}
+const bombasB = [];
+const fb = fuga(CELLB, [[-RB, -RB], [RB, -RB], [-RB, RB], [RB, RB]], gridB, bombasB,
+  (x, y) => bombasB.find(b => b.x === x && b.y === y), 0,
+  v => Math.floor(v / CELLB) * CELLB + CELLB / 2, (x, y) => x + ',' + y,
+  e => Math.floor(e.x / CELLB), e => Math.floor(e.y / CELLB));
+const heroi = { x: 5 * CELLB + 22, y: 5 * CELLB + 22, cel: '5,5', speed: 100 };
+bombasB.push({ x: 5, y: 5, t: 2400, alcance: 1, dono: 'p', dentro: new Set([heroi]) });
+const xIni = heroi.x;
+for (let i = 0; i < 120; i++) { fb.soltarBombas(); fb.mover(heroi, -1, 0, 1 / 60); }
+assert.ok(xIni - heroi.x > 80, `Quem larga a bomba tem que conseguir fugir dela (andou ${(xIni - heroi.x).toFixed(1)}px)`);
+for (let i = 0; i < 120; i++) { fb.soltarBombas(); fb.mover(heroi, 1, 0, 1 / 60); }
+assert.ok(!fb.encostaNaCasa(heroi, 5, 5), 'Depois de sair, a bomba vira parede e o jogador nao volta pra cima dela');
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
