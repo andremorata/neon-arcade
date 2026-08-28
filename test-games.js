@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o breach grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
@@ -527,6 +527,84 @@ const doisAlvos = alvo(100, 1, [{ x: 600, y: 300 }, { x: 200, y: 300 }]);
 assert.ok(Math.abs(doisAlvos.dx - 1) < 1e-9, 'Com dois na mesma linha a mira vai no mais proximo');
 const muitoLonge = alvo(100, 1, [{ x: 5000, y: 300 }]);
 assert.strictEqual(muitoLonge.dx, 1, 'Alvo alem do alcance nao conta');
+
+// Cidade do Runner: a grade tem que garantir que toda rua conecta com todas as
+// outras. Se um predio invadir a rua, existe entrega impossivel de alcancar e o
+// jogador perde o tempo dele sem entender por que.
+const runner = games.runner;
+const cidade = new Function(
+  runner.slice(runner.indexOf('  const QUADRA = 220'), runner.indexOf('  const els = {')) +
+  '; return { livre, centroRua, QUADRA, RUA, PREDIO, QUADRAS, MUNDO };')();
+assert.strictEqual(cidade.PREDIO, cidade.QUADRA - cidade.RUA, 'O predio e a quadra menos a rua');
+assert.ok(cidade.RUA > 60, 'A rua precisa caber o carro com folga');
+// todo cruzamento de todas as quadras tem que ser rua livre
+for (let j = 0; j < cidade.QUADRAS; j++) {
+  for (let i = 0; i < cidade.QUADRAS; i++) {
+    const c = cidade.centroRua(i, j);
+    assert.ok(cidade.livre(c.x, c.y), `cruzamento ${i},${j} nasceu dentro de predio`);
+  }
+}
+// o miolo de toda quadra tem que ser predio, senao nao existe cidade
+for (let j = 0; j < cidade.QUADRAS; j++) {
+  for (let i = 0; i < cidade.QUADRAS; i++) {
+    const mx = i * cidade.QUADRA + cidade.RUA / 2 + cidade.PREDIO / 2;
+    const my = j * cidade.QUADRA + cidade.RUA / 2 + cidade.PREDIO / 2;
+    assert.ok(!cidade.livre(mx, my), `o miolo da quadra ${i},${j} devia ser predio`);
+  }
+}
+// as ruas correm inteiras nos dois sentidos: e isso que garante caminho pra tudo
+for (let i = 1; i < cidade.QUADRAS; i++) {
+  const rua = i * cidade.QUADRA + cidade.RUA / 2;
+  for (let t = cidade.RUA; t < cidade.MUNDO - cidade.RUA; t += 20) {
+    assert.ok(cidade.livre(rua, t), `a avenida vertical ${i} esta tapada em y=${t}`);
+    assert.ok(cidade.livre(t, rua), `a avenida horizontal ${i} esta tapada em x=${t}`);
+  }
+}
+// fora do mundo nunca e livre, senao o carro escapa do mapa
+assert.ok(!cidade.livre(-10, 500), 'Antes da borda oeste e solido');
+assert.ok(!cidade.livre(cidade.MUNDO + 10, 500), 'Depois da borda leste e solido');
+assert.ok(!cidade.livre(500, -10) && !cidade.livre(500, cidade.MUNDO + 10), 'Norte e sul tambem fecham');
+
+// Entrega do Runner: cada uma devolve tempo, sobe o procurado e poe mais viatura
+// na rua. Se o tempo nao tivesse teto, entregar sem parar daria noite infinita.
+const entregaRunner = new Function('Neon', 'els', 'particles', 'carro', 'W', 'H',
+  runner.slice(runner.indexOf('  const QUADRA = 220'), runner.indexOf('  // Cada quadra tem uma avenida')) +
+  block(runner, '  function livre(x, y)') +
+  runner.slice(runner.indexOf('  const centroRua ='), runner.indexOf('  const els = {')) + `
+  let policia = [], alvo = null, comPacote = false, entregas = 0, procurado = 0, score = 0, tempo = 60;
+  function shakeAt() {} function flashAt() {}
+  ${block(runner, '  function sortearAlvo()')}
+  ${block(runner, '  function nascerPolicia()')}
+  ${block(runner, '  function entregar()')}
+  ${block(runner, '  function pegar()')}
+  return { pegar, entregar, sortearAlvo, livre, estado: () => ({ policia: policia.length, entregas, procurado, score, tempo, comPacote, alvo }) };
+`);
+const stubEl = () => ({ textContent: '' });
+const rn = entregaRunner(
+  { rand: (a, b) => (a + b) / 2, choice: a => a[0], clamp: clampFn, toast() {}, popEl() {},
+    audio: { sfx: new Proxy({}, { get: () => () => {} }) } },
+  { score: stubEl(), entregas: stubEl(), proc: stubEl() },
+  { burst() {} },
+  { x: 5 * 220 + 39, y: 5 * 220 + 39 }, 900, 600);
+for (let i = 0; i < 120; i++) {
+  rn.sortearAlvo();
+  const a = rn.estado().alvo;
+  assert.ok(rn.livre(a.x, a.y), `alvo ${i} sorteado dentro de predio`);
+}
+rn.pegar();
+assert.ok(rn.estado().comPacote, 'pegar tem que marcar o pacote');
+const antes = rn.estado();
+rn.entregar();
+const dep = rn.estado();
+assert.strictEqual(dep.entregas, 1, 'a entrega precisa contar');
+assert.ok(!dep.comPacote, 'depois de entregar o pacote sai');
+assert.ok(dep.tempo > antes.tempo, 'entregar devolve tempo');
+assert.ok(dep.score > antes.score, 'entregar pontua');
+for (let i = 0; i < 12; i++) { rn.pegar(); rn.entregar(); }
+const fim = rn.estado();
+assert.strictEqual(fim.procurado, 5, `o procurado trava em 5 estrelas, deu ${fim.procurado}`);
+assert.strictEqual(fim.policia, fim.procurado, 'a quantidade de viatura acompanha o procurado');
+assert.ok(fim.tempo <= 90, `o tempo precisa de teto, senao a noite nao acaba (deu ${fim.tempo})`);
 
 // dica de girar: so jogo deitado ganha area girando. Quadrado, 4:3 e em pe, nao.
 const hintSrc = block(core, '  function addRotateHint()');
