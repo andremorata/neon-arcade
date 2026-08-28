@@ -548,6 +548,24 @@ for (const [i, f] of fasesSlug.entries()) {
   assert.ok([...f.mapa.join('')].some(c => c === 'E' || c === 'F' || c === 'X'),
     `fase ${i + 1}: fase sem inimigo nenhum`);
 }
+// Pulo duplo do Slug: o segundo pulo e o que alcanca as plataformas altas. Sem
+// ele existiam plataformas desenhadas que o boneco nunca chegava.
+assert.match(slug, /const PULOS_MAX = 2;/, 'O Slug precisa de pulo duplo');
+assert.match(slug, /if \(state !== 'playing' \|\| jog\.pulos >= PULOS_MAX\) return;/,
+  'O pulo tem que respeitar o limite de pulos no ar');
+assert.match(slug, /if \(jog\.chao\) jog\.pulos = 0;/, 'Tocar o chao recarrega os pulos');
+assert.match(slug, /if \(TECLAS\[k\] === 'pular'\) \{ if \(!e\.repeat\) pular\(\); return; \}/,
+  'Pulo e evento, nao estado: segurando a tecla o segundo pulo sairia sozinho');
+// altura alcancavel com dois pulos tem que cobrir as plataformas mais altas do mapa
+const fis = new Function(
+  slug.slice(slug.indexOf('  const CELL = 50'), slug.indexOf('  // Fase e uma tira')) +
+  '; return { G, PULO, CELL, LINHAS };')();
+const alturaPulo = (fis.PULO * fis.PULO) / (2 * fis.G);          // altura de um pulo so
+const alturaDupla = alturaPulo + ((fis.PULO * 0.86) ** 2) / (2 * fis.G);
+assert.ok(alturaDupla > alturaPulo * 1.5, 'O segundo pulo tem que somar altura de verdade');
+assert.ok(alturaDupla > fis.CELL * 3.4,
+  `dois pulos sobem ${alturaDupla.toFixed(0)}px; as plataformas ficam a ate 3 blocos de ${fis.CELL}px`);
+
 const comChefeSlug = fasesSlug.filter(f => f.mapa.join('').includes('X'));
 assert.strictEqual(comChefeSlug.length, 1, 'O chefe do Slug aparece em uma fase so');
 assert.strictEqual(comChefeSlug[0], fasesSlug.at(-1), 'O chefe do Slug e a ultima fase');

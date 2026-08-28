@@ -12,9 +12,9 @@
 <link rel="stylesheet" href="../assets/css/neon-theme.css">
 <style>
   .stage { --arw: 3; --arh: 2; --maxw: 900px; }
-  /* d-pad vai pra esquerda: a mao direita fica com tiro e especial */
-  .dpad { left: 14px; right: auto; }
-  .acoes { display: none; position: absolute; right: 14px; bottom: 14px; z-index: 15; gap: 10px; }
+  /* Manche na esquerda e acoes na direita, como no Breach: um polegar so anda,
+     o outro so atira e pula. O d-pad de 4 setas nao dava conta dos dois juntos. */
+  .acoes { display: none; position: absolute; right: 14px; bottom: 14px; z-index: 15; gap: 10px; align-items: flex-end; }
   @media (pointer: coarse), (max-width: 700px) { .acoes { display: flex; } }
   .overlay:not(.hidden) ~ .acoes { display: none; }
   .acoes button {
@@ -26,6 +26,7 @@
   }
   .acoes button:active { background: rgba(255, 59, 92, 0.28); }
   .acoes .esp { border-color: rgba(0, 240, 255, 0.6); color: var(--neon-cyan); }
+  .acoes .pulo { border-color: rgba(57, 255, 122, 0.6); color: var(--neon-green); width: 74px; height: 74px; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -61,21 +62,17 @@
       </div>
       <button class="btn" id="startBtn">START</button>
       <div class="controls-hint">
-        <span class="key">← → anda</span><span class="key">↑ pula</span><span class="key">Clique atira</span><span class="key">Botão direito = especial</span><span class="key">P pausa</span>
+        <span class="key">← → anda</span><span class="key">↑ pula (duplo)</span><span class="key">Clique atira</span><span class="key">Botão direito = especial</span><span class="key">P pausa</span>
       </div>
-    </div>
-    <div class="dpad">
-      <button class="up" data-dir="pular">▲</button>
-      <button class="left" data-dir="esq">◀</button>
-      <button class="right" data-dir="dir">▶</button>
     </div>
     <div class="acoes">
       <button class="esp" data-acao="especial">ESP</button>
       <button data-acao="tiro">TIRO</button>
+      <button class="pulo" data-acao="pular">PULO</button>
     </div>
   </div>
 
-  <footer>// <a href="../index.html">← arcade</a> · mira automática · 🔋 recarrega o especial · ❤️ vida</footer>
+  <footer>// <a href="../index.html">← arcade</a> · pulo duplo · mira automática · 🔋 recarrega o especial · ❤️ vida</footer>
 </div>
 
 <script src="../assets/js/neon-core.js"></script>
@@ -152,7 +149,8 @@
   const particles = new Neon.Particles();
   els.best.textContent = pb;
 
-  const jog = { x: 100, y: 300, vx: 0, vy: 0, w: 30, h: 44, chao: false, olha: 1, vida: 100, invuln: 0 };
+  const jog = { x: 100, y: 300, vx: 0, vy: 0, w: 30, h: 44, chao: false, olha: 1, vida: 100, invuln: 0, pulos: 0 };
+  const PULOS_MAX = 2;               // o segundo pulo alcanca as plataformas altas
 
   function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
   function flashAt(cor, ms) { if (!Neon.motion.reduced) flash = { t: ms, cor }; }
@@ -333,6 +331,16 @@
   const preso = new Set();
   const TECLAS = { arrowleft: 'esq', a: 'esq', arrowright: 'dir', d: 'dir',
                    arrowup: 'pular', w: 'pular', ' ': 'pular' };
+  // Pulo e evento, nao estado: segurando o botao o segundo pulo saia sozinho no
+  // mesmo quadro e o jogador nunca escolhia a hora dele.
+  function pular() {
+    if (state !== 'playing' || jog.pulos >= PULOS_MAX) return;
+    jog.pulos++;
+    jog.vy = jog.pulos === 1 ? PULO : PULO * 0.86;
+    Neon.audio.sfx.flap();
+    if (jog.pulos === 2) particles.burst(jog.x, jog.y + jog.h / 2, '#39ff7a', 8, 130, 2.5);
+  }
+
   document.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
     if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
@@ -341,6 +349,7 @@
       e.preventDefault();
       if (state === 'menu' || state === 'gameover') { startGame(); return; }
       if (state === 'paused') { resumeGame(); return; }
+      if (TECLAS[k] === 'pular') { if (!e.repeat) pular(); return; }
       preso.add(TECLAS[k]);
       return;
     }
@@ -351,26 +360,59 @@
     if (k in TECLAS) preso.delete(TECLAS[k]);
   });
 
-  document.querySelectorAll('.dpad button, .acoes button').forEach(btn => {
-    const nome = btn.dataset.dir || btn.dataset.acao;
+  document.querySelectorAll('.acoes button').forEach(btn => {
+    const nome = btn.dataset.acao;
     const hold = on => (e) => {
       e.preventDefault();
       e.stopPropagation();
       if (nome === 'especial') { if (on) especial(); return; }
+      if (nome === 'pular') { if (on) pular(); return; }
       if (on) preso.add(nome); else preso.delete(nome);
     };
     btn.addEventListener('pointerdown', hold(true));
     for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) btn.addEventListener(ev, hold(false));
   });
 
+  // Manche na metade esquerda: puxar pro lado anda pro lado, e so isso. Vertical
+  // nao faz nada de proposito, porque pular tem botao proprio na outra mao.
+  const toques = new Map();
+  let manche = null, dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+
+  function paraQuadro(e) {
+    const r = els.stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  }
+  function soltarToque(id) {
+    const t = toques.get(id);
+    if (t === undefined) return;
+    toques.delete(id);
+    if (t === 'manche') { manche = null; preso.delete('esq'); preso.delete('dir'); }
+    else if (![...toques.values()].includes(t)) preso.delete(t);
+  }
   els.stage.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay, .dpad, .acoes')) return;
+    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay, .acoes')) return;
     e.preventDefault();
-    if (e.button === 2) especial(); else preso.add('tiro');
+    if (e.pointerType === 'touch') dedo = true;
+    if (e.button === 2) { especial(); return; }
+    const p = paraQuadro(e);
+    if (dedo && p.x < W * 0.5) {
+      manche = { ox: p.x, dx: 0 };
+      toques.set(e.pointerId, 'manche');
+    } else {
+      toques.set(e.pointerId, 'tiro');
+      preso.add('tiro');
+    }
+  });
+  els.stage.addEventListener('pointermove', (e) => {
+    if (toques.get(e.pointerId) !== 'manche' || !manche) return;
+    manche.dx = Neon.clamp((paraQuadro(e).x - manche.ox) / 55, -1, 1);
+    preso.delete('esq'); preso.delete('dir');
+    if (manche.dx < -0.25) preso.add('esq');
+    else if (manche.dx > 0.25) preso.add('dir');
   });
   els.stage.addEventListener('contextmenu', (e) => { e.preventDefault(); especial(); });
-  window.addEventListener('pointerup', () => preso.delete('tiro'));
-  window.addEventListener('pointercancel', () => preso.delete('tiro'));
+  window.addEventListener('pointerup', (e) => soltarToque(e.pointerId));
+  window.addEventListener('pointercancel', (e) => soltarToque(e.pointerId));
 
   Neon.$('startBtn').addEventListener('click', () => {
     if (state === 'paused') resumeGame();
@@ -388,8 +430,8 @@
     jog.vx = 0;
     if (preso.has('esq')) { jog.vx = -VEL; jog.olha = -1; }
     if (preso.has('dir')) { jog.vx = VEL; jog.olha = 1; }
-    if (preso.has('pular') && jog.chao) { jog.vy = PULO; Neon.audio.sfx.flap(); }
     moverCaixa(jog, dt);
+    if (jog.chao) jog.pulos = 0;
     jog.x = Neon.clamp(jog.x, jog.w / 2, larguraMapa - jog.w / 2);
     if (jog.y > H + 200) danoNoJogador(1000);
     if (espinhoEm(jog.x, jog.y + jog.h / 2 - 4)) danoNoJogador(18);
@@ -582,6 +624,17 @@
     }
     particles.draw(ctx);
     ctx.restore();
+
+    if (dedo && state === 'playing') {
+      const base = manche ? manche.ox : W * 0.16;
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(base, H - 90, 48, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(0, 240, 255, 0.3)';
+      Neon.circle(ctx, base + (manche ? manche.dx * 38 : 0), H - 90, 22);
+      ctx.globalAlpha = 1;
+    }
 
     if (chefe) {
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
