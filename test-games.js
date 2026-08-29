@@ -916,8 +916,8 @@ for (const regra of ['touch-action: manipulation', 'user-select: none', '-webkit
 const travaMobile = block(css, '@media (max-width: 700px), (orientation: landscape) and (max-height: 520px)');
 assert.match(travaMobile, /body:has\(\.stage\)[\s\S]*touch-action: none/,
   'Em celular a página de jogo precisa de touch-action: none, senão a pinça passa no iOS');
-assert.match(travaMobile, /position: fixed/,
-  'Em celular a página de jogo precisa ser fixa, senão a tela rola durante o jogo');
+assert.match(travaMobile, /html:has\(\.stage\)[\s\S]*overflow: hidden/,
+  'Em celular html e body precisam travar juntos: só o body fixo deixa o <html> preso em scrollTop negativo no PWA do iOS e desalinha o hit-test');
 
 // iPhone com notch/Dynamic Island: viewport-fit=cover cola o layout no topo da
 // tela, entao todo padding de topo/base do .app precisa somar a safe area,
@@ -933,6 +933,13 @@ for (const [name, html] of Object.entries({ ...games, menu })) {
   assert.match(html, /apple-mobile-web-app-status-bar-style"\s+content="black-translucent"/,
     `${name}: falta a meta apple-mobile-web-app-status-bar-style=black-translucent`);
 }
+// A faixa branca do PWA so aparece em retrato. Sem o teto o ajuste dispararia
+// tambem em paisagem, onde a diferenca passa de 400px, e esticaria a pagina.
+assert.match(core, /falta > 0 && falta <= 120/,
+  'travaAlturaPWA precisa limitar o ajuste a faixa da barra de status');
+assert.ok(!/falta <= 0[^\n]*style\.height = ''/.test(core),
+  'travaAlturaPWA nao pode zerar a altura quando falta <= 0: a viewport oscilaria');
+
 for (const [, decl] of css.matchAll(/\.app(?::has\([^)]*\))?\s*\{[^}]*?padding:([^;]*);/g)) {
   assert.ok(/safe-area-inset-top/.test(decl) && /safe-area-inset-bottom/.test(decl),
     `.app com "padding:${decl}" ignora a safe area do iPhone`);

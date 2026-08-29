@@ -861,9 +861,14 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
    touch-action: none no body mata a pinca ate no iOS, que ignora o
    user-scalable=no do meta viewport. */
 @media (max-width: 700px), (orientation: landscape) and (max-height: 520px) {
+  /* Trava o <html> junto, nao so o body. Com apenas o body em position:fixed o
+     iOS prendia o <html> em scrollTop -59 depois de expandir a viewport do PWA
+     (793 -> 852 no toque duplo), e a partir dai todo getBoundingClientRect vinha
+     59px abaixo do que estava pintado: o toque no botao caia no elemento de cima.
+     Sem raiz rolavel nao existe scroll pra travar. */
+  html:has(.stage),
   body:has(.stage) {
-    position: fixed;
-    inset: 0;
+    height: 100%;
     overflow: hidden;
     touch-action: none;
   }

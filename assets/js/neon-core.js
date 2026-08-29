@@ -510,6 +510,28 @@ window.Neon = (function () {
     stage.appendChild(a);
   }
 
+  // ── faixa branca do PWA no iOS ─────────────────────
+  // No PWA standalone o iOS abre a pagina numa viewport da altura da barra de
+  // status menor que a tela (793 de 852 num iPhone 15) e desenha a partir do
+  // topo, entao sobra uma faixa branca no rodape. Ele so corrigia no primeiro
+  // gesto do jogador — e corrigia errado, deixando o <html> em scrollTop
+  // negativo. Cravar a altura real da tela faz o WebKit acertar a viewport na
+  // hora, sem gesto e sem scroll travado.
+  function travaAlturaPWA() {
+    if (!navigator.standalone) return;
+    const raiz = document.documentElement;
+    const ajusta = () => {
+      const falta = screen.height - window.innerHeight;
+      // ate 120px e a faixa da barra de status. Em paisagem a diferenca passa
+      // de 400 e nao e este bug: ali soltamos a altura pra nao estourar a tela.
+      if (falta > 0 && falta <= 120) raiz.style.height = screen.height + 'px';
+      else if (falta > 120) raiz.style.height = '';
+      // falta <= 0 nao mexe: zerar aqui devolveria a viewport curta e oscilaria
+    };
+    ajusta();
+    window.addEventListener('resize', ajusta);
+  }
+
   // ── inicialização de página padrão ─────────────────
   // Espera DOM pronto e aplica: fontes, sound toggle, best keys.
   function initPage() {
@@ -522,6 +544,7 @@ window.Neon = (function () {
     const h1 = document.querySelector('.brand h1');
     if (h1) h1.dataset.glitch = h1.textContent.trim();
     addBackButton();
+    travaAlturaPWA();
     addRotateHint();
     const tag = $('best');
     if (tag) tag.textContent = best.get(tag.dataset.key || 'none');
