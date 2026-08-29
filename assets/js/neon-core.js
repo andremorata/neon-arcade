@@ -490,6 +490,26 @@ window.Neon = (function () {
     stage.appendChild(hint);
   }
 
+  // ── voltar pro arcade ──────────────────────────────
+  // O link do titulo e o do rodape somem em celular e no modo imersivo, entao
+  // sem isto nao ha saida do jogo sem o botao voltar do navegador. Vive dentro
+  // do .stage pra sobreviver a qualquer media query, e o mesmo stopPropagation
+  // do pause impede que o toque vire jogada no quadro atras.
+  function addBackButton() {
+    const stage = document.querySelector('.stage');
+    if (!stage || stage.querySelector('.back-btn')) return;
+    const a = document.createElement('a');
+    a.className = 'back-btn';
+    a.href = '../index.html';
+    a.title = 'Voltar ao arcade';
+    a.setAttribute('aria-label', 'Voltar ao arcade');
+    a.textContent = '\u2190';
+    for (const t of ['pointerdown', 'pointerup', 'click']) {
+      a.addEventListener(t, e => e.stopPropagation());
+    }
+    stage.appendChild(a);
+  }
+
   // ── inicialização de página padrão ─────────────────
   // Espera DOM pronto e aplica: fontes, sound toggle, best keys.
   function initPage() {
@@ -501,6 +521,7 @@ window.Neon = (function () {
     // dado no elemento, entao copia daqui em vez de repetir em 14 arquivos.
     const h1 = document.querySelector('.brand h1');
     if (h1) h1.dataset.glitch = h1.textContent.trim();
+    addBackButton();
     addRotateHint();
     const tag = $('best');
     if (tag) tag.textContent = best.get(tag.dataset.key || 'none');
