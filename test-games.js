@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o breach grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
@@ -1056,6 +1056,74 @@ assert.ok(gradeEmPe.rows > gradeEmPe.cols, 'Snake em pé precisa ser mais alto q
 assert.ok(gradeDeitado.cols > gradeDeitado.rows, 'Snake deitado precisa ser mais largo que alto');
 assert.match(games.snake, /const emPe = ROWS > COLS;/,
   'O Snake precisa nascer descendo na grade alta, senão sai de lado e bate na parede');
+
+// River: o rio e gerado por secao a partir de uma semente, e a morte volta pro
+// comeco da secao regenerando tudo igual. Entao (1) a mesma semente tem que dar o
+// mesmo rio; (2) toda fatia precisa deixar terra nas duas margens, canal nunca mais
+// estreito que o minimo (com ilha, cada canal separado); (3) a secao abre e fecha
+// reta, larga e centrada, senao o respawn nasce apontado pra margem; (4) a ponte
+// fecha o rio no fim e nenhuma secao passa sem deposito de gasolina nem capsula.
+// Testado nos dois formatos, porque as larguras saem de W.
+const river = games.river;
+const rioEm = (W, H) => new Function('Neon', 'canvas',
+  river.slice(river.indexOf('  const { W, H } = Neon.world'), river.indexOf('  const els = {')) +
+  '; return { gerarSecao, bateNaMargem, canalDe, W, MARGEM, MEIA_MIN, MEIA_RETA, CANAL_MIN, SECAO_FATIAS, RETA, FATIA };')(
+  { world: () => ({ W, H, retrato: H > W }) }, {});
+for (const [nome, rio] of [['deitado', rioEm(900, 600)], ['em pé', rioEm(600, 800)]]) {
+  const { W, MARGEM, MEIA_MIN, MEIA_RETA, CANAL_MIN, SECAO_FATIAS, RETA, FATIA } = rio;
+  assert.strictEqual(JSON.stringify(rio.gerarSecao(3, 777)), JSON.stringify(rio.gerarSecao(3, 777)),
+    `River ${nome}: a mesma semente tem que gerar a mesma seção`);
+  assert.notStrictEqual(JSON.stringify(rio.gerarSecao(3, 777)), JSON.stringify(rio.gerarSecao(3, 778)),
+    `River ${nome}: sementes diferentes têm que dar rios diferentes`);
+  for (let n = 0; n < 14; n++) {
+    const s = rio.gerarSecao(n, 4242);
+    assert.strictEqual(s.fatias.length, SECAO_FATIAS, `River ${nome}: seção ${n} com número errado de fatias`);
+    s.fatias.forEach((f, i) => {
+      assert.ok(f.esq >= MARGEM && f.dir <= W - MARGEM, `River ${nome}: seção ${n} fatia ${i} sem terra na margem (${f.esq}..${f.dir})`);
+      assert.ok(f.dir - f.esq >= 2 * MEIA_MIN - 1, `River ${nome}: seção ${n} fatia ${i} rio mais estreito que o mínimo`);
+      if (f.ilha) {
+        assert.ok(f.ilha[0] - f.esq >= CANAL_MIN - 1 && f.dir - f.ilha[1] >= CANAL_MIN - 1,
+          `River ${nome}: seção ${n} fatia ${i} com canal da ilha estreito demais`);
+        assert.ok(f.ilha[1] > f.ilha[0], `River ${nome}: seção ${n} fatia ${i} com ilha invertida`);
+      }
+      if (i < RETA || i >= SECAO_FATIAS - RETA) {
+        assert.ok(!f.ilha, `River ${nome}: seção ${n} fatia ${i} tem ilha na reta`);
+        assert.ok(Math.abs(f.esq - (W / 2 - MEIA_RETA)) <= 1 && Math.abs(f.dir - (W / 2 + MEIA_RETA)) <= 1,
+          `River ${nome}: seção ${n} fatia ${i} da reta não está larga e centrada (${f.esq}..${f.dir})`);
+      }
+    });
+    // ilha continua: nao pode sumir no meio e voltar
+    let trechos = 0;
+    s.fatias.forEach((f, i) => { if (f.ilha && !(s.fatias[i - 1] && s.fatias[i - 1].ilha)) trechos++; });
+    const comIlha = s.fatias.filter(f => f.ilha).length;
+    assert.ok(trechos === 0 || comIlha / trechos >= 10, `River ${nome}: seção ${n} tem ilha picotada`);
+    const ponte = s.specs.filter(e => e.tipo === 'ponte');
+    assert.strictEqual(ponte.length, 1, `River ${nome}: seção ${n} precisa de exatamente uma ponte`);
+    const fp = s.fatias[SECAO_FATIAS - 3];
+    assert.ok(ponte[0].esq === fp.esq && ponte[0].dir === fp.dir && Math.floor(ponte[0].y / FATIA) === n * SECAO_FATIAS + SECAO_FATIAS - 3,
+      `River ${nome}: seção ${n} com a ponte fora da fatia dela`);
+    assert.ok(s.specs.some(e => e.tipo === 'gas'), `River ${nome}: seção ${n} sem depósito de gasolina`);
+    assert.ok(s.specs.some(e => e.tipo === 'poder'), `River ${nome}: seção ${n} sem cápsula`);
+    // tudo que nasce na agua nasce na agua; torre nasce na terra
+    for (const e of s.specs) {
+      const f = s.fatias[Math.floor(e.y / FATIA) - n * SECAO_FATIAS];
+      if (e.tipo === 'torre') assert.ok(e.x < f.esq || e.x > f.dir, `River ${nome}: torre na água na seção ${n}`);
+      else if (e.tipo !== 'jato' && e.tipo !== 'ponte') assert.ok(!rio.bateNaMargem(f, e.x, 1), `River ${nome}: ${e.tipo} em cima da terra na seção ${n}`);
+    }
+  }
+}
+// colisao com a margem e com a ilha, dos dois lados
+const rioTeste = rioEm(900, 600);
+const fIlha = { esq: 300, dir: 600, ilha: [430, 470] };
+assert.ok(!rioTeste.bateNaMargem(fIlha, 360, 12), 'River: canal da esquerda é água');
+assert.ok(!rioTeste.bateNaMargem(fIlha, 540, 12), 'River: canal da direita é água');
+assert.ok(rioTeste.bateNaMargem(fIlha, 305, 12), 'River: encostar na margem esquerda bate');
+assert.ok(rioTeste.bateNaMargem(fIlha, 595, 12), 'River: encostar na margem direita bate');
+assert.ok(rioTeste.bateNaMargem(fIlha, 450, 12), 'River: ilha bate');
+assert.ok(rioTeste.bateNaMargem(fIlha, 425, 12), 'River: raspar na ilha bate');
+assert.deepStrictEqual(rioTeste.canalDe(fIlha, 360), [300, 430], 'River: barco à esquerda da ilha fica no canal esquerdo');
+assert.deepStrictEqual(rioTeste.canalDe(fIlha, 540), [470, 600], 'River: barco à direita da ilha fica no canal direito');
+assert.deepStrictEqual(rioTeste.canalDe({ esq: 300, dir: 600, ilha: null }, 450), [300, 600], 'River: sem ilha o canal é o rio inteiro');
 
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.

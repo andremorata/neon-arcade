@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON RIVER — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  /* Neon.world troca pra 3:4 em celular em pe: e o formato do 2600 e o rio ganha
+     campo de visao pra frente. Deitado o quadro abre pros lados e sobra terra
+     nas margens, que e onde o manche e o botao de tiro ficam sem tapar o rio. */
+  .stage { --arw: 3; --arh: 2; --maxw: 900px; }
+  /* a faixa de HUD ocupa os 30px do topo do quadro; o toast desce pra nao cobrir */
+  .toast { top: 52px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON RIVER</h1></a>
+      <div class="tag">// | Voe rio acima, exploda a ponte, abasteça | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:5;">
+    <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="river">0</span></div>
+    <div class="stat"><span class="lbl">Setor</span><span class="val" id="setor">1</span></div>
+    <div class="stat"><span class="lbl">Vidas</span><span class="val" id="vidas">3</span></div>
+    <div class="stat"><span class="lbl">Gasolina</span><span class="val" id="gas">100%</span>
+      <div class="combo-bar"><div class="fill" id="gasBar" style="width:100%"></div></div>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">PONTE DESTRUÍDA!</div>
+    <canvas id="game" width="900" height="600"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON RIVER</h2>
+      <p id="overlayText">River Raid do 2600: voe rio acima, exploda barcos, helicópteros, torres e a ponte no fim de cada setor. A gasolina só volta passando por cima dos depósitos — atirar neles dá pontos, mas queima o combustível. Cápsulas trocam o tiro por 25 segundos; a ponte destruída é o seu checkpoint.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Setor</span><b id="fsSetor">1</b></div>
+        <div class="fstat"><span>Abates</span><b id="fsKills">0</b></div>
+      </div>
+      <button class="btn" id="startBtn">DECOLAR</button>
+      <div class="controls-hint">
+        <span class="key">← → desvia</span><span class="key">↑ acelera · ↓ freia</span><span class="key">Espaço / clique atira</span><span class="key">Manche à esquerda, TIRO à direita</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · 3 vidas · vida extra a cada 10000 · a ponte é o checkpoint · 🟩 depósito abastece · ⬡ cápsula troca o tiro</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  // Em pe o quadro e 3:4 como o 2600. Deitado ele abre pros lados e sobra terra:
+  // e sobre a terra que o manche e o botao de tiro ficam, sem tapar o rio.
+  const { W, H } = Neon.world(canvas, [900, 600], [600, 800]);
+
+  // ── mundo ─────────────────────────────────────────
+  // O y de mundo cresce pra frente (pra cima na tela). `dist` e o y de mundo da
+  // base do quadro: o aviao fica sempre a PLANO_Y da base e o rio desce por ele.
+  // O rio e uma pilha de fatias de FATIA px, cada uma com margem esquerda,
+  // direita e, as vezes, uma ilha no meio. Margem em degrau, como no 2600.
+  const FATIA = 20;
+  const SECAO_FATIAS = 130, SECAO_PX = SECAO_FATIAS * FATIA;   // 2600px entre pontes
+  const RETA = 10;                     // fatias retas e largas nas duas pontas da secao
+  const RAMPA = 40;                    // fatias antes do fim em que o rio volta pro centro
+  const MARGEM = 44;                   // terra minima de cada lado: cabe uma torre
+  const MEIA_MIN = Math.round(W * 0.11), MEIA_MAX = Math.round(W * 0.32);
+  const MEIA_RETA = Math.round(MEIA_MAX * 0.85);
+  const CANAL_MIN = 64;                // canal de cada lado da ilha: o aviao tem 24
+  const FATIA_RETA = { esq: Math.round(W / 2 - MEIA_RETA), dir: Math.round(W / 2 + MEIA_RETA), ilha: null };
+
+  const PLANO_Y = 120, MEIA_AVIAO = 12;
+  const VEL_MIN = 120, VEL_BASE = 210, VEL_MAX = 380, VEL_LADO = 300;
+  const GAS_MAX = 100, GAS_SEG = 42, ABASTECE = 34;   // segundos pra secar o tanque · gas por segundo no deposito
+  const VIDAS_INICIAIS = 3, VIDA_EXTRA = 10000;
+  const ARMA_SEGUNDOS = 25;
+
+  const ARMAS = {
+    simples: { nome: 'SIMPLES', cor: '#ffe600', cadencia: 210, vel: 720 },
+    duplo:   { nome: 'DUPLO',   cor: '#00f0ff', cadencia: 190, vel: 760 },
+    leque:   { nome: 'LEQUE',   cor: '#ff8c1a', cadencia: 250, vel: 700 },
+    laser:   { nome: 'LASER',   cor: '#ff2bd6', cadencia: 120, vel: 1150, fura: true },
+  };
+  const PODERES = ['duplo', 'leque', 'laser', 'escudo'];
+  const PODER_COR = { duplo: '#00f0ff', leque: '#ff8c1a', laser: '#ff2bd6', escudo: '#39ff7a' };
+  const PODER_LETRA = { duplo: 'D', leque: 'L', laser: 'Z', escudo: 'S' };
+
+  // vel em px/s · recarga em segundos · pontos como no 2600 (ponte 500)
+  const TIPOS = {
+    barco: { w: 52, h: 20, cor: '#ff2bd6', pontos: 30,  vida: 1, vel: 55 },
+    heli:  { w: 40, h: 26, cor: '#ff8c1a', pontos: 60,  vida: 1, vel: 110 },
+    jato:  { w: 44, h: 18, cor: '#e6e6ff', pontos: 100, vida: 1, vel: 420 },
+    mina:  { w: 26, h: 26, cor: '#9b30ff', pontos: 40,  vida: 1 },
+    torre: { w: 34, h: 34, cor: '#ff3b5c', pontos: 150, vida: 2, recarga: 2.4 },
+    gas:   { w: 40, h: 64, cor: '#39ff7a', pontos: 80,  vida: 1 },
+    ponte: { w: 0,  h: 30, cor: '#ffd700', pontos: 500, vida: 1 },
+    poder: { w: 30, h: 30, cor: '#00f0ff', pontos: 0,   vida: Infinity },
+  };
+  const MOTIVOS = { margem: 'Bateu na margem.', bateu: 'Colidiu com um inimigo.', tiro: 'Foi abatido por uma torre.', gas: 'A gasolina acabou.' };
+
+  // mulberry32: com a mesma semente a secao sai igualzinha. E assim que a morte
+  // volta pra ultima ponte com o mesmo rio e os mesmos inimigos, como no 2600.
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // canais de agua de uma fatia: um so, ou dois quando ha ilha
+  const canais = f => f.ilha ? [[f.esq, f.ilha[0]], [f.ilha[1], f.dir]] : [[f.esq, f.dir]];
+  // o canal onde x esta (o mais perto, se x cair na ilha)
+  function canalDe(f, x) {
+    if (!f.ilha) return [f.esq, f.dir];
+    return x < (f.ilha[0] + f.ilha[1]) / 2 ? [f.esq, f.ilha[0]] : [f.ilha[1], f.dir];
+  }
+  // caixa de meia largura `meia` centrada em x toca terra nesta fatia?
+  function bateNaMargem(f, x, meia) {
+    if (x - meia < f.esq || x + meia > f.dir) return true;
+    return !!(f.ilha && x + meia > f.ilha[0] && x - meia < f.ilha[1]);
+  }
+
+  // Uma secao vai de uma ponte a outra. Comeca e termina em reta larga (respawn
+  // justo dos dois lados da ponte), aperta e serpenteia no meio conforme n cresce,
+  // e nas ultimas RAMPA fatias volta pro centro devagar pra chegar reta na ponte.
+  function gerarSecao(n, semente) {
+    const r = rng((semente + n * 104729) >>> 0);
+    const dif = Math.min(1, n / 9);           // da secao 10 em diante e o teto
+    const passoCx = 9 + dif * 5;              // quanto o centro anda por fatia
+    const PESOS = [['barco', 30], ['heli', 22], ['mina', 14], ['gas', 14], ['torre', 8 + dif * 8], ['jato', 8 + dif * 6], ['poder', 5]];
+    const total = PESOS.reduce((s, p) => s + p[1], 0);
+    const sorteio = () => {
+      let k = r() * total;
+      for (const [tipo, peso] of PESOS) { k -= peso; if (k <= 0) return tipo; }
+      return 'barco';
+    };
+    const colocar = (tipo, f, y) => {
+      if (tipo === 'torre') return { tipo, x: r() < 0.5 ? f.esq - 24 : f.dir + 24, y };
+      if (tipo === 'jato') return { tipo, x: 0, lado: r() < 0.5 ? -1 : 1, y };
+      const w = TIPOS[tipo].w;
+      const cs = canais(f).filter(([a, b]) => b - a >= w + 16);
+      if (!cs.length) return null;
+      const [a, b] = cs[Math.floor(r() * cs.length)];
+      const s = { tipo, x: Math.round(a + w / 2 + 8 + r() * (b - a - w - 16)), y };
+      if (tipo === 'poder') s.poder = PODERES[Math.floor(r() * PODERES.length)];
+      return s;
+    };
+
+    const fatias = [], specs = [];
+    const y0 = n * SECAO_PX;
+    let cx = W / 2, meia = MEIA_RETA, alvoCx = cx, alvoMeia = meia;
+    let ilhaResta = 0, ilhaLen = 0, ilhaMeia = 0;
+    let ultimo = -99, desdeGas = 0, poderes = 0;
+    for (let i = 0; i < SECAO_FATIAS; i++) {
+      const reta = i < RETA || i >= SECAO_FATIAS - RETA;
+      const rampa = i >= SECAO_FATIAS - RAMPA;
+      if (reta || rampa) { alvoCx = W / 2; alvoMeia = MEIA_RETA; ilhaResta = 0; }
+      else if (r() < 0.06 + dif * 0.05) {
+        alvoMeia = MEIA_MIN + (MEIA_MAX - MEIA_MIN) * Math.pow(r(), 0.7 + dif * 1.3);
+        alvoCx = MARGEM + alvoMeia + r() * (W - 2 * (MARGEM + alvoMeia));
+      }
+      // enquanto ha ilha o rio nao pode apertar: os dois canais precisam caber
+      if (ilhaResta > 0) alvoMeia = Math.max(alvoMeia, CANAL_MIN + ilhaMeia + 8);
+      cx += Math.max(-passoCx, Math.min(passoCx, alvoCx - cx));
+      meia += Math.max(-6, Math.min(6, alvoMeia - meia));
+      meia = Math.max(MEIA_MIN, Math.min(MEIA_MAX, meia));
+      cx = Math.max(MARGEM + meia, Math.min(W - MARGEM - meia, cx));
+      const esq = Math.round(cx - meia), dir = Math.round(cx + meia);
+
+      let ilha = null;
+      if (ilhaResta > 0) {
+        const k = 1 - ilhaResta / ilhaLen;                          // 0..1 ao longo da ilha
+        const im = Math.min(ilhaMeia * Math.sin(Math.PI * k) + 6, meia - CANAL_MIN);
+        ilha = [Math.round(cx - im), Math.round(cx + im)];
+        ilhaResta--;
+      } else if (!reta && !rampa && i + 32 < SECAO_FATIAS - RAMPA
+                 && meia >= CANAL_MIN + 30 && r() < 0.035 + dif * 0.03) {
+        ilhaLen = ilhaResta = 14 + Math.floor(r() * 16);
+        ilhaMeia = 14 + r() * Math.min(28, meia - CANAL_MIN - 22);
+      }
+      const f = { esq, dir, ilha };
+      fatias.push(f);
+
+      const y = y0 + i * FATIA + FATIA / 2;
+      desdeGas++;
+      if (i === 4) { specs.push({ tipo: 'gas', x: Math.round(cx), y }); desdeGas = 0; ultimo = i; continue; }
+      if (i === SECAO_FATIAS - 3) { specs.push({ tipo: 'ponte', x: Math.round(cx), y, esq, dir }); continue; }
+      if (reta || i - ultimo < 4) continue;
+      if (desdeGas > 30 || r() < 0.12 + dif * 0.10) {
+        const tipo = desdeGas > 30 ? 'gas' : sorteio();
+        const s = colocar(tipo, f, y);
+        if (!s) continue;
+        specs.push(s);
+        ultimo = i;
+        if (tipo === 'gas') desdeGas = 0;
+        if (tipo === 'poder') poderes++;
+      }
+    }
+    // toda secao entrega pelo menos uma capsula: e o que faz o tiro mudar de cara
+    if (!poderes) {
+      const i = 30 + Math.floor(r() * 60);
+      const s = colocar('poder', fatias[i], y0 + i * FATIA + FATIA / 2);
+      if (s) specs.push(s);
+    }
+    return { n, fatias, specs };
+  }
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), setor: Neon.$('setor'),
+    vidas: Neon.$('vidas'), gas: Neon.$('gas'), gasBar: Neon.$('gasBar'),
+    fsScore: Neon.$('fsScore'), fsSetor: Neon.$('fsSetor'), fsKills: Neon.$('fsKills'),
+    stage: Neon.$('stage'),
+  };
+
+  let secoes = [], semente = 0;
+  let dist = 0, vel = VEL_BASE, secaoAtual = 0;
+  let ents = [], tiros = [];
+  let score = 0, kills = 0, vidas = VIDAS_INICIAIS, gas = GAS_MAX, gasMostrado = -1, proxVida = VIDA_EXTRA;
+  let arma = 'simples', armaT = 0, escudo = false, cadencia = 0, invuln = 0;
+  let morteT = 0, motivoMorte = 'bateu', avisoT = 0, abastT = 0;
+  let pb = Neon.best.get('river'), startHi = 0;
+  let state = 'menu', lastFrame = performance.now();
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, cor: '' };
+  const particles = new Neon.Particles();
+  const aviao = { x: W / 2, vx: 0 };
+  els.best.textContent = pb;
+
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(cor, ms) { if (!Neon.motion.reduced) flash = { t: ms, cor }; }
+
+  const planoY = () => dist + PLANO_Y;          // y de mundo do aviao
+  const sy = w => H - (w - dist);               // y de mundo -> y de tela
+
+  function secao(n) {
+    while (secoes.length <= n) secoes.push(gerarSecao(secoes.length, semente));
+    return secoes[n];
+  }
+  function fatia(i) {
+    if (i < 0) return FATIA_RETA;
+    const n = Math.floor(i / SECAO_FATIAS);
+    return secao(n).fatias[i - n * SECAO_FATIAS];
+  }
+  const fatiaEm = y => fatia(Math.floor(y / FATIA));
+
+  // ── entidades ─────────────────────────────────────
+  function nascer(s) {
+    const base = TIPOS[s.tipo], dif = Math.min(1, secaoAtual / 9);
+    const e = { ...base, tipo: s.tipo, x: s.x, y: s.y, spec: s, vx: 0, t: Math.random() * 6, cd: 0, piscaT: 0 };
+    if (s.tipo === 'barco' || s.tipo === 'heli') e.vx = (Math.random() < 0.5 ? -1 : 1) * base.vel * (1 + dif * 0.6);
+    if (s.tipo === 'heli') e.cd = Neon.rand(0.8, 2.2);
+    if (s.tipo === 'jato') { e.x = s.lado > 0 ? -40 : W + 40; e.vx = s.lado * base.vel; }
+    if (s.tipo === 'torre') { e.cd = Neon.rand(0.6, 1.6); e.ang = -Math.PI / 2; }
+    if (s.tipo === 'ponte') { e.x = (s.esq + s.dir) / 2; e.w = s.dir - s.esq + 40; e.esq = s.esq; e.dir = s.dir; }
+    if (s.tipo === 'poder') e.poder = s.poder;
+    s.spawned = true;
+    ents.push(e);
+  }
+  const remover = e => { ents = ents.filter(o => o !== e); };
+
+  // Poe em jogo o que esta pra entrar pelo topo. O jato espera chegar mais perto:
+  // ele cruza a tela inteira num segundo, entao nascer la em cima nao faria sentido.
+  function semear() {
+    const topo = dist + H + 60;
+    const nFim = Math.floor(topo / SECAO_PX);
+    for (let n = secaoAtual; n <= nFim; n++) {
+      for (const s of secao(n).specs) {
+        if (s.spawned || s.y > topo) continue;
+        if (s.tipo === 'jato' && s.y > dist + H * 0.8) continue;
+        if (s.y < dist - 40) { s.spawned = true; continue; }   // ficou pra tras: nao nasce mais
+        nascer(s);
+      }
+    }
+  }
+
+  // Volta pro comeco da secao atual, com a secao inteira de novo: rio igual,
+  // inimigos de volta, tanque cheio, arma simples. E o que o 2600 faz na ponte.
+  function renascer() {
+    for (let n = secaoAtual; n < secoes.length; n++) for (const s of secoes[n].specs) s.spawned = false;
+    ents = []; tiros = [];
+    dist = secaoAtual * SECAO_PX + 3 * FATIA - PLANO_Y;
+    aviao.x = W / 2; aviao.vx = 0; vel = VEL_BASE;
+    gas = GAS_MAX; arma = 'simples'; armaT = 0; escudo = false; invuln = 2.2; cadencia = 0;
+    pintarGas();
+    semear();
+  }
+
+  function pintarGas() {
+    const g = Math.ceil(Math.max(0, gas));
+    if (g === gasMostrado) return;
+    gasMostrado = g;
+    els.gas.textContent = `${g}%`;
+    els.gasBar.style.width = `${g}%`;
+    els.gasBar.style.background = g > 40 ? '' : g > 20 ? 'var(--neon-yellow)' : 'var(--neon-pink)';
+  }
+
+  function pontuar(n) {
+    score += n;
+    els.score.textContent = score;
+    Neon.popEl(els.score);
+    if (score >= proxVida) {
+      proxVida += VIDA_EXTRA;
+      vidas++;
+      els.vidas.textContent = vidas;
+      Neon.popEl(els.vidas);
+      Neon.toast('✈ VIDA EXTRA!');
+      Neon.audio.sfx.record();
+    }
+  }
+
+  function destruir(e) {
+    remover(e);
+    const ey = sy(e.y);
+    if (e.tipo === 'ponte') {
+      pontuar(e.pontos);
+      particles.burst(e.x, ey, '#ffd700', 40, 260, 4);
+      particles.wave(e.x, ey, '#ffd700', 220);
+      particles.float(e.x, ey - 30, '+500', '#ffd700', 18);
+      Neon.audio.sfx.boom();
+      Neon.audio.sfx.level();
+      shakeAt(14, 450);
+      flashAt('rgba(255, 215, 0,', 320);
+      Neon.toast('PONTE DESTRUÍDA · CHECKPOINT');
+      return;
+    }
+    pontuar(e.pontos);
+    if (e.tipo !== 'gas') kills++;
+    particles.burst(e.x, ey, e.cor, e.tipo === 'torre' ? 22 : 14, 200, 3.5);
+    particles.float(e.x, ey - 20, `+${e.pontos}`, e.cor, 13);
+    if (e.tipo === 'torre' || e.tipo === 'gas') { Neon.audio.sfx.boom(); shakeAt(7, 200); }
+    else Neon.audio.sfx.golden();
+  }
+
+  function pegarPoder(e) {
+    remover(e);
+    const ey = sy(e.y);
+    if (e.poder === 'escudo') {
+      escudo = true;
+      Neon.toast('ESCUDO · ABSORVE UMA BATIDA');
+    } else {
+      arma = e.poder;
+      armaT = ARMA_SEGUNDOS;
+      Neon.toast(`ARMA ${ARMAS[arma].nome} · ${ARMA_SEGUNDOS}s`);
+    }
+    Neon.audio.sfx.golden();
+    particles.wave(aviao.x, H - PLANO_Y, PODER_COR[e.poder], 140);
+    particles.burst(e.x, ey, PODER_COR[e.poder], 12, 160, 3);
+  }
+
+  // ── tiro ──────────────────────────────────────────
+  function atirar() {
+    if (state !== 'playing' || cadencia > 0) return;
+    const a = ARMAS[arma];
+    cadencia = a.cadencia;
+    const y = planoY() + 18, v = a.vel + vel;    // soma a propria velocidade: o tiro sempre foge do aviao
+    const novo = (dx, vx) => tiros.push({
+      x: aviao.x + dx, y, vx, vy: v, meu: true, fura: !!a.fura, cor: a.cor, atingidos: a.fura ? new Set() : null,
+    });
+    if (arma === 'duplo') { novo(-10, 0); novo(10, 0); }
+    else if (arma === 'leque') { novo(0, 0); novo(-6, -v * 0.22); novo(6, v * 0.22); }
+    else novo(0, 0);
+    Neon.audio.sfx.shoot();
+  }
+
+  function morrer(motivo) {
+    if (state !== 'playing') return;
+    // A margem mata sempre, como no 2600: a carencia pos-respawn e o escudo so
+    // valem contra inimigo e tiro. Sem gasolina nada segura.
+    if (motivo === 'bateu' || motivo === 'tiro') {
+      if (invuln > 0) return;
+      if (escudo) {
+        escudo = false;
+        invuln = 1.5;
+        Neon.audio.sfx.wall();
+        shakeAt(8, 200);
+        flashAt('rgba(57, 255, 122,', 180);
+        particles.wave(aviao.x, H - PLANO_Y, '#39ff7a', 140);
+        Neon.toast('ESCUDO ABSORVEU!');
+        return;
+      }
+    }
+    state = 'dying';
+    morteT = 1.4;
+    motivoMorte = motivo;
+    vidas--;
+    els.vidas.textContent = vidas;
+    const py = H - PLANO_Y;
+    particles.burst(aviao.x, py, '#ffe600', 30, 260, 4);
+    particles.burst(aviao.x, py, '#ff3b5c', 18, 180, 3);
+    particles.wave(aviao.x, py, '#ffe600', 170);
+    Neon.audio.sfx.boom();
+    shakeAt(14, 400);
+    flashAt('rgba(255, 59, 92,', 300);
+    Neon.audio.music.intensity(0);
+  }
+
+  function fim() {
+    state = 'gameover';
+    imersivo(false);
+    Neon.audio.music.down();
+    pb = Neon.best.update('river', score);
+    els.best.textContent = pb;
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    if (isRecord) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    els.fsScore.textContent = score;
+    els.fsSetor.textContent = secaoAtual + 1;
+    els.fsKills.textContent = kills;
+    Neon.$('finalStats').style.display = 'grid';
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'FIM DE VOO',
+      `${MOTIVOS[motivoMorte]} Você chegou ao setor ${secaoAtual + 1} com ${kills} ${kills === 1 ? 'abate' : 'abates'}.`,
+      'VOAR DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  const imersivo = (on) => document.body.classList.toggle('imersivo', on);
+
+  function startGame() {
+    Neon.audio.ensure();
+    imersivo(true);
+    startHi = pb;
+    semente = (Math.random() * 1e9) >>> 0;
+    secoes = []; secaoAtual = 0;
+    score = 0; kills = 0; vidas = VIDAS_INICIAIS; proxVida = VIDA_EXTRA;
+    els.score.textContent = '0';
+    els.setor.textContent = '1';
+    els.vidas.textContent = vidas;
+    particles.clear();
+    renascer();
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar. O rio espera.', 'RETOMAR');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  // ── input ─────────────────────────────────────────
+  const preso = new Set();
+  const TECLAS = {
+    arrowleft: 'esq', a: 'esq', arrowright: 'dir', d: 'dir',
+    arrowup: 'cima', w: 'cima', arrowdown: 'baixo', s: 'baixo', ' ': 'tiro',
+  };
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'p') { if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); return; }
+    if (k in TECLAS) {
+      e.preventDefault();
+      if (state === 'menu' || state === 'gameover') { startGame(); return; }
+      if (state === 'paused') { resumeGame(); return; }
+      preso.add(TECLAS[k]);
+      return;
+    }
+    if (k === 'enter') {
+      if (state === 'menu' || state === 'gameover') startGame();
+      else if (state === 'paused') resumeGame();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in TECLAS) preso.delete(TECLAS[k]);
+  });
+
+  // Toque: manche na metade esquerda (puxa pro lado desvia, pra frente acelera,
+  // pra tras freia) e tiro em qualquer ponto da metade direita, com o botao
+  // vermelho desenhado ali so pra mostrar onde. Mouse atira em qualquer lugar.
+  // Nao confiar so na media query: em alguns aparelhos ela mente e o jogador fica
+  // sem ver o manche mesmo com o toque funcionando. O primeiro toque decide.
+  let dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  const toques = new Map();
+  let manche = null, segurandoTiro = false;
+  const BOTAO = { x: W - 76, y: H - 100, r: 42 };
+
+  const paraQuadro = (e) => {
+    const r = els.stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  };
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay, .back-btn')) return;
+    e.preventDefault();
+    if (e.pointerType !== 'mouse') dedo = true;
+    if (state !== 'playing' && state !== 'dying') return;
+    const p = paraQuadro(e);
+    if (e.pointerType === 'mouse' || p.x >= W * 0.5 || Math.hypot(p.x - BOTAO.x, p.y - BOTAO.y) < BOTAO.r * 1.3) {
+      toques.set(e.pointerId, 'tiro');
+      segurandoTiro = true;
+    } else {
+      manche = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0, dy: 0 };
+      toques.set(e.pointerId, 'manche');
+    }
+  });
+  els.stage.addEventListener('pointermove', (e) => {
+    if (toques.get(e.pointerId) !== 'manche' || !manche) return;
+    const p = paraQuadro(e);
+    manche.dx = Neon.clamp((p.x - manche.ox) / 60, -1, 1);
+    manche.dy = Neon.clamp((p.y - manche.oy) / 60, -1, 1);
+  });
+  const soltar = (e) => {
+    const t = toques.get(e.pointerId);
+    if (t === undefined) return;
+    toques.delete(e.pointerId);
+    if (t === 'manche') manche = null;
+    if (t === 'tiro' && ![...toques.values()].includes('tiro')) segurandoTiro = false;
+  };
+  window.addEventListener('pointerup', soltar);
+  window.addEventListener('pointercancel', soltar);
+  els.stage.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    if (state === 'dying') {
+      morteT -= dt;
+      if (morteT <= 0) {
+        if (vidas > 0) {
+          renascer();
+          state = 'playing';
+          Neon.toast(`${MOTIVOS[motivoMorte].toUpperCase()} ${vidas} ${vidas === 1 ? 'VIDA' : 'VIDAS'}`);
+        } else fim();
+      }
+      return;
+    }
+    if (state !== 'playing') return;
+
+    // controles: tecla vai no talo, manche vai na proporcao do quanto foi puxado
+    let lado = (preso.has('dir') ? 1 : 0) - (preso.has('esq') ? 1 : 0);
+    let pedal = (preso.has('cima') ? 1 : 0) - (preso.has('baixo') ? 1 : 0);
+    if (manche) { lado += manche.dx; pedal -= manche.dy; }
+    lado = Neon.clamp(lado, -1, 1);
+    pedal = Neon.clamp(pedal, -1, 1);
+    const alvoVel = pedal >= 0 ? VEL_BASE + (VEL_MAX - VEL_BASE) * pedal : VEL_BASE + (VEL_BASE - VEL_MIN) * pedal;
+    vel += (alvoVel - vel) * Math.min(1, dt * 4);
+    aviao.vx += (lado * VEL_LADO - aviao.vx) * Math.min(1, dt * 10);
+    aviao.x = Neon.clamp(aviao.x + aviao.vx * dt, 8, W - 8);
+    dist += vel * dt;
+    if (cadencia > 0) cadencia -= dt * 1000;
+    if (invuln > 0) invuln -= dt;
+    if (preso.has('tiro') || segurandoTiro) atirar();
+
+    const py = planoY();
+    const s = Math.max(0, Math.floor(py / SECAO_PX));
+    if (s > secaoAtual) {
+      secaoAtual = s;
+      els.setor.textContent = s + 1;
+      Neon.popEl(els.setor);
+      Neon.audio.sfx.level();
+      Neon.toast(`SETOR ${s + 1}`);
+    }
+
+    // gasolina: correr gasta mais, e no fim do tanque o aviao cai
+    gas -= dt * (GAS_MAX / GAS_SEG) * (0.7 + 0.3 * vel / VEL_BASE);
+    if (armaT > 0) {
+      armaT -= dt;
+      if (armaT <= 0) { arma = 'simples'; Neon.toast('ARMA SIMPLES'); }
+    }
+    semear();
+
+    // margens: a caixa do aviao contra a fatia da frente e a de tras
+    for (const yy of [py - MEIA_AVIAO, py + MEIA_AVIAO]) {
+      if (bateNaMargem(fatiaEm(yy), aviao.x, MEIA_AVIAO)) { morrer('margem'); return; }
+    }
+
+    let sobreGas = false;
+    for (const e of [...ents]) {
+      e.t += dt;
+      if (e.piscaT > 0) e.piscaT -= dt;
+      if (e.tipo === 'barco' || e.tipo === 'heli') {
+        if (e.tipo === 'heli') {
+          e.cd -= dt;
+          if (e.cd <= 0) { e.cd = Neon.rand(0.8, 2.4); e.vx *= -1; }
+        }
+        e.x += e.vx * dt;
+        const [a, b] = canalDe(fatiaEm(e.y), e.x);
+        if (e.x - e.w / 2 < a + 4) { e.x = a + 4 + e.w / 2; e.vx = Math.abs(e.vx); }
+        else if (e.x + e.w / 2 > b - 4) { e.x = b - 4 - e.w / 2; e.vx = -Math.abs(e.vx); }
+      } else if (e.tipo === 'jato') {
+        e.x += e.vx * dt;
+        if (Math.random() < 0.5) particles.emit(e.x - Math.sign(e.vx) * 22, sy(e.y), -e.vx * 0.15, 0, '#e6e6ff', 2, 0.3);
+        if (e.vx > 0 ? e.x > W + 60 : e.x < -60) { remover(e); continue; }
+      } else if (e.tipo === 'torre') {
+        const dx = aviao.x - e.x, dy = py - e.y;
+        e.ang = Math.atan2(-dy, dx);                  // angulo na tela: y de mundo e invertido
+        if (Math.abs(dy) < H * 0.7 && e.y > py - 40) {
+          e.cd -= dt;
+          if (e.cd <= 0) {
+            e.cd = e.recarga * (1 - Math.min(1, secaoAtual / 9) * 0.35);
+            // mira onde o aviao vai estar, nao onde esta: ele sobe o rio o tempo todo
+            const d = Math.hypot(dx, dy) || 1, tv = d / 300;
+            const ax = aviao.x - e.x, ay = py + vel * tv * 0.7 - e.y, ad = Math.hypot(ax, ay) || 1;
+            tiros.push({ x: e.x, y: e.y, vx: ax / ad * 300, vy: ay / ad * 300, meu: false });
+            Neon.audio.sfx.beep();
+          }
+        }
+      }
+      if (e.y < dist - 80) { remover(e); continue; }
+
+      if (Math.abs(e.x - aviao.x) < e.w / 2 + MEIA_AVIAO && Math.abs(e.y - py) < e.h / 2 + MEIA_AVIAO) {
+        if (e.tipo === 'gas') sobreGas = true;
+        else if (e.tipo === 'poder') pegarPoder(e);
+        else { morrer('bateu'); return; }
+      }
+    }
+
+    if (sobreGas) {
+      gas = Math.min(GAS_MAX, gas + ABASTECE * dt);
+      abastT -= dt;
+      if (abastT <= 0) { abastT = 0.18; Neon.audio.sfx.tick(); }
+    }
+    if (gas <= 0) { gas = 0; pintarGas(); morrer('gas'); return; }
+    if (gas < 20) {
+      avisoT -= dt;
+      if (avisoT <= 0) { avisoT = 0.9; Neon.audio.sfx.flag(); }
+    }
+    pintarGas();
+
+    for (const t of [...tiros]) {
+      t.x += t.vx * dt;
+      t.y += t.vy * dt;
+      if (t.y > dist + H + 40 || t.y < dist - 40 || t.x < -40 || t.x > W + 40) { tiros = tiros.filter(o => o !== t); continue; }
+      if (!t.meu) {
+        if (Math.abs(t.x - aviao.x) < MEIA_AVIAO + 4 && Math.abs(t.y - py) < MEIA_AVIAO + 4) {
+          tiros = tiros.filter(o => o !== t);
+          morrer('tiro');
+          return;
+        }
+        continue;
+      }
+      let gasto = false;
+      for (const e of ents) {
+        if (e.tipo === 'poder') continue;                          // capsula nao quebra: tiro passa
+        if (t.atingidos && t.atingidos.has(e)) continue;
+        if (Math.abs(e.x - t.x) > e.w / 2 + 3 || Math.abs(e.y - t.y) > e.h / 2 + 6) continue;
+        e.vida--;
+        if (e.vida <= 0) destruir(e);
+        else { e.piscaT = 0.12; Neon.audio.sfx.hit(); }
+        if (t.fura) t.atingidos.add(e);
+        else { gasto = true; break; }
+      }
+      if (gasto) tiros = tiros.filter(o => o !== t);
+    }
+
+    Neon.audio.music.intensity(
+      0.25 * (vel - VEL_MIN) / (VEL_MAX - VEL_MIN) + Math.min(0.6, secaoAtual * 0.08) + (gas < 20 ? 0.15 : 0));
+  }
+
+  // ── render ────────────────────────────────────────
+  const AGUA = ctx.createLinearGradient(0, 0, 0, H);
+  AGUA.addColorStop(0, '#031a4a');
+  AGUA.addColorStop(1, '#062a6e');
+
+  function desenharRio() {
+    const i0 = Math.floor(dist / FATIA) - 1, i1 = Math.floor((dist + H) / FATIA) + 1;
+    // terra: chao roxo com a grade synthwave rolando junto com o mundo
+    ctx.fillStyle = '#120636';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255, 43, 214, 0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let w = Math.floor(dist / 60) * 60; w < dist + H + 60; w += 60) {
+      const y = Math.round(sy(w)) + 0.5;
+      ctx.moveTo(0, y); ctx.lineTo(W, y);
+    }
+    for (let x = 30; x < W; x += 60) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+    ctx.stroke();
+
+    // agua, fatia a fatia, em degrau como no 2600
+    ctx.fillStyle = AGUA;
+    for (let i = i0; i <= i1; i++) {
+      const f = fatia(i), y = sy((i + 1) * FATIA);
+      for (const [a, b] of canais(f)) ctx.fillRect(a, y, b - a, FATIA + 1);
+    }
+    // marolas: uma faixa clara a cada tres fatias
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.05)';
+    for (let i = i0; i <= i1; i++) {
+      if (i % 3) continue;
+      const f = fatia(i), y = sy((i + 1) * FATIA) + 8;
+      for (const [a, b] of canais(f)) ctx.fillRect(a + 6, y, b - a - 12, 3);
+    }
+
+    // beira das margens com brilho
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 2;
+    Neon.glow(ctx, '#00f0ff', 12);
+    const borda = (xDe) => {
+      ctx.beginPath();
+      let aberto = false;
+      for (let i = i0; i <= i1; i++) {
+        const x = xDe(fatia(i)), yTop = sy((i + 1) * FATIA), yBot = yTop + FATIA;
+        if (x === null) { aberto = false; continue; }
+        if (!aberto) { ctx.moveTo(x, yBot); aberto = true; } else ctx.lineTo(x, yBot);
+        ctx.lineTo(x, yTop);
+      }
+      ctx.stroke();
+    };
+    borda(f => f.esq);
+    borda(f => f.dir);
+    // ilhas: laterais em degrau e tampa nas pontas
+    ctx.beginPath();
+    for (let i = i0; i <= i1; i++) {
+      const f = fatia(i);
+      if (!f.ilha) continue;
+      const yTop = sy((i + 1) * FATIA), yBot = yTop + FATIA;
+      const [a, b] = f.ilha, ant = fatia(i - 1).ilha, prox = fatia(i + 1).ilha;
+      ctx.moveTo(a, yBot); ctx.lineTo(a, yTop);
+      ctx.moveTo(b, yBot); ctx.lineTo(b, yTop);
+      if (ant) { ctx.moveTo(a, yBot); ctx.lineTo(ant[0], yBot); ctx.moveTo(b, yBot); ctx.lineTo(ant[1], yBot); }
+      else { ctx.moveTo(a, yBot); ctx.lineTo(b, yBot); }
+      if (!prox) { ctx.moveTo(a, yTop); ctx.lineTo(b, yTop); }
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  function desenharEnt(e, now) {
+    const y = sy(e.y);
+    if (y < -60 || y > H + 60) return;
+    const cor = e.piscaT > 0 ? '#ffffff' : e.cor;
+    ctx.save();
+    ctx.translate(e.x, y);
+    if (e.tipo === 'barco') {
+      if (e.vx < 0) ctx.scale(-1, 1);
+      ctx.fillStyle = cor;
+      Neon.glow(ctx, cor, 12);
+      ctx.beginPath();
+      ctx.moveTo(-26, -7); ctx.lineTo(16, -7); ctx.lineTo(26, 0); ctx.lineTo(16, 7); ctx.lineTo(-26, 7);
+      ctx.closePath(); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#05001a';
+      ctx.fillRect(-16, -4, 16, 8);
+    } else if (e.tipo === 'heli') {
+      ctx.fillStyle = cor;
+      Neon.glow(ctx, cor, 12);
+      ctx.beginPath(); ctx.ellipse(0, 0, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(e.vx < 0 ? 12 : -30, -2, 18, 4);
+      ctx.fillRect(e.vx < 0 ? 26 : -30, -7, 4, 10);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2;
+      ctx.save();
+      ctx.rotate(now / 40 + e.t);
+      ctx.beginPath(); ctx.moveTo(-24, 0); ctx.lineTo(24, 0); ctx.moveTo(0, -24); ctx.lineTo(0, 24); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#05001a';
+      ctx.fillRect(e.vx < 0 ? -10 : 2, -4, 8, 6);
+    } else if (e.tipo === 'jato') {
+      if (e.vx < 0) ctx.scale(-1, 1);
+      ctx.fillStyle = cor;
+      Neon.glow(ctx, cor, 14);
+      ctx.beginPath();
+      ctx.moveTo(26, 0); ctx.lineTo(-8, -9); ctx.lineTo(-22, -9); ctx.lineTo(-14, 0); ctx.lineTo(-22, 9); ctx.lineTo(-8, 9);
+      ctx.closePath(); ctx.fill();
+    } else if (e.tipo === 'mina') {
+      const pulso = 0.5 + 0.5 * Math.sin(now / 150 + e.t);
+      ctx.strokeStyle = cor;
+      ctx.fillStyle = cor;
+      ctx.lineWidth = 3;
+      Neon.glow(ctx, cor, 8 + pulso * 10);
+      ctx.beginPath();
+      for (let k = 0; k < 8; k++) {
+        const a = k * Math.PI / 4 + e.t;
+        ctx.moveTo(Math.cos(a) * 7, Math.sin(a) * 7); ctx.lineTo(Math.cos(a) * 13, Math.sin(a) * 13);
+      }
+      ctx.stroke();
+      Neon.circle(ctx, 0, 0, 8);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#05001a';
+      Neon.circle(ctx, 0, 0, 3);
+    } else if (e.tipo === 'torre') {
+      ctx.fillStyle = '#1a0b2e';
+      ctx.strokeStyle = cor;
+      ctx.lineWidth = 2;
+      Neon.glow(ctx, cor, 10);
+      ctx.fillRect(-17, -17, 34, 34);
+      ctx.strokeRect(-17, -17, 34, 34);
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(e.ang) * 24, Math.sin(e.ang) * 24); ctx.stroke();
+      ctx.fillStyle = cor;
+      Neon.circle(ctx, 0, 0, 7);
+      if (e.vida < TIPOS.torre.vida) { ctx.shadowBlur = 0; ctx.fillStyle = '#05001a'; Neon.circle(ctx, 0, 0, 3); }
+    } else if (e.tipo === 'gas') {
+      ctx.fillStyle = 'rgba(57, 255, 122, 0.16)';
+      ctx.strokeStyle = cor;
+      ctx.lineWidth = 2;
+      Neon.glow(ctx, cor, 10);
+      // caixa arredondada na mao: roundRect ainda nao existe em Safari antigo
+      ctx.beginPath();
+      ctx.moveTo(-14, -32); ctx.lineTo(14, -32); ctx.quadraticCurveTo(20, -32, 20, -26);
+      ctx.lineTo(20, 26); ctx.quadraticCurveTo(20, 32, 14, 32);
+      ctx.lineTo(-14, 32); ctx.quadraticCurveTo(-20, 32, -20, 26);
+      ctx.lineTo(-20, -26); ctx.quadraticCurveTo(-20, -32, -14, -32);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = cor;
+      ctx.fillRect(-20, -32, 40, 9);
+      ctx.font = '700 12px Orbitron, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('GAS', 0, 4);
+      ctx.fillRect(-12, 16, 24, 3);
+    } else if (e.tipo === 'ponte') {
+      const a = e.esq - 20 - e.x, b = e.dir + 20 - e.x;
+      ctx.fillStyle = '#1a0b2e';
+      ctx.fillRect(a, -15, b - a, 30);
+      ctx.fillStyle = cor;
+      Neon.glow(ctx, cor, 10);
+      ctx.fillRect(a, -15, b - a, 3);
+      ctx.fillRect(a, 12, b - a, 3);
+      ctx.globalAlpha = 0.6;
+      for (let x = e.esq + 8 - e.x; x < e.dir - 8 - e.x; x += 40) ctx.fillRect(x - 2, -11, 4, 22);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ff2bd6';
+      Neon.glow(ctx, '#ff2bd6', 8);
+      for (let x = a + 12; x < b; x += 26) {
+        ctx.globalAlpha = (((now / 300) | 0) + ((x / 26) | 0)) % 2 ? 1 : 0.3;
+        Neon.circle(ctx, x, 0, 2.5);
+      }
+      ctx.globalAlpha = 1;
+    } else if (e.tipo === 'poder') {
+      const c = PODER_COR[e.poder];
+      ctx.translate(0, Math.sin(now / 250 + e.t) * 3);
+      ctx.fillStyle = 'rgba(5, 0, 26, 0.85)';
+      ctx.strokeStyle = c;
+      ctx.lineWidth = 2;
+      Neon.glow(ctx, c, 14);
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const ang = k * Math.PI / 3 - Math.PI / 6;
+        ctx.lineTo(Math.cos(ang) * 15, Math.sin(ang) * 15);
+      }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = c;
+      ctx.font = '700 13px Orbitron, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(PODER_LETRA[e.poder], 0, 1);
+    }
+    ctx.restore();
+  }
+
+  function desenharTiro(t) {
+    const y = sy(t.y);
+    if (t.meu) {
+      ctx.fillStyle = t.cor;
+      Neon.glow(ctx, t.cor, 10);
+      if (t.fura) ctx.fillRect(t.x - 2, y - 14, 4, 28);
+      else ctx.fillRect(t.x - 2, y - 6, 4, 12);
+    } else {
+      ctx.fillStyle = '#ff2bd6';
+      Neon.glow(ctx, '#ff2bd6', 10);
+      Neon.circle(ctx, t.x, y, 5);
+    }
+    ctx.shadowBlur = 0;
+  }
+
+  function desenharAviao(now) {
+    const x = aviao.x, y = H - PLANO_Y;
+    if (escudo) {
+      ctx.strokeStyle = '#39ff7a';
+      ctx.lineWidth = 2;
+      Neon.glow(ctx, '#39ff7a', 14);
+      ctx.globalAlpha = 0.6 + 0.3 * Math.sin(now / 120);
+      ctx.beginPath(); ctx.arc(x, y, 32, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
+    if (invuln > 0 && ((now / 90) | 0) % 2) return;
+    ctx.save();
+    ctx.translate(x, y);
+    const rolagem = aviao.vx / VEL_LADO;
+    ctx.scale(1 - Math.abs(rolagem) * 0.3, 1);
+    // chama do motor: cresce com a velocidade
+    const f = (vel - VEL_MIN) / (VEL_MAX - VEL_MIN);
+    ctx.fillStyle = '#ff8c1a';
+    Neon.glow(ctx, '#ff8c1a', 14);
+    ctx.globalAlpha = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(-4, 14); ctx.lineTo(4, 14); ctx.lineTo(0, 24 + f * 22 + Math.sin(now / 40) * 3);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffe600';
+    Neon.glow(ctx, '#ffe600', 16);
+    ctx.beginPath();
+    ctx.moveTo(0, -22); ctx.lineTo(5, -6); ctx.lineTo(20, 6); ctx.lineTo(20, 10); ctx.lineTo(5, 8);
+    ctx.lineTo(7, 16); ctx.lineTo(-7, 16); ctx.lineTo(-5, 8); ctx.lineTo(-20, 10); ctx.lineTo(-20, 6); ctx.lineTo(-5, -6);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#05001a';
+    ctx.fillRect(-2, -12, 4, 10);
+    ctx.restore();
+  }
+
+  function desenharControles() {
+    if (!dedo || (state !== 'playing' && state !== 'dying')) return;
+    const bx = manche ? manche.ox : W * 0.16, by = manche ? manche.oy : H - 100;
+    ctx.globalAlpha = 0.45;
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(bx, by, 48, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.3)';
+    Neon.circle(ctx, bx + (manche ? manche.dx * 38 : 0), by + (manche ? manche.dy * 38 : 0), 22);
+    ctx.globalAlpha = segurandoTiro ? 0.9 : 0.45;
+    ctx.strokeStyle = '#ff3b5c';
+    ctx.fillStyle = segurandoTiro ? 'rgba(255, 59, 92, 0.5)' : 'rgba(255, 59, 92, 0.2)';
+    ctx.beginPath(); ctx.arc(BOTAO.x, BOTAO.y, BOTAO.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ff3b5c';
+    ctx.font = '700 11px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('TIRO', BOTAO.x, BOTAO.y);
+    ctx.globalAlpha = 1;
+  }
+
+  // Faixa de HUD dentro do quadro e medidor de gasolina na base, como o E-F do
+  // 2600. O painel de fora some no modo imersivo, entao tudo que importa vive aqui.
+  function hud(now) {
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.55)';
+    ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
+    ctx.fillRect(0, 30, W, 1);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    let hx = 72;                                   // abre espaco pro .back-btn
+    const rotulo = (rot) => {
+      ctx.fillStyle = 'rgba(232, 230, 245, 0.5)';
+      ctx.font = '700 9px Orbitron, sans-serif';
+      ctx.fillText(rot, hx, 15);
+      hx += ctx.measureText(rot).width + 8;
+    };
+    const valor = (val, cor) => {
+      ctx.fillStyle = cor;
+      ctx.font = '700 14px Orbitron, sans-serif';
+      ctx.fillText(String(val), hx, 15);
+      hx += ctx.measureText(String(val)).width + 22;
+    };
+    rotulo('PONTOS'); valor(score, '#ffe600');
+    rotulo('SETOR'); valor(secaoAtual + 1, '#00f0ff');
+    rotulo('VIDAS');
+    ctx.fillStyle = '#39ff7a';
+    for (let k = 0; k < Math.min(vidas, 6); k++) {
+      ctx.beginPath(); ctx.moveTo(hx + 6, 8); ctx.lineTo(hx + 12, 21); ctx.lineTo(hx, 21); ctx.closePath(); ctx.fill();
+      hx += 15;
+    }
+    hx += 16;
+    rotulo('ARMA'); valor(ARMAS[arma].nome, ARMAS[arma].cor);
+    if (armaT > 0) {
+      hx -= 12;
+      ctx.fillStyle = 'rgba(255,255,255,0.14)';
+      ctx.fillRect(hx, 12, 50, 5);
+      ctx.fillStyle = ARMAS[arma].cor;
+      ctx.fillRect(hx, 12, 50 * Neon.clamp(armaT / ARMA_SEGUNDOS, 0, 1), 5);
+      hx += 62;
+    }
+    if (escudo) { rotulo('ESCUDO'); valor('ON', '#39ff7a'); }
+
+    // medidor de gasolina
+    const gw = Math.min(360, W * 0.46), gx = (W - gw) / 2, gy = H - 34, gh = 12;
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.7)';
+    ctx.fillRect(gx - 10, gy - 14, gw + 20, gh + 34);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(gx, gy, gw, gh);
+    const cor = gas > 40 ? '#39ff7a' : gas > 20 ? '#ffe600' : '#ff3b5c';
+    const pisca = gas < 20 && ((now / 250) | 0) % 2;
+    ctx.fillStyle = cor;
+    Neon.glow(ctx, cor, 10);
+    ctx.globalAlpha = pisca ? 0.35 : 1;
+    ctx.fillRect(gx, gy, gw * Neon.clamp(gas / GAS_MAX, 0, 1), gh);
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(232, 230, 245, 0.7)';
+    ctx.font = '700 9px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('GASOLINA', W / 2, gy - 7);
+    ctx.fillText('E', gx, gy + gh + 10);
+    ctx.fillText('½', W / 2, gy + gh + 10);
+    ctx.fillText('F', gx + gw, gy + gh + 10);
+    ctx.fillStyle = 'rgba(232, 230, 245, 0.5)';
+    ctx.fillRect(W / 2 - 0.5, gy - 3, 1, gh + 6);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+  }
+
+  function render(now) {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.power * (shake.t / shake.max);
+      ctx.translate(Neon.rand(-k, k), Neon.rand(-k, k));
+    }
+    desenharRio();
+    for (const e of ents) desenharEnt(e, now);
+    for (const t of tiros) desenharTiro(t);
+    if (state !== 'dying') desenharAviao(now);
+    particles.draw(ctx);
+    ctx.restore();
+    desenharControles();
+    hud(now);
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.cor} ${Math.min(0.4, flash.t / 220)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    particles.update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  // tela de menu ja mostra um rio de verdade atras do overlay
+  semente = (Math.random() * 1e9) >>> 0;
+  dist = 3 * FATIA - PLANO_Y;
+  semear();
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

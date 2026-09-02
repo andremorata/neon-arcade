@@ -52,7 +52,8 @@ Além disso, recorta funções direto do fonte de cada jogo e roda a lógica de 
 uma cópia que dessincroniza com o tempo. Hoje cobre a rebatida do Pong, os setores do alvo do
 Darts, os anéis do Archer, o apoio por centro de massa do Siege, a curva de velocidade do
 Piano, a cruz de explosão e a fuga da própria bomba no Bomber, e a projeção da pista, as
-curvas de clima e a contagem de ultrapassagem do Enduro. Boa parte desses testes nasceu de um
+curvas de clima e a contagem de ultrapassagem do Enduro, e o gerador de rio do River (margens,
+ilhas, ponte e respawn determinístico por semente). Boa parte desses testes nasceu de um
 bug real, e o comentário acima de cada um diz qual.
 
 ## Estrutura
