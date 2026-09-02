@@ -95,8 +95,9 @@
   const VEL_MIN = 120, VEL_BASE = 210, VEL_MAX = 380, VEL_LADO = 300;
   // O cruzeiro so chega em VEL_BASE no setor VEL_SETORES. O setor 1 tem que dar
   // tempo de ler o rio; a pressa vem junto com a dificuldade, nao antes dela.
-  const VEL_SETORES = 4;
-  const velBase = () => VEL_BASE * (0.72 + 0.28 * Math.min(1, secaoAtual / VEL_SETORES));
+  const VEL_SETORES = 4, VEL_LARGADA = 0.55;
+  const velBase = () => VEL_BASE * (VEL_LARGADA + (1 - VEL_LARGADA) * Math.min(1, secaoAtual / VEL_SETORES));
+  const VEL_FREIO = 0.42;              // o freio tira ate 42% do cruzeiro do momento
   const GAS_MAX = 100, GAS_SEG = 42, ABASTECE = 34;   // segundos pra secar o tanque · gas por segundo no deposito
   const VIDAS_INICIAIS = 3, VIDA_EXTRA = 10000;
   const ARMA_SEGUNDOS = 25;
@@ -579,7 +580,7 @@
     lado = Neon.clamp(lado, -1, 1);
     pedal = Neon.clamp(pedal, -1, 1);
     const vb = velBase();
-    const alvoVel = pedal >= 0 ? vb + (VEL_MAX - vb) * pedal : vb + (vb - VEL_MIN) * pedal;
+    const alvoVel = pedal >= 0 ? vb + (VEL_MAX - vb) * pedal : vb * (1 + VEL_FREIO * pedal);
     vel += (alvoVel - vel) * Math.min(1, dt * 4);
     aviao.vx += (lado * VEL_LADO - aviao.vx) * Math.min(1, dt * 10);
     aviao.x = Neon.clamp(aviao.x + aviao.vx * dt, 8, W - 8);
