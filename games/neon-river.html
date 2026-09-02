@@ -82,13 +82,21 @@
   const RETA = 10;                     // fatias retas e largas nas duas pontas da secao
   const RAMPA = 40;                    // fatias antes do fim em que o rio volta pro centro
   const MARGEM = 44;                   // terra minima de cada lado: cabe uma torre
-  const MEIA_MIN = Math.round(W * 0.11), MEIA_MAX = Math.round(W * 0.32);
+  // O aviao e os inimigos tem largura fixa em px, entao o rio nao pode ser so uma
+  // fracao de W: em pe (600) a mesma fracao daria um rio 33% mais estreito que
+  // deitado (900) com um barco de 52px dentro. Piso absoluto resolve nas duas.
+  const MEIA_MIN = Math.max(Math.round(W * 0.11), 86);
+  const MEIA_MAX = Math.max(Math.round(W * 0.32), MEIA_MIN + 64);
   const MEIA_RETA = Math.round(MEIA_MAX * 0.85);
-  const CANAL_MIN = 64;                // canal de cada lado da ilha: o aviao tem 24
+  const CANAL_MIN = 76;                // canal de cada lado da ilha: o aviao tem 24
   const FATIA_RETA = { esq: Math.round(W / 2 - MEIA_RETA), dir: Math.round(W / 2 + MEIA_RETA), ilha: null };
 
   const PLANO_Y = 120, MEIA_AVIAO = 12;
   const VEL_MIN = 120, VEL_BASE = 210, VEL_MAX = 380, VEL_LADO = 300;
+  // O cruzeiro so chega em VEL_BASE no setor VEL_SETORES. O setor 1 tem que dar
+  // tempo de ler o rio; a pressa vem junto com a dificuldade, nao antes dela.
+  const VEL_SETORES = 4;
+  const velBase = () => VEL_BASE * (0.72 + 0.28 * Math.min(1, secaoAtual / VEL_SETORES));
   const GAS_MAX = 100, GAS_SEG = 42, ABASTECE = 34;   // segundos pra secar o tanque · gas por segundo no deposito
   const VIDAS_INICIAIS = 3, VIDA_EXTRA = 10000;
   const ARMA_SEGUNDOS = 25;
@@ -300,7 +308,7 @@
     for (let n = secaoAtual; n < secoes.length; n++) for (const s of secoes[n].specs) s.spawned = false;
     ents = []; tiros = [];
     dist = secaoAtual * SECAO_PX + 3 * FATIA - PLANO_Y;
-    aviao.x = W / 2; aviao.vx = 0; vel = VEL_BASE;
+    aviao.x = W / 2; aviao.vx = 0; vel = velBase();
     gas = GAS_MAX; arma = 'simples'; armaT = 0; escudo = false; invuln = 2.2; cadencia = 0;
     pintarGas();
     semear();
@@ -519,11 +527,18 @@
       toques.set(e.pointerId, 'manche');
     }
   });
+  // Zona morta antes de reagir: sem ela o tremor do dedo parado ja desviava o
+  // aviao. Depois dela o curso e longo, pra dar controle fino em vez de tudo-ou-nada.
+  const MANCHE_MORTO = 14, MANCHE_CURSO = 105;
+  const eixoManche = (d) => {
+    const a = Math.abs(d);
+    return a <= MANCHE_MORTO ? 0 : Neon.clamp(Math.sign(d) * (a - MANCHE_MORTO) / MANCHE_CURSO, -1, 1);
+  };
   els.stage.addEventListener('pointermove', (e) => {
     if (toques.get(e.pointerId) !== 'manche' || !manche) return;
     const p = paraQuadro(e);
-    manche.dx = Neon.clamp((p.x - manche.ox) / 60, -1, 1);
-    manche.dy = Neon.clamp((p.y - manche.oy) / 60, -1, 1);
+    manche.dx = eixoManche(p.x - manche.ox);
+    manche.dy = eixoManche(p.y - manche.oy);
   });
   const soltar = (e) => {
     const t = toques.get(e.pointerId);
@@ -563,7 +578,8 @@
     if (manche) { lado += manche.dx; pedal -= manche.dy; }
     lado = Neon.clamp(lado, -1, 1);
     pedal = Neon.clamp(pedal, -1, 1);
-    const alvoVel = pedal >= 0 ? VEL_BASE + (VEL_MAX - VEL_BASE) * pedal : VEL_BASE + (VEL_BASE - VEL_MIN) * pedal;
+    const vb = velBase();
+    const alvoVel = pedal >= 0 ? vb + (VEL_MAX - vb) * pedal : vb + (vb - VEL_MIN) * pedal;
     vel += (alvoVel - vel) * Math.min(1, dt * 4);
     aviao.vx += (lado * VEL_LADO - aviao.vx) * Math.min(1, dt * 10);
     aviao.x = Neon.clamp(aviao.x + aviao.vx * dt, 8, W - 8);
