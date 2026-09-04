@@ -55,12 +55,151 @@ assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda
 const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
+// o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
+assert.match(games.wheels, /pb = Neon\.best\.update\('wheels', total\)/, 'O Wheels precisa gravar o total de estrelas');
 // o breach grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.breach, /pb = Neon\.best\.update\('breach', score\)/, 'O Breach precisa gravar o recorde');
 for (const [key, variable] of Object.entries(BEST)) {
   assert.match(games[key], new RegExp(`pb\\s*=\\s*Neon\\.best\\.update\\('${key}', ${variable}\\)`),
     `O ${key} deve atualizar o recorde em memória`);
 }
+
+// ── NEON WHEELS ────────────────────────────────────
+// O bloco de fisica e recortado do fonte e rodado aqui: e a unica forma de
+// saber que as 12 pistas fecham sem abrir o navegador uma por uma.
+const wheels = games.wheels;
+const wIni = wheels.indexOf('  // \u2500\u2500 f\u00edsica \u2500\u2500');
+const wFim = wheels.indexOf('  // \u2500\u2500 fim da f\u00edsica \u2500\u2500');
+assert.ok(wIni > 0 && wFim > wIni, 'wheels: marcadores do bloco de fisica nao encontrados');
+const W = new Function(wheels.slice(wIni, wFim)
+  + '; return { K, STEP, PISTAS, CONJUNTOS, compilar, novoCarro, passo, piloto, correrSozinho };')();
+
+assert.strictEqual(W.PISTAS.length, 12, 'O Wheels tem 12 fases');
+assert.strictEqual(W.CONJUNTOS.length, 3, 'As 12 fases vem em 3 conjuntos');
+for (const c of W.CONJUNTOS) assert.strictEqual(c.pistas.length, 4, `O conjunto ${c.nome} tem 4 pistas`);
+
+// Tempo de ar pra fechar um giro segurando o pedal. Nao e 2*PI/tilt: o giro
+// leva tiltResp pra pegar velocidade, e essa rampa e justamente o que perdoa
+// os pulinhos. Integra a rampa em vez de chutar o numero.
+const arNecessario = (() => {
+  let w = 0, giro = 0, t = 0;
+  while (t < 5) {
+    w += (-W.K.tilt - w) * Math.min(1, W.K.tiltResp * W.STEP);
+    giro += w * W.STEP;
+    t += W.STEP;
+    if (Math.abs(giro) >= 2 * Math.PI * 0.9) return t;
+  }
+  assert.fail('wheels: com esse tilt nao da pra fechar um flip');
+})();
+
+for (const pd of W.PISTAS) {
+  const p = W.compilar(pd.pecas);
+  assert.ok(p.fim > 4000, `${pd.nome}: pista curta demais (${p.fim.toFixed(0)}px)`);
+
+  // toda pista fecha com o piloto automatico segurando o gas, e sobra gasolina:
+  // sem isso a fase e impossivel pra crianca, que e a regra do plano
+  const car = W.novoCarro(p);
+  let maiorVoo = 0;
+  for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+    W.piloto(car);
+    W.passo(car, p, W.STEP);
+    for (const e of car.ev) if (e.tipo === 'pouso') maiorVoo = Math.max(maiorVoo, e.ar);
+    car.ev.length = 0;
+  }
+  assert.ok(!car.morto, `${pd.nome}: o piloto morreu (${car.morto}) em x=${car.x.toFixed(0)}`);
+  assert.ok(car.x >= p.fim, `${pd.nome}: o piloto nao chegou (x=${car.x.toFixed(0)} de ${p.fim.toFixed(0)})`);
+  // a segunda estrela pede 25% de gasolina na chegada: se nem o piloto
+  // automatico consegue, a estrela e inalcancavel naquela pista
+  assert.ok(car.gasolina >= 25,
+    `${pd.nome}: o piloto chega com ${car.gasolina.toFixed(0)}%, a estrela dos 25% fica impossivel`);
+  assert.ok(maiorVoo >= arNecessario,
+    `${pd.nome}: maior voo e ${maiorVoo.toFixed(2)}s, precisa de ${arNecessario.toFixed(2)}s pra um flip`);
+}
+
+// A fase 1 e o tutorial: quem so segura o gas, sem soltar no ar, tem que
+// percorrer boa parte dela antes de capotar. Sem isso a crianca bate nos
+// primeiros 10 segundos toda vez e larga o jogo.
+{
+  const p = W.compilar(W.PISTAS[0].pecas), car = W.novoCarro(p);
+  for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+    car.gas = true; car.freio = false;
+    W.passo(car, p, W.STEP);
+    car.ev.length = 0;
+  }
+  const parte = car.x / p.fim;
+  assert.ok(parte > 0.35,
+    `A fase 1 e o tutorial: so-gas chega a ${(parte * 100).toFixed(0)}% da pista, precisa passar de 35%`);
+}
+
+// "Sem pista impossivel": um jogador lento gasta mais gasolina de base. Com o
+// dreno 80% maior o piloto ainda tem que chegar em todas as 12, senao a fase
+// trava a crianca por combustivel em vez de por habilidade.
+const drenoNormal = W.K.dreno;
+W.K.dreno = drenoNormal * 1.8;
+for (const pd of W.PISTAS) {
+  const p = W.compilar(pd.pecas), car = W.novoCarro(p);
+  for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+    W.piloto(car);
+    W.passo(car, p, W.STEP);
+    car.ev.length = 0;
+  }
+  assert.ok(car.x >= p.fim && !car.morto,
+    `${pd.nome}: com dreno de jogador lento o carro nao chega (x=${car.x.toFixed(0)}, ${car.morto || 'sem gasolina'})`);
+}
+W.K.dreno = drenoNormal;
+
+// correrSozinho e o que gera o tempo-alvo da terceira estrela: precisa ser
+// determinista e devolver os itens ao estado inicial, senao a corrida do
+// jogador comeca com as moedas ja coletadas
+const pw = W.compilar(W.PISTAS[0].pecas);
+const r1 = W.correrSozinho(pw), r2 = W.correrSozinho(pw);
+assert.strictEqual(r1.t, r2.t, 'O tempo-alvo do Wheels tem que ser deterministico');
+assert.ok(r1.t > 5 && r1.t < 90, `Tempo-alvo fora de escala: ${r1.t.toFixed(1)}s`);
+assert.ok(pw.itens.every(i => !i.pego), 'correrSozinho tem que devolver as moedas e latas');
+
+// o loop so passa com velocidade: e o que faz o booster ter proposito
+const wLoop = W.compilar([['reta', 300], ['loop', 100], ['reta', 400], ['chegada']]);
+const lancar = (v) => {
+  const c = W.novoCarro(wLoop);
+  c.x = 200; c.vx = v;
+  for (let i = 0; i < 6 * 240 && !c.morto && c.x < wLoop.fim; i++) { W.passo(c, wLoop, W.STEP); c.ev.length = 0; }
+  return c;
+};
+assert.ok(lancar(450).x < 500, 'A 450 px/s o carro nao pode passar do loop');
+assert.strictEqual(lancar(650).morto, 'teto', 'A 650 px/s o carro cai de teto no loop');
+assert.ok(!lancar(950).morto, 'A 950 px/s o carro fecha o loop');
+
+// o flip conta quando fecha a volta, ainda no ar, e passar no loop nao e flip
+const wAr = W.compilar(W.PISTAS[0].pecas);
+const voador = W.novoCarro(wAr);
+voador.y -= 500; voador.vy = -260; voador.vx = 300;
+let flipNoAr = null;
+for (let i = 0; i < 3 * 240 && !voador.morto; i++) {
+  voador.gas = true;
+  W.passo(voador, wAr, W.STEP);
+  for (const e of voador.ev) if (e.tipo === 'flip' && voador.chao === 0 && !flipNoAr) flipNoAr = e;
+  voador.ev.length = 0;
+}
+assert.ok(flipNoAr, 'O flip do Wheels tem que ser contado ainda no ar');
+assert.strictEqual(flipNoAr.sentido, 'back', 'Gas preso no ar da backflip');
+
+const noLoop = lancar(950);
+assert.strictEqual(noLoop.flips, 0, `Passar no loop nao e flip (contou ${noLoop.flips})`);
+
+// o tanque seca e corta o motor, mas o carro nao trava: rola ate parar
+const wSeco = W.compilar([['reta', 4000], ['chegada']]);
+const seco = W.novoCarro(wSeco);
+seco.gasolina = 0;
+for (let i = 0; i < 240; i++) { seco.gas = true; W.passo(seco, wSeco, W.STEP); seco.ev.length = 0; }
+assert.ok(Math.hypot(seco.vx, seco.vy) < 5, 'Sem gasolina o motor nao empurra');
+// e uma lata devolve combustivel sem passar do tanque cheio
+const wLata = W.compilar([['reta', 600], ['lata'], ['reta', 600], ['chegada']]);
+assert.strictEqual(wLata.itens.filter(i => i.tipo === 'lata').length, 1, 'A peca lata gera uma lata');
+const bebe = W.novoCarro(wLata);
+bebe.gasolina = 10;
+for (let i = 0; i < 6 * 240 && bebe.x < 700; i++) { bebe.gas = true; W.passo(bebe, wLata, W.STEP); bebe.ev.length = 0; }
+assert.ok(bebe.gasolina > 10, 'A lata tem que reabastecer');
+assert.ok(bebe.gasolina <= W.K.tanque, 'A lata nao pode passar do tanque cheio');
 
 // geometria do alvo do Darts: setor/anel precisam bater com o desenho, senao o dardo
 // crava num lugar e pontua outro. Usa as constantes do proprio arquivo pra nao dessincronizar.

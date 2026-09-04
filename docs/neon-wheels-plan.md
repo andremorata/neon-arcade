@@ -149,6 +149,7 @@ marca da Mattel e não entra em texto nenhum do jogo.
 | Corrida | gás/freio, giro no ar, gasolina, latas, moedas, chegada, explosão, reinício instantâneo | ré, checkpoint no meio da pista |
 | Pista | reta, rampa, ondulação, lombada, salto, loop, booster, vão, elevador, obstáculo fixo, obstáculo móvel (martelo/plataforma) | caminho dividido, editor de pista |
 | Acrobacia | flip, wheelie, tempo de ar, pouso perfeito, combo com multiplicador visível | near-miss, endo |
+| Fases | **12 pistas em 3 conjuntos de 4**, abertas em ordem e rejogáveis depois de abertas | 24 pistas, editor de pista |
 | Estrelas | 3 por pista: chegar / chegar com gasolina folgada / bater o tempo-alvo | estrela por moedas |
 | Carros | 8 carros em 3 conjuntos, 4 atributos, evolução com moeda universal | raridade, caixa surpresa |
 | Competição | rival de IA na pista; Desafio do Dia (3 rivais, 2 vidas); placar local de tempo por pista | multiplayer online, gemas, anúncios, presente por relógio |
@@ -283,6 +284,7 @@ determinística por pista, então o Desafio do Dia é o mesmo para todos no mesm
 ```js
 { v: 1, moedas: 0, carro: 'faisca',
   carros: { faisca: { vel: 1, grip: 1, estab: 1, tilt: 1 } },
+  aberta: 3,                                    // índice da última pista liberada
   pistas: { 'rua-1': { estrelas: 3, tempo: 41.2, pontos: 1820 } },
   barra: 0.35, desafio: { dia: '2026-09-04', feito: false } }
 ```
@@ -291,8 +293,8 @@ Campo `v` para migrar sem apagar o progresso da criança. Nunca renomear a chave
 
 ### 2.9 Telas
 
-1. **Hub**: garagem (carro atual, 4 barras, botão evoluir), seletor de conjunto e pista com
-   estrelas, botão do Desafio do Dia, total de estrelas e moedas.
+1. **Hub**: garagem (carro atual, 4 barras, botão evoluir), grade de 12 fases com estrelas,
+   botão do Desafio do Dia, total de estrelas e moedas.
 2. **Corrida**: HUD com gasolina, moedas, tempo, combo; pedais; rival visível; pausa.
 3. **Resultado**: 3 estrelas com animação uma a uma, pontuação detalhada, "DE NOVO" e
    "PRÓXIMA". Reinício também pelo `R` a qualquer momento (sem passar pela tela).
@@ -300,6 +302,12 @@ Campo `v` para migrar sem apagar o progresso da criança. Nunca renomear a chave
 
 O hub é HTML sobre o `.stage` (como o overlay), não canvas: mais fácil de fazer botões grandes
 para dedo de criança e de manter o tema.
+
+**Liberação das fases.** A 1 nasce aberta. Fechar uma fase abre a seguinte e grava
+`aberta` no save. Fase fechada mostra cadeado e não clica. Fase aberta mostra as estrelas
+ganhas e o melhor tempo, e joga de novo à vontade: a criança volta em qualquer pista já
+liberada pra buscar a estrela que faltou. Nunca desfaz uma liberação, nem quando o save migra
+de versão.
 
 ### 2.10 Fases de desenvolvimento
 
@@ -309,11 +317,11 @@ Cada fase termina jogável e mergeável em `main`; a suíte nunca fica com um jo
 |---|---|---|
 | **0 · Protótipo de física** (`proto/wheels.html`, fora de `games/` porque o teste exige tile no menu para tudo que está lá; `node proto/wheels-check.js` trava a física) | carro + reta + rampa + loop + salto; pedais; explosão | um adulto acha o loop "gostoso" e a criança consegue fazer um flip em 5 min |
 | **1 · Uma corrida inteira** | 1 pista, gasolina, latas, moedas, chegada, estrelas, reinício, HUD, pausa, som, entrada no `GAMES` | fecha a pista no iPad e no desktop; `node test-games.js` passa |
-| **2 · Kit de pista** | compilador + todas as peças da tabela; 8 pistas do conjunto Rua; paralaxe | as 8 pistas fecham com o carro base; tempo-alvo gerado pela IA |
+| **2 · Kit de pista** | compilador + todas as peças da tabela; 4 pistas do conjunto Rua; paralaxe | as 4 pistas fecham com o carro base; tempo-alvo gerado pela IA |
 | **3 · Acrobacias** | sensores, combo, texto flutuante, barra persistente, baú | placar de pontuação por pista |
-| **4 · Garagem e save** | 8 carros, evolução, moeda universal, save versionado, hub | progresso sobrevive a fechar o navegador e a atualizar o jogo |
+| **4 · Garagem e save** | 8 carros, evolução, moeda universal, save versionado, hub com grade de fases e cadeado | progresso sobrevive a fechar o navegador e a atualizar o jogo; fase liberada nunca fecha de novo |
 | **5 · Competição** | rival na pista, 3 perfis, Desafio do Dia, placar local | Desafio funciona offline e repete por data |
-| **6 · Conjuntos 2 e 3** | 16 pistas com elevador, martelo, plataforma; carros Fora de estrada e Velocidade | 24 pistas, 72 estrelas |
+| **6 · Conjuntos 2 e 3** | 8 pistas com elevador, martelo, plataforma; carros Fora de estrada e Velocidade | 12 pistas, 36 estrelas |
 | **7 · Polimento** | câmera com zoom, shake, clima/hora nos conjuntos, música por intensidade, tutorial na pista 1, celebrações | teste com a criança: entende sem explicação |
 
 Ordem importa: física antes de tudo, porque se o carro não for gostoso nada em cima salva.

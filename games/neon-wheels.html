@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON WHEELS — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  /* 16:9 como o Slug: em celular deitado sobra menos tarja */
+  .stage { --arw: 16; --arh: 9; --maxw: 960px; }
+  .toast { top: 52px; }
+
+  /* Hub das fases: HTML sobre o quadro, não canvas. Botão grande para dedo de
+     criança e o tema vem de graça do neon-theme. */
+  .hub {
+    position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column;
+    justify-content: safe center; gap: 12px; padding: 14px 16px 16px; overflow-y: auto;
+    background: linear-gradient(180deg, rgba(4,0,26,0.94), rgba(10,0,40,0.97));
+    font-family: 'Orbitron', sans-serif;
+  }
+  .hub.hidden { display: none; }
+  /* o botão de voltar mora no canto superior esquerdo do quadro: 58px de recuo
+     tira o título de baixo dele sem mexer no CSS compartilhado */
+  .hub-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-left: 58px; }
+  .hub-topo h2 {
+    margin: 0; font-size: clamp(15px, 3.2vw, 22px); letter-spacing: 0.16em;
+    background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hub-topo .placar { font-size: clamp(10px, 2.2vw, 13px); color: var(--text-dim); letter-spacing: 0.08em; }
+  .hub-topo .placar b { color: var(--neon-yellow); }
+  #hubConjuntos { display: flex; flex-direction: column; gap: 12px; flex: 1; max-height: 420px; }
+  .hub-conj { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .hub-conj > span {
+    font-size: clamp(9px, 1.9vw, 11px); letter-spacing: 0.22em; color: var(--neon-cyan); opacity: 0.75;
+  }
+  .hub-grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 1; }
+  .fase {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; padding: 10px 4px; min-height: 74px; border-radius: 12px; cursor: pointer;
+    border: 1px solid rgba(255, 43, 214, 0.45); background: rgba(255, 43, 214, 0.10);
+    color: var(--text); font-family: inherit; touch-action: manipulation;
+  }
+  .fase .n { font-size: clamp(15px, 3.4vw, 21px); font-weight: 700; color: var(--neon-pink); line-height: 1; }
+  .fase .nome { font-size: clamp(7px, 1.5vw, 9px); letter-spacing: 0.1em; opacity: 0.75; text-align: center; }
+  .fase .estrelas { font-size: clamp(9px, 2vw, 12px); letter-spacing: 0.08em; color: var(--neon-yellow); line-height: 1; }
+  .fase:active { transform: scale(0.96); }
+  .fase.feita { border-color: rgba(57, 255, 122, 0.55); background: rgba(57, 255, 122, 0.10); }
+  .fase.feita .n { color: var(--neon-green); }
+  .fase.travada { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.03); cursor: not-allowed; }
+  .fase.travada .n, .fase.travada .nome { color: var(--text-dim); opacity: 0.5; }
+  @media (hover: hover) { .fase:not(.travada):hover { background: rgba(255, 43, 214, 0.22); } }
+  /* em celular deitado a altura é curta: encolhe tudo pra caber sem rolagem */
+  @media (orientation: landscape) and (max-height: 520px) {
+    .hub { padding: 8px 10px 10px; gap: 6px; }
+    .hub-grade { gap: 5px; }
+    .fase { min-height: 52px; padding: 5px 3px; }
+  }
+  /* em pé o quadro tem uns 240px de altura e o botão de voltar come o topo.
+     O jogo pede pra girar, mas as 12 fases têm que caber e clicar assim mesmo. */
+  @media (max-width: 560px) and (orientation: portrait) {
+    .hub { padding: 60px 8px 8px; gap: 5px; }
+    #hubConjuntos { gap: 6px; max-height: none; }
+    .hub-grade { gap: 4px; }
+    .hub-topo { position: absolute; top: 16px; left: 56px; right: 10px; padding-left: 0; }
+    .fase { min-height: 34px; padding: 3px 2px; gap: 1px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON WHEELS</h1></a>
+      <div class="tag">// | Acrobacia em pista de neon | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Estrelas</span><span class="val" id="estrelas">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="wheels">0</span></div>
+    <div class="stat"><span class="lbl">Fase</span><span class="val" id="fase">1</span></div>
+    <div class="stat"><span class="lbl">Moedas</span><span class="val" id="moedas">0</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">BATEU!</div>
+    <canvas id="game" width="960" height="540"></canvas>
+
+    <div class="hub hidden" id="hub">
+      <div class="hub-topo">
+        <h2>ESCOLHA A FASE</h2>
+        <span class="placar">★ <b id="hubEstrelas">0</b>/36 · MOEDAS <b id="hubMoedas">0</b></span>
+      </div>
+      <div id="hubConjuntos"></div>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON WHEELS</h2>
+      <p id="overlayText">Gás na direita, freio na esquerda. No ar os mesmos pedais giram o carro. Pousar de teto explode. Doze fases, três estrelas em cada uma.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Tempo</span><b id="fsTempo">0</b></div>
+        <div class="fstat"><span>Moedas</span><b id="fsMoedas">0</b></div>
+        <div class="fstat"><span>Acrobacias</span><b id="fsFlips">0</b></div>
+      </div>
+      <button class="btn" id="startBtn">START</button>
+      <div class="controls-hint">
+        <span class="key">→ gás</span><span class="key">← freio</span><span class="key">R reinicia</span><span class="key">P pausa</span><span class="key">ESC fases</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · ⛽ latas reabastecem · 🪙 moedas · ★ chegar · ★ sobrar gasolina · ★ bater o tempo</footer>
+</div>
+
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 960, H = 540;
+
+  // ── física ──
+  // Tudo em px, s e rad, com massa 1: força e aceleração são o mesmo número.
+  // Este bloco não toca DOM nem Neon — o test-games.js recorta e roda em Node.
+  const STEP = 1 / 240;
+  const K = {
+    g: 1000,          // gravidade
+    motor: 950,       // aceleração total no zero; cai linear até vmax
+    vmax: 1000,       // velocidade em que o motor para de empurrar
+    freio: 700,       // desaceleração de freio por roda
+    rolagem: 25,      // resistência de rolamento por roda
+    arrasto: 0.00022, // arrasto do ar (× v²)
+    grip: 1.1,        // força tangencial máxima = grip × normal
+    tilt: 11,         // velocidade de giro no ar com o pedal segurado (rad/s)
+    tiltResp: 4,      // rapidez com que o giro chega nessa velocidade (1/s)
+    mola: 140,        // suspensão: força por px de compressão
+    amort: 9,         // suspensão: força por px/s de velocidade normal
+    curso: 10,        // compressão máxima antes do batente rígido
+    quique: 0.15,     // restituição no batente
+    inercia: 380,     // momento de inércia do chassi
+    boost: 2500,      // empurrão do booster, fora do limite do grip
+    vboost: 1150,     // velocidade que o booster entrega
+    eixo: 44,         // distância entre eixos
+    altura: 6,        // eixo abaixo do centro de massa
+    raio: 11,         // raio da roda
+    teto: 25,         // altura do teto acima do centro
+    tanque: 100,      // gasolina cheia
+    dreno: 4.5,       // gasolina por segundo, sempre
+    drenoGas: 6.5,    // gasolina por segundo a mais com o pé no fundo
+    lata: 34,         // quanto uma lata devolve
+    pega: 34,         // raio de coleta de moeda e lata
+  };
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  const LOOP_N = 36, CURVA = 80;
+  // Só os segmentos perto do progresso do carro colidem. Sem isso o chão de
+  // entrada e o fim do loop, que se tocam no mesmo ponto, espremem a roda.
+  const JANELA = 22;
+
+  // Peças: reta L · rampa graus L (negativo desce) · pouso graus L · vao largura queda
+  // · lombada altura · onda n altura · loop raio · booster L · mesa altura topo
+  // · rampao graus raio · moedas n · lata · chegada.
+  // Regra da casa: toda pista fecha com o piloto automático segurando o gás, e
+  // sobra gasolina. O test-games.js verifica pista por pista.
+  const CONJUNTOS = [
+    { nome: 'RUA', ceu: ['#07002a', '#2a0a58', '#0a0020'], serra: '#12033a', sol: ['#ffe600', '#ff2bd6'], pistas: [
+      { nome: 'PRIMEIRA VOLTA', pecas: [
+        ['reta', 520], ['moedas', 4], ['onda', 3, 10], ['reta', 320],
+        ['mesa', 18, 120], ['reta', 340], ['moedas', 5], ['onda', 3, 12], ['reta', 300],
+        ['rampa', 16, 130], ['vao', 150, 50], ['pouso', 14, 160], ['reta', 380],
+        ['lata'], ['booster', 180], ['reta', 220], ['loop', 100], ['reta', 400], ['moedas', 4],
+        ['onda', 2, 16], ['reta', 340], ['lata'],
+        ['booster', 200], ['rampao', 30, 240], ['moedas', 5], ['vao', 300, 30], ['pouso', 24, 220], ['reta', 340],
+        ['onda', 3, 14], ['reta', 460],
+        ['chegada'],
+      ] },
+      { nome: 'VIADUTO', pecas: [
+        ['reta', 420], ['onda', 4, 18], ['reta', 240], ['moedas', 4],
+        ['rampa', 22, 160], ['vao', 200, 70], ['pouso', 18, 130], ['reta', 300],
+        ['mesa', 28, 80], ['reta', 300], ['booster', 180], ['reta', 180], ['loop', 105], ['reta', 340], ['moedas', 5],
+        ['lombada', 42], ['reta', 260], ['lata'],
+        ['booster', 200], ['rampao', 30, 240], ['moedas', 6], ['vao', 300, 40], ['pouso', 24, 200], ['reta', 320],
+        ['onda', 3, 20], ['reta', 240], ['lata'], ['mesa', 26, 90], ['reta', 440],
+        ['chegada'],
+      ] },
+      { nome: 'QUARTEIRÃO', pecas: [
+        ['reta', 400], ['mesa', 26, 80], ['reta', 260], ['moedas', 4],
+        ['rampa', 26, 180], ['vao', 240, 90], ['pouso', 20, 150], ['reta', 300], ['lata'],
+        ['onda', 5, 20], ['reta', 260], ['booster', 200], ['reta', 180], ['loop', 110], ['reta', 300], ['moedas', 5],
+        ['rampa', -22, 200], ['reta', 260], ['lata'], ['lombada', 44], ['reta', 240],
+        ['booster', 210], ['rampao', 32, 250], ['moedas', 7], ['vao', 320, 60], ['pouso', 26, 210], ['reta', 300],
+        ['lata'], ['mesa', 30, 80], ['reta', 280], ['onda', 3, 22], ['reta', 420],
+        ['chegada'],
+      ] },
+      { nome: 'ROTATÓRIA', pecas: [
+        ['reta', 420], ['moedas', 4], ['lombada', 36], ['reta', 240], ['lata'],
+        ['booster', 220], ['reta', 170], ['loop', 100], ['reta', 90], ['loop', 100], ['reta', 340], ['moedas', 5],
+        ['onda', 4, 20], ['reta', 260], ['mesa', 30, 80], ['reta', 300], ['lata'],
+        ['rampa', 26, 190], ['moedas', 7], ['vao', 280, 110], ['pouso', 24, 190], ['reta', 320], ['lata'],
+        ['booster', 200], ['rampao', 34, 250], ['moedas', 6], ['vao', 330, 30], ['pouso', 26, 210], ['reta', 300],
+        ['lata'], ['lombada', 44], ['reta', 260], ['mesa', 26, 90], ['reta', 460],
+        ['chegada'],
+      ] },
+    ] },
+    { nome: 'DESERTO', ceu: ['#2a0605', '#7a1a1e', '#160208'], serra: '#3a0a12', sol: ['#fff2a0', '#ff6a1a'], pistas: [
+      { nome: 'DUNA', pecas: [
+        ['reta', 440], ['onda', 5, 22], ['reta', 240], ['moedas', 4], ['lata'],
+        ['rampa', 26, 200], ['reta', 200], ['rampa', -26, 240], ['reta', 280],
+        ['mesa', 30, 80], ['reta', 300], ['moedas', 5], ['lata'],
+        ['booster', 200], ['reta', 180], ['loop', 115], ['reta', 320],
+        ['rampa', 28, 200], ['moedas', 7], ['vao', 300, 120], ['pouso', 24, 190], ['reta', 300], ['lata'],
+        ['onda', 4, 24], ['reta', 260], ['mesa', 28, 90], ['reta', 300], ['lombada', 44], ['reta', 440],
+        ['chegada'],
+      ] },
+      { nome: 'CANYON', pecas: [
+        ['reta', 400], ['rampa', 30, 260], ['reta', 200], ['moedas', 4], ['rampa', -32, 300], ['reta', 280], ['lata'],
+        ['onda', 5, 22], ['reta', 240], ['mesa', 32, 80], ['reta', 300], ['moedas', 5],
+        ['rampa', 32, 200], ['vao', 240, 160], ['pouso', 20, 170], ['reta', 300], ['lata'],
+        ['booster', 210], ['reta', 180], ['loop', 120], ['reta', 320], ['moedas', 4],
+        ['rampa', -24, 220], ['reta', 240], ['lata'], ['onda', 4, 24], ['reta', 260],
+        ['booster', 210], ['rampao', 34, 260], ['moedas', 7], ['vao', 320, 40], ['pouso', 26, 210], ['reta', 320],
+        ['mesa', 28, 100], ['reta', 300], ['rampa', -22, 200], ['reta', 460],
+        ['chegada'],
+      ] },
+      { nome: 'MIRAGEM', pecas: [
+        ['reta', 420], ['mesa', 28, 80], ['reta', 240], ['moedas', 4], ['lata'],
+        ['booster', 220], ['reta', 170], ['loop', 105], ['reta', 90], ['loop', 105], ['reta', 340], ['moedas', 5],
+        ['onda', 5, 24], ['reta', 260], ['rampa', 30, 220], ['vao', 260, 130], ['pouso', 24, 200], ['reta', 320],
+        ['mesa', 34, 80], ['reta', 280], ['moedas', 6], ['lata'],
+        ['booster', 220], ['rampao', 36, 250], ['vao', 340, -30], ['pouso', 30, 220], ['reta', 300],
+        ['lombada', 46], ['reta', 260], ['lata'], ['onda', 3, 22], ['reta', 280], ['mesa', 26, 90], ['reta', 440],
+        ['chegada'],
+      ] },
+      { nome: 'TEMPESTADE', pecas: [
+        ['reta', 400], ['onda', 4, 20], ['reta', 240], ['moedas', 4], ['lata'],
+        ['rampa', 28, 200], ['vao', 240, 100], ['pouso', 22, 170], ['reta', 280],
+        ['mesa', 32, 80], ['reta', 260], ['booster', 220], ['reta', 180], ['loop', 120], ['reta', 300], ['moedas', 5],
+        ['rampa', 32, 240], ['reta', 220], ['rampa', -30, 260], ['reta', 280], ['lata'],
+        ['booster', 220], ['rampao', 36, 260], ['moedas', 8], ['vao', 350, 60], ['pouso', 28, 220], ['reta', 320],
+        ['onda', 5, 24], ['reta', 260], ['lata'], ['mesa', 30, 90], ['reta', 300],
+        ['lombada', 46], ['reta', 280], ['moedas', 4], ['reta', 420],
+        ['chegada'],
+      ] },
+    ] },
+    { nome: 'ÓRBITA', ceu: ['#00021a', '#0a2050', '#02000f'], serra: '#031030', sol: ['#e8faff', '#00f0ff'], pistas: [
+      { nome: 'LANÇAMENTO', pecas: [
+        ['reta', 440], ['moedas', 4], ['lombada', 38], ['reta', 240], ['lata'],
+        ['booster', 230], ['rampao', 34, 250], ['moedas', 6], ['vao', 330, 50], ['pouso', 26, 210], ['reta', 320],
+        ['onda', 4, 22], ['reta', 260], ['mesa', 30, 80], ['reta', 300], ['moedas', 5],
+        ['booster', 220], ['reta', 180], ['loop', 125], ['reta', 340],
+        ['rampa', 28, 210], ['vao', 300, 110], ['pouso', 24, 200], ['reta', 300], ['lata'],
+        ['mesa', 28, 90], ['reta', 280], ['onda', 3, 22], ['reta', 460],
+        ['chegada'],
+      ] },
+      { nome: 'ANEL', pecas: [
+        ['reta', 420], ['mesa', 26, 80], ['reta', 260], ['moedas', 4], ['lata'],
+        ['booster', 240], ['reta', 170], ['loop', 110], ['reta', 90], ['loop', 110], ['reta', 320], ['moedas', 5],
+        ['onda', 5, 24], ['reta', 260], ['rampa', 30, 220], ['moedas', 7], ['vao', 300, 120], ['pouso', 26, 200], ['reta', 320],
+        ['mesa', 34, 80], ['reta', 280], ['lata'],
+        ['booster', 230], ['reta', 170], ['loop', 135], ['reta', 320], ['moedas', 5],
+        ['lombada', 46], ['reta', 260], ['lata'], ['onda', 4, 22], ['reta', 280], ['mesa', 28, 90], ['reta', 440],
+        ['chegada'],
+      ] },
+      { nome: 'GRAVIDADE ZERO', pecas: [
+        ['reta', 420], ['onda', 4, 20], ['reta', 240], ['moedas', 4], ['lata'],
+        ['booster', 230], ['rampao', 36, 250], ['vao', 340, -40], ['pouso', 30, 220], ['reta', 300], ['moedas', 5],
+        ['mesa', 32, 80], ['reta', 260], ['lata'], ['booster', 220], ['reta', 180], ['loop', 125], ['reta', 320],
+        ['rampa', 32, 240], ['moedas', 8], ['vao', 320, 140], ['pouso', 26, 220], ['reta', 300], ['lata'],
+        ['onda', 5, 24], ['reta', 260], ['lata'], ['mesa', 30, 90], ['reta', 300], ['moedas', 5],
+        ['booster', 230], ['rampao', 34, 260], ['vao', 330, 20], ['pouso', 28, 220], ['reta', 300], ['lata'],
+        ['lombada', 46], ['reta', 280], ['reta', 420],
+        ['chegada'],
+      ] },
+      { nome: 'ESTAÇÃO', pecas: [
+        ['reta', 440], ['moedas', 4], ['mesa', 28, 80], ['reta', 260], ['lata'],
+        ['rampa', 26, 180], ['vao', 240, 90], ['pouso', 22, 160], ['reta', 300],
+        ['booster', 240], ['reta', 170], ['loop', 115], ['reta', 100], ['loop', 115], ['reta', 340], ['moedas', 5], ['lata'],
+        ['onda', 6, 24], ['reta', 260], ['lata'], ['mesa', 32, 90], ['reta', 300],
+        ['booster', 230], ['rampao', 36, 260], ['moedas', 8], ['vao', 350, 60], ['pouso', 28, 230], ['reta', 320], ['lata'],
+        ['rampa', 30, 230], ['reta', 220], ['rampa', -28, 250], ['reta', 280], ['moedas', 5],
+        ['booster', 230], ['reta', 170], ['loop', 140], ['reta', 320], ['lata'],
+        ['lombada', 46], ['reta', 260], ['lata'], ['onda', 4, 22], ['reta', 280], ['mesa', 28, 90], ['reta', 460],
+        ['chegada'],
+      ] },
+    ] },
+  ];
+  // Lista plana: a fase 1 é o índice 0, e é assim que o save guarda.
+  const PISTAS = CONJUNTOS.flatMap((c, ci) => c.pistas.map((p, pi) => ({ ...p, conj: ci, n: ci * 4 + pi })));
+
+  // Peças viram uma polilinha. Normal aponta pro lado em que o carro anda:
+  // pra cima no chão, pra dentro no loop.
+  function compilar(pecas) {
+    const segs = [], trechos = [], itens = [], pedidos = [], mesas = [];
+    let x = 0, y = 0, ang = 0, fim = 0, fundo = 0, trecho = [[0, 0]];
+    const ponto = (nx, ny) => {
+      const [px, py] = trecho[trecho.length - 1];
+      const dx = nx - px, dy = ny - py, len = Math.hypot(dx, dy);
+      if (len < 1e-6) return;
+      segs.push({ x0: px, y0: py, x1: nx, y1: ny, nx: dy / len, ny: -dx / len, len });
+      trecho.push([nx, ny]); x = nx; y = ny; fundo = Math.max(fundo, ny);
+    };
+    const reto = len => ponto(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+    const arco = (ate, r) => {
+      if (ate === ang) return;
+      const s = ate < ang ? -1 : 1;
+      const cx = x - s * Math.sin(ang) * r, cy = y + s * Math.cos(ang) * r;
+      const n = Math.ceil(Math.abs(ate - ang) / (Math.PI / 30));
+      for (let i = 1; i <= n; i++) {
+        const a = ang + (ate - ang) * i / n;
+        ponto(cx + s * Math.sin(a) * r, cy - s * Math.cos(a) * r);
+      }
+      ang = ate;
+    };
+    const rad = d => d * Math.PI / 180;
+    const lombada = h => {   // 8× a altura: inclinação máxima de ~21°
+      const L = h * 8, x0 = x, y0 = y;
+      for (let i = 1; i <= 14; i++) {
+        const s = i / 14;
+        ponto(x0 + L * s, y0 - h * (1 - Math.cos(2 * Math.PI * s)) / 2);
+      }
+    };
+    for (const [tipo, p, q] of pecas) {
+      if (tipo === 'reta') { arco(0, CURVA); reto(p); }
+      else if (tipo === 'rampa') { arco(-rad(p), CURVA); reto(q); }
+      else if (tipo === 'pouso') { ang = rad(p); reto(q); arco(0, CURVA); }
+      else if (tipo === 'vao') { trechos.push(trecho); x += p; y += q || 0; ang = 0; trecho = [[x, y]]; }
+      else if (tipo === 'lombada') { arco(0, CURVA); lombada(p); }
+      else if (tipo === 'onda') { arco(0, CURVA); for (let k = 0; k < p; k++) lombada(q); }
+      else if (tipo === 'booster') { arco(0, CURVA); reto(p); segs[segs.length - 1].boost = true; }
+      else if (tipo === 'mesa') {
+        // Trapézio: sobe, topo plano, desce. Parede vertical não serve: o pneu
+        // encostado nela recebe tração pra cima e capota o carro sozinho.
+        arco(0, CURVA);
+        const r = p * 1.6;
+        mesas.push([[x, y], [x + r, y - p], [x + r + q, y - p], [x + r * 2 + q, y]]);
+        ponto(x + r, y - p); ponto(x + r + q, y - p); ponto(x + r * 2 + q, y);
+      } else if (tipo === 'rampao') { arco(-rad(p), q); }   // quarto de pipe
+      else if (tipo === 'moedas') pedidos.push({ i: segs.length, n: p, tipo: 'moeda' });
+      else if (tipo === 'lata') pedidos.push({ i: segs.length, n: 1, tipo: 'lata' });
+      else if (tipo === 'loop') {
+        arco(0, CURVA);
+        const cx = x, cy = y - p;
+        for (let i = 1; i <= LOOP_N; i++) {
+          const a = Math.PI / 2 - 2 * Math.PI * i / LOOP_N;
+          ponto(cx + Math.cos(a) * p, cy + Math.sin(a) * p);
+        }
+      } else if (tipo === 'chegada') { arco(0, CURVA); fim = x; reto(360); }
+    }
+    trechos.push(trecho);
+    // Itens seguem a pista a partir do ponto pedido, 34px acima. Num vão eles
+    // fazem o arco por cima, que é onde o carro passa de verdade.
+    for (const { i, n, tipo } of pedidos) {
+      let k = i, d = 30;
+      for (let c = 0; c < n; c++, d += 46) {
+        while (k < segs.length && d > segs[k].len) { d -= segs[k].len; k++; }
+        if (k >= segs.length) break;
+        const s = segs[k], t = d / s.len, prox = segs[k + 1];
+        if (prox && t > 0.98 && Math.hypot(prox.x0 - s.x1, prox.y0 - s.y1) > 4) {
+          const falta = n - c, ax = s.x1, ay = s.y1, bx = prox.x0, by = prox.y0;
+          const alto = Math.hypot(bx - ax, by - ay) * 0.22;
+          for (let j = 0; j < falta; j++) {
+            const u = (j + 0.5) / falta;
+            itens.push({ tipo, x: ax + (bx - ax) * u, y: ay + (by - ay) * u - alto * 4 * u * (1 - u) - 30, pego: false });
+          }
+          k = -1; break;
+        }
+        itens.push({ tipo, x: s.x0 + (s.x1 - s.x0) * t + s.nx * 34, y: s.y0 + (s.y1 - s.y0) * t + s.ny * 34, pego: false });
+      }
+    }
+    const moedas = itens.filter(i => i.tipo === 'moeda').length;
+    return { segs, trechos, itens, mesas, moedas, fim, y0: 0, fundo: fundo + 420 };
+  }
+
+  function novoCarro(pista) {
+    return {
+      x: 80, y: pista.y0 - K.altura - K.raio + 3, vx: 0, vy: 0, a: 0, w: 0,
+      gas: false, freio: false, seg: 0, chao: 2, ar: 0, giro: 0, flipsAr: 0, estavel: 0,
+      gasolina: K.tanque, moedas: 0, flips: 0, ev: [], morto: '',
+      rodas: [
+        { lx: -K.eixo / 2, ly: K.altura, comp: 0, chao: true, spin: 0, vt: 0 },
+        { lx: K.eixo / 2, ly: K.altura, comp: 0, chao: true, spin: 0, vt: 0 },
+      ],
+    };
+  }
+
+  function maisPerto(s, px, py) {
+    const dx = s.x1 - s.x0, dy = s.y1 - s.y0;
+    const t = clamp(((px - s.x0) * dx + (py - s.y0) * dy) / (s.len * s.len), 0, 1);
+    return [s.x0 + dx * t, s.y0 + dy * t, t];
+  }
+
+  // Um subpasso. Corpo rígido (x, y, a) com duas rodas presas ao chassi. Cada
+  // roda que penetra a pista recebe mola + amortecedor; passou do curso, bate
+  // no batente rígido. Tração e freio agem na tangente, saturados pelo grip.
+  function passo(car, pista, dt) {
+    const segs = pista.segs;
+    const i0 = Math.max(0, car.seg - JANELA), i1 = Math.min(segs.length - 1, car.seg + JANELA);
+    const fx = Math.cos(car.a), fy = Math.sin(car.a);   // frente do carro
+    const dx = -fy, dy = fx;                             // "baixo" do carro
+    car.vy += K.g * dt;
+
+    // 0. gasolina: drena sempre, mais ainda com o pé no fundo. Tanque seco
+    // não trava o carro, só corta o motor: ele rola até parar ou até uma lata.
+    if (car.gasolina > 0) car.gasolina = Math.max(0, car.gasolina - (K.dreno + (car.gas ? K.drenoGas : 0)) * dt);
+    const motorOn = car.gasolina > 0;
+
+    // 1. geometria: penetração e direção de empurrão de cada roda
+    let chao = 0;
+    for (const r of car.rodas) {
+      r.ax = car.x + fx * r.lx + dx * r.ly;
+      r.ay = car.y + fy * r.lx + dy * r.ly;
+      r.pen = 0;
+      for (let i = i0; i <= i1; i++) {
+        const s = segs[i];
+        const [cx, cy, t] = maisPerto(s, r.ax, r.ay);
+        const vx = r.ax - cx, vy = r.ay - cy, d = Math.hypot(vx, vy);
+        if (d >= K.raio) continue;
+        const lado = vx * s.nx + vy * s.ny;
+        let p, px, py;
+        if (lado < 0 && t > 0 && t < 1) { p = K.raio - lado; px = s.nx; py = s.ny; } // atravessou: volta pela normal
+        else if (d > 1e-6) { p = K.raio - d; px = vx / d; py = vy / d; }
+        else { p = K.raio; px = s.nx; py = s.ny; }
+        if (p > r.pen) { r.pen = p; r.nx = px; r.ny = py; r.seg = s; }
+      }
+      r.chao = r.pen > 0;
+      if (r.chao) chao++;
+    }
+
+    // 2. forças de contato
+    let boost = null;
+    for (const r of car.rodas) {
+      if (!r.chao) { r.comp *= 0.85; r.spin += r.vt / K.raio * dt; continue; }
+      const ox = r.ax - car.x, oy = r.ay - car.y, nx = r.nx, ny = r.ny;
+      const vpx = car.vx - car.w * oy, vpy = car.vy + car.w * ox;   // velocidade do ponto
+      const vn = vpx * nx + vpy * ny;
+      const braco = ox * ny - oy * nx;
+      let N = K.mola * Math.min(r.pen, K.curso) - K.amort * vn;
+      if (N < 0) N = 0;
+      car.vx += N * nx * dt; car.vy += N * ny * dt; car.w += braco * N / K.inercia * dt;
+      if (r.pen > K.curso && vn < 0) {
+        const j = -(1 + K.quique) * vn / (1 + braco * braco / K.inercia);
+        car.vx += j * nx; car.vy += j * ny; car.w += braco * j / K.inercia;
+        const c = (r.pen - K.curso) * 0.5;
+        car.x += nx * c; car.y += ny * c;
+        car.ev.push({ tipo: 'batida', forca: -vn });
+      }
+      r.comp = Math.min(r.pen, K.curso);
+      // tração no ponto de contato, um raio abaixo do centro da roda: é esse
+      // braço que levanta o nariz no gás e abaixa no freio
+      const tx = -ny, ty = nx;
+      const vt = vpx * tx + vpy * ty;
+      let Ft;
+      if (car.gas && motorOn) Ft = K.motor / chao * clamp(1 - vt / K.vmax, 0, 1);
+      else if (car.freio) Ft = -Math.sign(vt) * Math.min(K.freio, Math.abs(vt) / dt);
+      else Ft = -Math.sign(vt) * Math.min(K.rolagem, Math.abs(vt) / dt);
+      const lim = K.grip * N;
+      Ft = clamp(Ft, -lim, lim);
+      // Booster é esteira, não pneu: empurra o chassi no centro de massa. Passando
+      // pelo ponto de contato o torque erguia o nariz e capotava o carro sozinho.
+      if (r.seg.boost && vt < K.vboost) boost = { fx: tx, fy: ty };
+      car.vx += Ft * tx * dt; car.vy += Ft * ty * dt;
+      const bx = ox - nx * K.raio, by = oy - ny * K.raio;
+      car.w += (bx * ty - by * tx) * Ft / K.inercia * dt;
+      r.vt = vt; r.spin += vt / K.raio * dt;
+    }
+    if (boost) { car.vx += boost.fx * K.boost * dt; car.vy += boost.fy * K.boost * dt; }
+    // 3. no ar o pedal manda na velocidade de giro, não no torque: segurou
+    // gira, soltou para. Torque puro acumulava giro que a criança não conseguia
+    // desfazer antes do chão. Com uma roda no chão quem inclina é a reação da
+    // tração e do freio no ponto de contato, que já é forte.
+    if (!chao) {
+      const alvo = car.gas === car.freio ? 0 : car.gas ? -K.tilt : K.tilt;
+      const k = car.gas || car.freio ? K.tiltResp : 2;
+      car.w += (alvo - car.w) * Math.min(1, k * dt);
+    }
+    // 4. arrasto do ar
+    const v = Math.hypot(car.vx, car.vy), dr = 1 - K.arrasto * v * dt;
+    car.vx *= dr; car.vy *= dr;
+    // 5. integra
+    car.x += car.vx * dt; car.y += car.vy * dt; car.a += car.w * dt;
+    // 6. tempo de ar (pro som de pouso)
+    if (!chao) car.ar += dt;
+    else if (car.chao === 0) { car.ev.push({ tipo: 'pouso', ar: car.ar }); car.ar = 0; }
+    car.chao = chao;
+    // 7. flip: giro acumulado enquanto falta roda no chão, contando também o
+    // lançamento e o pouso numa roda só. Conta na hora em que fecha a volta,
+    // não no pouso: contar só no pouso perdia o flip que terminava com a roda
+    // de trás já encostada. Zera depois de 0,2 s com as duas rodas no chão, o
+    // que também impede o loop de contar como flip.
+    if (chao === 2) {
+      car.estavel += dt;
+      if (car.estavel > 0.2) { car.giro = 0; car.flipsAr = 0; }
+    } else {
+      car.estavel = 0;
+      car.giro += car.w * dt;
+      const n = Math.floor((Math.abs(car.giro) + 0.1 * 2 * Math.PI) / (2 * Math.PI));   // fecha com 324°
+      if (n > car.flipsAr) {
+        car.flipsAr = n; car.flips++;
+        car.ev.push({ tipo: 'flip', n, sentido: car.giro < 0 ? 'back' : 'front' });
+      }
+    }
+    // 8. moedas e latas
+    for (const it of pista.itens) {
+      if (it.pego || (car.x - it.x) ** 2 + (car.y - it.y) ** 2 >= K.pega * K.pega) continue;
+      it.pego = true;
+      if (it.tipo === 'lata') car.gasolina = Math.min(K.tanque, car.gasolina + K.lata);
+      else car.moedas++;
+      car.ev.push({ tipo: it.tipo, x: it.x, y: it.y });
+    }
+    // 9. teto encostou = explode; caiu do mundo = explode
+    const gx = Math.cos(car.a), gy = Math.sin(car.a), hx = -gy, hy = gx;
+    for (const lx of [-10, 8]) {   // extremos do teto desenhado, não do chassi
+      const px = car.x + gx * lx - hx * K.teto, py = car.y + gy * lx - hy * K.teto;
+      for (let i = i0; i <= i1 && !car.morto; i++) {
+        const s = segs[i];
+        const [cx, cy, t] = maisPerto(s, px, py);
+        const vx = px - cx, vy = py - cy, d = Math.hypot(vx, vy);
+        if (d < 3 || (d < 10 && t > 0 && t < 1 && vx * s.nx + vy * s.ny < 0)) car.morto = 'teto';
+      }
+    }
+    if (car.y > pista.fundo) car.morto = 'queda';
+    // 10. progresso: segmento mais perto do centro, dentro da janela
+    let md = Infinity;
+    for (let i = i0; i <= i1; i++) {
+      const [cx, cy] = maisPerto(segs[i], car.x, car.y);
+      const d = (car.x - cx) ** 2 + (car.y - cy) ** 2;
+      if (d < md) { md = d; car.seg = i; }
+    }
+  }
+
+  // Piloto automático: gás no chão; no ar mira a velocidade de giro que leva o
+  // chassi ao nível. Serve pra calcular o tempo-alvo de cada pista e, na fase 5,
+  // vai virar o rival. Mirar o ângulo direto oscilava.
+  const anguloCurto = a => Math.atan2(Math.sin(a), Math.cos(a));
+  function piloto(car) {
+    if (car.chao > 0) { car.gas = true; car.freio = false; return; }
+    const alvo = clamp(-anguloCurto(car.a) * 5, -K.tilt, K.tilt);
+    car.gas = alvo < car.w - 0.4;
+    car.freio = alvo > car.w + 0.4;
+  }
+
+  // Roda a pista inteira sem desenhar nada. O tempo-alvo da terceira estrela
+  // sai daqui, então nunca fica desatualizado quando a pista muda.
+  function correrSozinho(pista, segundos) {
+    const car = novoCarro(pista);
+    const n = Math.round((segundos || 120) / STEP);
+    let t = 0;
+    for (let i = 0; i < n && !car.morto && car.x < pista.fim; i++) {
+      piloto(car);
+      passo(car, pista, STEP);
+      car.ev.length = 0;
+      t += STEP;
+    }
+    for (const it of pista.itens) it.pego = false;
+    return { t, morto: car.morto, x: car.x, gasolina: car.gasolina, moedas: car.moedas };
+  }
+  // ── fim da física ──
+
+  // ── save ──────────────────────────────────────────
+  // v pra migrar sem apagar o progresso. Nunca renomear a chave.
+  const SAVE_KEY = 'neon-wheels-save';
+  const saveVazio = () => ({ v: 1, aberta: 0, moedas: 0, pistas: {} });
+  function carregarSave() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if (!s || typeof s !== 'object') return saveVazio();
+      return { ...saveVazio(), ...s, pistas: s.pistas || {} };
+    } catch (e) { return saveVazio(); }   // JSON corrompido não pode travar o jogo
+  }
+  let save = carregarSave();
+  const gravar = () => localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+  const estrelasDe = n => (save.pistas[n] && save.pistas[n].estrelas) || 0;
+  const totalEstrelas = () => PISTAS.reduce((s, p) => s + estrelasDe(p.n), 0);
+
+  // ── estado ────────────────────────────────────────
+  const els = {
+    stage: Neon.$('stage'), hub: Neon.$('hub'), conjuntos: Neon.$('hubConjuntos'),
+    hubEstrelas: Neon.$('hubEstrelas'), hubMoedas: Neon.$('hubMoedas'),
+    estrelas: Neon.$('estrelas'), best: Neon.$('best'), fase: Neon.$('fase'), moedas: Neon.$('moedas'),
+    fsTempo: Neon.$('fsTempo'), fsMoedas: Neon.$('fsMoedas'), fsFlips: Neon.$('fsFlips'),
+    finalStats: Neon.$('finalStats'),
+  };
+  let pistaN = 0, pista = null, alvo = 0;
+  let car = null, state = 'menu', tempo = 0, acc = 0, fimT = 0, shake = 0, sfxT = 0, combo = 0, comboT = 0;
+  let pb = Neon.best.get('wheels');
+  let lastFrame = performance.now();
+  const cam = { x: 0, y: 0, z: 1.45 };
+  const particles = new Neon.Particles();
+  const imersivo = on => document.body.classList.toggle('imersivo', on);
+  let dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  const shakeAt = p => { if (!Neon.motion.reduced) shake = Math.max(shake, p); };
+  const conjDe = n => CONJUNTOS[PISTAS[n].conj];
+
+  function pintarPainel() {
+    els.estrelas.textContent = totalEstrelas();
+    els.moedas.textContent = save.moedas;
+    els.best.textContent = pb;
+    els.fase.textContent = `${pistaN + 1}/${PISTAS.length}`;
+  }
+
+  // ── hub ───────────────────────────────────────────
+  function montarHub() {
+    els.conjuntos.innerHTML = '';
+    for (const [ci, conj] of CONJUNTOS.entries()) {
+      const bloco = document.createElement('div');
+      bloco.className = 'hub-conj';
+      const rot = document.createElement('span');
+      rot.textContent = conj.nome;
+      const grade = document.createElement('div');
+      grade.className = 'hub-grade';
+      for (const [pi, p] of conj.pistas.entries()) {
+        const n = ci * 4 + pi, e = estrelasDe(n), travada = n > save.aberta;
+        const b = document.createElement('button');
+        b.className = 'fase' + (travada ? ' travada' : e === 3 ? ' feita' : '');
+        b.disabled = travada;
+        b.innerHTML = `<span class="n">${travada ? '🔒' : n + 1}</span>`
+          + `<span class="nome">${p.nome}</span>`
+          + `<span class="estrelas">${travada ? '' : '★'.repeat(e) + '☆'.repeat(3 - e)}</span>`;
+        if (!travada) b.addEventListener('click', () => { Neon.audio.ensure(); jogar(n); });
+        grade.appendChild(b);
+      }
+      bloco.append(rot, grade);
+      els.conjuntos.appendChild(bloco);
+    }
+    els.hubEstrelas.textContent = totalEstrelas();
+    els.hubMoedas.textContent = save.moedas;
+  }
+  function abrirHub() {
+    state = 'hub';
+    Neon.audio.music.stop();
+    Neon.overlay.hide();
+    montarHub();
+    els.hub.classList.remove('hidden');
+    imersivo(true);
+    pintarPainel();
+  }
+  const fecharHub = () => els.hub.classList.add('hidden');
+
+  // ── corrida ───────────────────────────────────────
+  function jogar(n) {
+    pistaN = n;
+    fecharHub();
+    Neon.overlay.hide();
+    pista = compilar(PISTAS[n].pecas);
+    // Tempo-alvo calculado na hora pelo piloto automático, com 40% de folga.
+    // Número fixo na tabela envelhece toda vez que a pista muda.
+    alvo = correrSozinho(pista).t * 1.4;
+    imersivo(true);
+    reiniciar();
+  }
+  function reiniciar() {
+    car = novoCarro(pista);
+    for (const it of pista.itens) it.pego = false;
+    tempo = 0; acc = 0; fimT = 0; combo = 0; comboT = 0;
+    cam.x = car.x + 200; cam.y = car.y - 80; cam.z = 1.45;
+    particles.clear();
+    els.finalStats.style.display = 'none';
+    state = 'playing';
+    lastFrame = performance.now();
+    pintarPainel();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    Neon.audio.sfx.pause(); Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar. ESC volta às fases.', 'RESUME');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    state = 'playing'; lastFrame = performance.now();
+    Neon.overlay.hide(); Neon.audio.music.start();
+  }
+  function explodir() {
+    state = 'morto'; fimT = 0;
+    particles.burst(car.x, car.y, '#ff8c1a', 26, 260, 4);
+    particles.burst(car.x, car.y, '#ffe600', 16, 180, 3);
+    particles.wave(car.x, car.y, '#ff3b5c', 160);
+    for (let i = 0; i < 7; i++) {
+      particles.emit(car.x, car.y, (Math.random() - 0.3) * 320, -Math.random() * 380,
+        i % 2 ? '#00f0ff' : '#ff2bd6', 6 + Math.random() * 5, 1.4);
+    }
+    shakeAt(14);
+    Neon.audio.sfx.boom(); Neon.audio.music.down();
+    Neon.toast(car.morto === 'queda' ? 'CAIU!' : 'BATEU DE TETO!');
+  }
+  // ★ chegar · ★ chegar com ≥25% de gasolina · ★ bater o tempo-alvo.
+  // As três podem vir em corridas diferentes: o save guarda o melhor de cada.
+  function chegou() {
+    state = 'chegou'; fimT = 0;
+    const ganhas = 1 + (car.gasolina >= K.tanque * 0.25 ? 1 : 0) + (tempo <= alvo ? 1 : 0);
+    const antes = save.pistas[pistaN] || { estrelas: 0, tempo: 0, moedas: 0 };
+    save.pistas[pistaN] = {
+      estrelas: Math.max(antes.estrelas, ganhas),
+      tempo: antes.tempo ? Math.min(antes.tempo, tempo) : tempo,
+      moedas: Math.max(antes.moedas, car.moedas),
+    };
+    save.moedas += car.moedas;
+    // Liberar nunca volta atrás: a fase aberta é sempre a mais longe que a criança chegou.
+    if (pistaN === save.aberta && pistaN + 1 < PISTAS.length) save.aberta = pistaN + 1;
+    gravar();
+    const total = totalEstrelas();
+    pb = Neon.best.update('wheels', total);
+    pintarPainel();
+    particles.burst(car.x, car.y - 30, '#39ff7a', 24, 200, 3);
+    Neon.audio.sfx.record();
+    if (ganhas === 3) Neon.audio.sfx.level();
+  }
+  function telaResultado() {
+    state = 'resultado';
+    Neon.audio.music.stop();
+    const g = save.pistas[pistaN].estrelas, agora = tempo;
+    els.fsTempo.textContent = agora.toFixed(2) + 's';
+    els.fsMoedas.textContent = `${car.moedas}/${pista.moedas}`;
+    els.fsFlips.textContent = car.flips;
+    els.finalStats.style.display = '';
+    const linha = (ok, txt) => `<span class="key" style="opacity:${ok ? 1 : 0.4}">${ok ? '★' : '☆'} ${txt}</span>`;
+    const ultima = pistaN + 1 >= PISTAS.length;
+    Neon.overlay.show(
+      g === 3 ? 'TRÊS ESTRELAS!' : 'PISTA FECHADA',
+      `${PISTAS[pistaN].nome} · ${'★'.repeat(g)}${'☆'.repeat(3 - g)}`,
+      ultima ? 'DE NOVO' : 'PRÓXIMA',
+      g === 3 ? 'record' : '',
+      linha(true, 'chegar')
+      + linha(car.gasolina >= K.tanque * 0.25, `sobrar 25% de gasolina (você: ${Math.round(car.gasolina)}%)`)
+      + linha(agora <= alvo, `fechar em ${alvo.toFixed(1)}s`)
+      + '<br><span class="key" id="btnFases" style="cursor:pointer">← FASES</span>'
+      + '<span class="key" id="btnDeNovo" style="cursor:pointer">↻ DE NOVO</span>');
+    const f = Neon.$('btnFases'), d = Neon.$('btnDeNovo');
+    if (f) f.addEventListener('click', abrirHub);
+    if (d) d.addEventListener('click', reiniciar);
+  }
+  function tratar(ev) {
+    if (ev.tipo === 'flip') {
+      combo++; comboT = 2;
+      Neon.audio.sfx.golden();
+      const nome = ev.sentido === 'back' ? 'BACKFLIP' : 'FRONTFLIP';
+      particles.float(car.x, car.y - 70, `${nome}${combo > 1 ? ' x' + combo : '!'}`, '#ffe600', 24);
+    } else if (ev.tipo === 'moeda') {
+      Neon.audio.sfx.point();
+      particles.burst(ev.x, ev.y, '#ffe600', 6, 90, 2.5);
+    } else if (ev.tipo === 'lata') {
+      Neon.audio.sfx.eat(1);
+      particles.burst(ev.x, ev.y, '#ff3b5c', 10, 120, 3);
+      particles.float(ev.x, ev.y - 20, '+GASOLINA', '#ff3b5c', 15);
+    } else if (ev.tipo === 'pouso' && ev.ar > 0.35) {
+      Neon.audio.sfx.drop();
+      shakeAt(4);
+    } else if (ev.tipo === 'batida' && ev.forca > 220 && performance.now() - sfxT > 120) {
+      sfxT = performance.now();
+      Neon.audio.sfx.drop();
+      shakeAt(Math.min(10, ev.forca / 80));
+    }
+  }
+
+  // ── input ─────────────────────────────────────────
+  const preso = new Set(), toques = new Map();
+  const TEC = { arrowright: 'gas', d: 'gas', arrowup: 'gas', w: 'gas',
+                arrowleft: 'freio', a: 'freio', arrowdown: 'freio', s: 'freio' };
+  const correndo = () => state === 'playing' || state === 'morto' || state === 'chegou';
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'escape') { if (state !== 'menu') abrirHub(); return; }
+    if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
+    if (k === 'r') { if (correndo() || state === 'resultado') reiniciar(); return; }
+    if (k in TEC) {
+      e.preventDefault();
+      preso.add(TEC[k]);
+      if (state === 'menu') abrirHub();
+      return;
+    }
+    if (k === 'enter' || k === ' ') {
+      e.preventDefault();
+      if (state === 'menu') abrirHub();
+      else if (state === 'paused') resumeGame();
+      else if (state === 'resultado') proxima();
+    }
+  });
+  document.addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k in TEC) preso.delete(TEC[k]); });
+
+  const paraQuadro = e => {
+    const r = els.stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  };
+  els.stage.addEventListener('pointerdown', e => {
+    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay, .back-btn, .hub')) return;
+    e.preventDefault();
+    if (e.pointerType !== 'mouse') dedo = true;
+    if (state !== 'playing' && state !== 'morto' && state !== 'chegou') return;
+    toques.set(e.pointerId, paraQuadro(e).x < W / 2 ? 'freio' : 'gas');
+  });
+  const soltar = e => toques.delete(e.pointerId);
+  window.addEventListener('pointerup', soltar);
+  window.addEventListener('pointercancel', soltar);
+  els.stage.addEventListener('contextmenu', e => e.preventDefault());
+
+  function proxima() {
+    if (pistaN + 1 < PISTAS.length && estrelasDe(pistaN) > 0) jogar(pistaN + 1);
+    else reiniciar();
+  }
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else if (state === 'resultado') proxima();
+    else abrirHub();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── câmera ────────────────────────────────────────
+  function camera(dt) {
+    let base = -Infinity;
+    for (let i = Math.max(0, car.seg - JANELA); i <= Math.min(pista.segs.length - 1, car.seg + JANELA); i++) {
+      base = Math.max(base, pista.segs[i].y0, pista.segs[i].y1);
+    }
+    const alt = Math.max(0, base - car.y), v = Math.hypot(car.vx, car.vy);
+    // Perto o bastante pra ver o carro, longe o bastante pra ler o que vem.
+    // Afasta quando ele sobe ou corre, que é quando o jogador precisa de campo.
+    const zt = clamp(1.45 - alt / 520 - v / 2600, 0.7, 1.45);
+    const k = 1 - Math.exp(-5 * dt), kz = 1 - Math.exp(-2.5 * dt);
+    cam.z += (zt - cam.z) * kz;
+    const tx = car.x + car.vx * 0.22 + 90 / cam.z, ty = car.y - 70 / cam.z + car.vy * 0.05;
+    cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+  }
+
+  // ── carro ─────────────────────────────────────────
+  // Hot rod de perfil, em coordenadas do chassi: x pra frente, y pra baixo.
+  // Os para-lamas são recortes de verdade no contorno, com o mesmo centro dos
+  // eixos da física, então a roda aparece inteira e some pra dentro quando a
+  // suspensão comprime.
+  const ARCO_R = 13, ARCO_Y = 2, L = 37;
+  const PERFIL = [                          // de trás pra frente, por cima
+    [-37, -4], [-35, -10], [-29, -13],       // traseira e tampa curta
+    [-10, -24], [8, -25],                    // vidro traseiro deitado e teto
+    [18, -14], [30, -12], [36, -8], [38, -1], // capô comprido e bico
+  ];
+  const VIDRO = [[-9, -22], [6, -23], [16, -15], [-19, -15]];
+  const CAPO = [[11, -21], [17, -15], [27, -13], [20, -19]];   // tomada de ar no capô
+
+  const traco = (pts, fechar) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    if (fechar) ctx.closePath();
+  };
+
+  // Contorno fechado: sobe pela traseira, passa pelo teto, desce o bico e volta
+  // pela saia contornando as duas caixas de roda.
+  function caminhoCorpo() {
+    ctx.beginPath();
+    ctx.moveTo(-L, ARCO_Y);
+    for (const [px, py] of PERFIL) ctx.lineTo(px, py);
+    ctx.lineTo(L, ARCO_Y);
+    ctx.arc(K.eixo / 2, ARCO_Y, ARCO_R, 0, Math.PI, true);
+    ctx.lineTo(-K.eixo / 2 + ARCO_R, ARCO_Y);
+    ctx.arc(-K.eixo / 2, ARCO_Y, ARCO_R, 0, Math.PI, true);
+    ctx.closePath();
+  }
+
+  function desenharRoda(r) {
+    const R = K.raio, wy = r.ly - r.comp;
+    ctx.save();
+    ctx.translate(r.lx, wy);
+    ctx.fillStyle = '#06001a'; Neon.circle(ctx, 0, 0, R + 1.5);            // pneu
+    ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2.5; Neon.glow(ctx, '#00f0ff', 12);
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.rotate(r.spin);
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)'; ctx.lineWidth = 1.6;        // banda de rodagem
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = i * Math.PI / 5;
+      ctx.moveTo(Math.cos(a) * (R - 3), Math.sin(a) * (R - 3));
+      ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = '#e8e6f5'; ctx.lineWidth = 1.8; Neon.glow(ctx, '#e8e6f5', 6);
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {                                          // 5 raios
+      const a = i * Math.PI * 2 / 5;
+      ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * (R - 4), Math.sin(a) * (R - 4));
+    }
+    ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffe600'; Neon.circle(ctx, 0, 0, 2.2);                // cubo
+    ctx.restore();
+  }
+
+  function desenharCarro() {
+    const andando = state === 'playing';
+    ctx.save();
+    ctx.translate(car.x, car.y);
+    ctx.rotate(car.a);
+
+    if (andando) {                                                          // farol
+      const cone = ctx.createLinearGradient(38, 0, 98, 0);
+      cone.addColorStop(0, 'rgba(255, 246, 200, 0.22)');
+      cone.addColorStop(1, 'rgba(255, 246, 200, 0)');
+      ctx.fillStyle = cone;
+      traco([[38, -6], [98, -22], [98, 12], [38, 0]], true);
+      ctx.fill();
+    }
+
+    for (const r of car.rodas) desenharRoda(r);
+
+    caminhoCorpo();                                                         // carroceria
+    const pintura = ctx.createLinearGradient(0, -25, 0, ARCO_Y);
+    pintura.addColorStop(0, '#4a0e86');
+    pintura.addColorStop(0.5, '#210350');
+    pintura.addColorStop(1, '#0c0024');
+    ctx.fillStyle = pintura; ctx.fill();
+    ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 2.2; Neon.glow(ctx, '#ff2bd6', 10);
+    ctx.stroke(); ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)'; ctx.lineWidth = 1.4;       // vinco e porta
+    ctx.beginPath();
+    ctx.moveTo(-33, -7); ctx.lineTo(34, -8);
+    ctx.moveTo(-19, -15); ctx.lineTo(-17, -2);
+    ctx.moveTo(14, -16); ctx.lineTo(12, -2);
+    ctx.stroke();
+
+    traco(VIDRO, true);                                                     // vidro
+    const v = ctx.createLinearGradient(-9, -23, 16, -14);
+    v.addColorStop(0, 'rgba(0, 240, 255, 0.5)');
+    v.addColorStop(1, 'rgba(0, 240, 255, 0.14)');
+    ctx.fillStyle = v; ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.75)'; ctx.lineWidth = 1.2; ctx.stroke();
+
+    traco(CAPO, true);                                                      // tomada de ar
+    ctx.fillStyle = 'rgba(255, 140, 26, 0.4)'; ctx.fill();
+    ctx.strokeStyle = '#ff8c1a'; ctx.lineWidth = 1.4; ctx.stroke();
+
+    ctx.strokeStyle = '#ff2bd6'; ctx.lineWidth = 2.2; Neon.glow(ctx, '#ff2bd6', 8);
+    ctx.beginPath();                                                        // aerofólio
+    ctx.moveTo(-34, -9); ctx.lineTo(-33, -16);
+    ctx.moveTo(-27, -13); ctx.lineTo(-26, -16);
+    ctx.moveTo(-38, -16); ctx.lineTo(-24, -17);
+    ctx.stroke(); ctx.shadowBlur = 0;
+
+    const freando = car.freio && andando;                                   // lanterna e farol
+    ctx.fillStyle = freando ? '#ff3b5c' : 'rgba(255, 59, 92, 0.55)';
+    Neon.glow(ctx, '#ff3b5c', freando ? 22 : 8);
+    ctx.fillRect(-37, -9, 3.5, 5);
+    ctx.fillStyle = '#fff6c8'; Neon.glow(ctx, '#ffe600', 16);
+    ctx.fillRect(34.5, -8, 3.5, 4.5);
+    ctx.shadowBlur = 0;
+
+    if (car.gas && car.gasolina > 0 && andando) {                           // escapamento
+      const c = 12 + Math.random() * 14;
+      ctx.fillStyle = '#ff8c1a'; Neon.glow(ctx, '#ff8c1a', 18);
+      traco([[-36, -3], [-36 - c, 0], [-36, 2]], true); ctx.fill();
+      ctx.fillStyle = '#ffe600';
+      traco([[-36, -2], [-36 - c * 0.55, 0], [-36, 1]], true); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+
+  // ── render ────────────────────────────────────────
+  function fundo() {
+    const c = conjDe(pistaN);
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, c.ceu[0]); sky.addColorStop(0.55, c.ceu[1]); sky.addColorStop(1, c.ceu[2]);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    const sg = ctx.createLinearGradient(0, H * 0.22, 0, H * 0.58);
+    sg.addColorStop(0, c.sol[0]); sg.addColorStop(1, c.sol[1]);
+    ctx.fillStyle = sg; Neon.glow(ctx, c.sol[1], 40);
+    Neon.circle(ctx, W * 0.72, H * 0.4, 92);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = c.serra;
+    for (let i = 0; i < 5; i++) ctx.fillRect(W * 0.72 - 100, H * 0.4 + 10 + i * 16, 200, 4 + i * 1.5);
+    ctx.beginPath(); ctx.moveTo(0, H);
+    const px = (cam.x * 0.15) % 320;
+    for (let x = -px - 320; x <= W + 320; x += 160) {
+      ctx.lineTo(x, H * 0.62); ctx.lineTo(x + 80, H * 0.62 - 90 - ((x / 160) & 1) * 40);
+    }
+    ctx.lineTo(W + 400, H); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.10)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    const gx = (cam.x * 0.5 * cam.z) % 80, gy = (cam.y * 0.5 * cam.z) % 80;
+    for (let x = -gx; x < W; x += 80) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = -gy; y < H; y += 80) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+  }
+
+  function render() {
+    if (!pista) { ctx.fillStyle = '#07002a'; ctx.fillRect(0, 0, W, H); return; }
+    fundo();
+    ctx.save();
+    const sx = shake > 0 ? (Math.random() - 0.5) * shake : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake : 0;
+    ctx.translate(W / 2 + sx, H / 2 + sy);
+    ctx.scale(cam.z, cam.z);
+    ctx.translate(-cam.x, -cam.y);
+
+    // pista em três camadas: brilho largo, trilho, fio branco
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const [cor, larg, blur] of [['rgba(255, 43, 214, 0.22)', 14, 0], ['#ff2bd6', 5, 18], ['rgba(255,255,255,0.85)', 1.5, 0]]) {
+      ctx.strokeStyle = cor; ctx.lineWidth = larg; Neon.glow(ctx, '#ff2bd6', blur);
+      ctx.beginPath();
+      for (const tr of pista.trechos) {
+        ctx.moveTo(tr[0][0], tr[0][1]);
+        for (let i = 1; i < tr.length; i++) ctx.lineTo(tr[i][0], tr[i][1]);
+      }
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    // mesas: preenche o trapézio por baixo do traçado, que já foi desenhado
+    ctx.fillStyle = 'rgba(255, 140, 26, 0.22)';
+    for (const m of pista.mesas) { traco(m, true); ctx.fill(); }
+    // boosters: setas ciano correndo na direção da pista
+    const fase = (performance.now() / 120) % 40;
+    ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 3; Neon.glow(ctx, '#00f0ff', 12);
+    for (const s of pista.segs) {
+      if (!s.boost) continue;
+      ctx.beginPath();
+      for (let d = fase; d < s.len - 10; d += 40) {
+        const bx = s.x0 + (s.x1 - s.x0) * d / s.len, by = s.y0 + (s.y1 - s.y0) * d / s.len;
+        ctx.moveTo(bx - 8, by - 12); ctx.lineTo(bx + 2, by - 5); ctx.lineTo(bx - 8, by + 2);
+      }
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    // moedas girando e latas de gasolina
+    const gm = Math.abs(Math.cos(performance.now() / 260));
+    for (const it of pista.itens) {
+      if (it.pego) continue;
+      if (it.tipo === 'lata') {
+        ctx.fillStyle = 'rgba(255, 59, 92, 0.35)'; Neon.glow(ctx, '#ff3b5c', 14);
+        ctx.fillRect(it.x - 8, it.y - 10, 16, 20);
+        ctx.strokeStyle = '#ff3b5c'; ctx.lineWidth = 2; ctx.strokeRect(it.x - 8, it.y - 10, 16, 20);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#fff'; ctx.font = '700 9px Orbitron, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('GAS', it.x, it.y);
+        ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      } else {
+        ctx.fillStyle = '#ffe600'; Neon.glow(ctx, '#ffe600', 14);
+        ctx.beginPath(); ctx.ellipse(it.x, it.y, 4 + 6 * gm, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+    // chegada
+    const fy = pista.segs[pista.segs.length - 1].y1;
+    ctx.fillStyle = '#39ff7a'; Neon.glow(ctx, '#39ff7a', 14);
+    ctx.fillRect(pista.fim - 2, fy - 120, 4, 120);
+    ctx.shadowBlur = 0;
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      ctx.fillStyle = (i + j) & 1 ? '#fff' : '#111';
+      ctx.fillRect(pista.fim + 2 + i * 9, fy - 118 + j * 9, 9, 9);
+    }
+
+    if (state !== 'morto') desenharCarro();
+    particles.draw(ctx);
+    ctx.restore();
+
+    hud();
+  }
+
+  function hud() {
+    ctx.fillStyle = 'rgba(5, 0, 26, 0.55)'; ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = 'rgba(0, 240, 255, 0.25)'; ctx.fillRect(0, 30, W, 1);
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    // barra de gasolina: é o que decide a segunda estrela, então vem primeiro
+    const g = car.gasolina / K.tanque;
+    ctx.fillStyle = 'rgba(232, 230, 245, 0.5)'; ctx.font = '700 9px Orbitron, sans-serif';
+    ctx.fillText('GAS', 58, 15);
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(84, 9, 96, 12);
+    ctx.fillStyle = g > 0.45 ? '#39ff7a' : g > 0.25 ? '#ffe600' : '#ff3b5c';
+    Neon.glow(ctx, ctx.fillStyle, 10);
+    ctx.fillRect(84, 9, 96 * g, 12);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+    ctx.strokeRect(84, 9, 96, 12);
+    ctx.beginPath(); ctx.moveTo(108, 9); ctx.lineTo(108, 21); ctx.stroke();  // marca dos 25%
+    let hx = 194;
+    for (const [rot, val, cor] of [
+      ['TEMPO', tempo.toFixed(1), tempo <= alvo ? '#39ff7a' : '#ffe600'],
+      ['ALVO', alvo.toFixed(1), 'rgba(232, 230, 245, 0.7)'],
+      ['MOEDAS', `${car.moedas}/${pista.moedas}`, '#ffe600'],
+      ['FLIPS', car.flips, '#ff2bd6'],
+      ['FASE', `${pistaN + 1} ${PISTAS[pistaN].nome}`, '#39ff7a'],
+    ]) {
+      ctx.fillStyle = 'rgba(232, 230, 245, 0.5)'; ctx.font = '700 9px Orbitron, sans-serif';
+      ctx.fillText(rot, hx, 15); hx += ctx.measureText(rot).width + 7;
+      ctx.fillStyle = cor; ctx.font = '700 13px Orbitron, sans-serif';
+      ctx.fillText(String(val), hx, 15); hx += ctx.measureText(String(val)).width + 20;
+    }
+    ctx.textBaseline = 'alphabetic';
+
+    // trilho do progresso da pista
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(0, H - 5, W, 5);
+    ctx.fillStyle = '#39ff7a'; ctx.fillRect(0, H - 5, W * clamp(car.x / pista.fim, 0, 1), 5);
+
+    // pedais: só aparecem pra quem toca
+    if (dedo && state === 'playing') {
+      for (const [x, nome, cor, on] of [[86, 'FREIO', '#ff3b5c', car.freio], [W - 86, 'GÁS', '#39ff7a', car.gas]]) {
+        ctx.globalAlpha = on ? 0.95 : 0.4;
+        ctx.strokeStyle = cor; ctx.lineWidth = 3; Neon.glow(ctx, cor, on ? 20 : 6);
+        ctx.beginPath(); ctx.arc(x, H - 86, 46, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = cor; ctx.globalAlpha = on ? 0.32 : 0.07; ctx.fill();
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        ctx.font = '700 13px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = cor;
+        ctx.fillText(nome, x, H - 81);
+      }
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // ── loop ──────────────────────────────────────────
+  function loop(now) {
+    const dt = Math.min(0.1, (now - lastFrame) / 1000);
+    lastFrame = now;
+    if (state === 'playing') {
+      const tv = [...toques.values()];
+      car.gas = preso.has('gas') || tv.includes('gas');
+      car.freio = preso.has('freio') || tv.includes('freio');
+      acc += dt;
+      let n = 0;
+      while (acc >= STEP && n < 8 && !car.morto) { passo(car, pista, STEP); acc -= STEP; tempo += STEP; n++; }
+      if (n === 8) acc = 0;   // quadro perdido: descarta em vez de acelerar depois
+      for (const ev of car.ev) tratar(ev);
+      car.ev.length = 0;
+      if (comboT > 0 && (comboT -= dt) <= 0) combo = 0;
+      Neon.audio.music.intensity(clamp(Math.hypot(car.vx, car.vy) / 900 + combo * 0.15, 0, 1));
+      if (car.morto) explodir(); else if (car.x > pista.fim) chegou();
+    } else if (state === 'morto' || state === 'chegou') {
+      fimT += dt;
+      if (fimT > 1.5) { if (state === 'chegou') telaResultado(); else reiniciar(); }
+    }
+    if (car && state !== 'paused' && state !== 'hub') camera(dt);
+    particles.update(dt);
+    shake = Math.max(0, shake - dt * 40);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // Gancho de diagnóstico. No iPad não dá pra abrir um depurador de verdade,
+  // então o Safari remoto lê o estado por aqui. Não muda nada do jogo.
+  window.__wheels = () => ({ car, pista, state, tempo, alvo, pistaN, save, cam });
+
+  pintarPainel();
+  render();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
