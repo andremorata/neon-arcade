@@ -185,7 +185,10 @@ Modelo "duas rodas + chassi", o mesmo do Hill Climb, sem motor de física extern
   entre a posição ideal da roda e a de contato (dá o "balanço" de brinquedo).
 - Grip: atrito tangencial saturado; abaixo do limite a roda tem tração, acima escorrega. Gás
   em subida com grip baixo = escorrega, como no original.
-- No ar: pedal aplica torque `±TILT`. Sem contato de roda, gravidade pura.
+- No ar: pedal manda na **velocidade** de giro, não no torque: segurou gira a `TILT` rad/s,
+  soltou o giro para. Torque puro (testado no protótipo) acumulava rotação que a criança não
+  conseguia desfazer antes do chão; a versão por velocidade dá o "segura até ficar em pé,
+  solta" do original. Sem contato de roda, gravidade pura.
 - Teto encosta no chão (ponto do "teto" do chassi toca segmento) → explosão. Pequena
   tolerância de ângulo (~ 150°) para não punir quase-pouso.
 - Loop: só a física resolve. Entrar com velocidade suficiente = passa; sem = cai de teto e
@@ -216,9 +219,10 @@ const PISTA_1 = [
 | `salto` / `vao` | largura | pista some; queda = fim |
 | `pouso` | ângulo, comprimento | rampa de recepção |
 | `loop` | raio | círculo de 24 segmentos, entrada e saída tangentes |
-| `booster` | comprimento | acelera para `VMAX` da peça, não gasta gasolina |
+| `booster` | comprimento | esteira: empurra o **centro de massa** até `VBOOST`, não gasta gasolina. Passando pelo ponto de contato do pneu o torque erguia o nariz e capotava o carro (visto na fase 0) |
 | `elevador` | altura | plataforma sobe quando o carro pisa, tempo fixo; carro para em cima |
-| `obstaculo` | tipo | bloco fixo (pula ou perde velocidade) |
+| `mesa` | altura, topo | trapézio: sobe, topo plano, desce. Parede vertical não serve: o pneu encostado nela recebe tração pra cima e capota o carro sozinho (visto na fase 0) |
+| `rampao` | ângulo, raio | quarto de pipe; larga o carro no ângulo pedido. É a peça que dá tempo de ar pra um flip inteiro |
 | `martelo` / `plataforma` | período | peça móvel por tempo, determinística pela semente da pista |
 | `lata` / `moeda` | — | itens colocados pelo compilador ao longo das peças (`lata` explícita em pontos-chave, moedas em arcos nas rampas) |
 | `chegada` | — | faixa; cruzar = corrida fechada |
@@ -232,6 +236,12 @@ determinística por pista, então o Desafio do Dia é o mesmo para todos no mesm
 - Sensores: ângulo acumulado no ar (flip a cada ±360°), tempo sem contato (ar), ângulo do
   chassi com só a roda traseira no chão por mais de 0,4 s (wheelie), pouso com as duas rodas
   a menos de 0,15 s uma da outra e |ângulo − inclinação da pista| < 12° (pouso perfeito).
+- O flip conta **na hora em que fecha a volta** (a 324°, ainda no ar), não no pouso. Contar no
+  pouso perdia o flip que terminava com a roda de trás já encostada, e o jogador via o carro
+  girar sem placar nenhum. O giro acumula enquanto falta roda no chão e zera depois de 0,2 s
+  com as duas rodas apoiadas, o que também impede o loop de contar como flip.
+- Uma volta leva `2π / TILT` segundos, então toda pista precisa de pelo menos um salto com esse
+  tempo de ar mais folga pra nivelar. O `wheels-check.js` verifica isso pista por pista.
 - Cada manobra mostra texto flutuante (`Neon` já tem) e soma a um combo com multiplicador que
   cai depois de 2 s no chão sem manobra. Combo alto sobe a `music.intensity`.
 - Pontuação da corrida = moedas + acrobacias × multiplicador + bônus de gasolina restante +
@@ -297,7 +307,7 @@ Cada fase termina jogável e mergeável em `main`; a suíte nunca fica com um jo
 
 | Fase | Entrega | Critério de pronto |
 |---|---|---|
-| **0 · Protótipo de física** (arquivo à parte, não entra no menu) | carro + reta + rampa + loop + salto; pedais; explosão | um adulto acha o loop "gostoso" e a criança consegue fazer um flip em 5 min |
+| **0 · Protótipo de física** (`proto/wheels.html`, fora de `games/` porque o teste exige tile no menu para tudo que está lá; `node proto/wheels-check.js` trava a física) | carro + reta + rampa + loop + salto; pedais; explosão | um adulto acha o loop "gostoso" e a criança consegue fazer um flip em 5 min |
 | **1 · Uma corrida inteira** | 1 pista, gasolina, latas, moedas, chegada, estrelas, reinício, HUD, pausa, som, entrada no `GAMES` | fecha a pista no iPad e no desktop; `node test-games.js` passa |
 | **2 · Kit de pista** | compilador + todas as peças da tabela; 8 pistas do conjunto Rua; paralaxe | as 8 pistas fecham com o carro base; tempo-alvo gerado pela IA |
 | **3 · Acrobacias** | sensores, combo, texto flutuante, barra persistente, baú | placar de pontuação por pista |
