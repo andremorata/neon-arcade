@@ -968,13 +968,21 @@
     const sky = ctx.createLinearGradient(0, 0, 0, H);
     sky.addColorStop(0, c.ceu[0]); sky.addColorStop(0.55, c.ceu[1]); sky.addColorStop(1, c.ceu[2]);
     ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-    const sg = ctx.createLinearGradient(0, H * 0.22, 0, H * 0.58);
+    // Sol synthwave: o disco com brilho, e as faixas recortadas dentro dele.
+    // Como retângulos por cima elas eram mais largas que o sol e sobravam
+    // penduradas no céu dos dois lados.
+    const SX = W * 0.72, SY = H * 0.4, SR = 92;
+    const sg = ctx.createLinearGradient(0, SY - SR, 0, SY + SR);
     sg.addColorStop(0, c.sol[0]); sg.addColorStop(1, c.sol[1]);
     ctx.fillStyle = sg; Neon.glow(ctx, c.sol[1], 40);
-    Neon.circle(ctx, W * 0.72, H * 0.4, 92);
+    Neon.circle(ctx, SX, SY, SR);
     ctx.shadowBlur = 0;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(SX, SY, SR, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = c.ceu[1];   // faixa = céu aparecendo através do sol
+    for (let i = 0; i < 6; i++) ctx.fillRect(SX - SR, SY + 6 + i * 15, SR * 2, 3 + i * 1.8);
+    ctx.restore();
     ctx.fillStyle = c.serra;
-    for (let i = 0; i < 5; i++) ctx.fillRect(W * 0.72 - 100, H * 0.4 + 10 + i * 16, 200, 4 + i * 1.5);
     ctx.beginPath(); ctx.moveTo(0, H);
     const px = (cam.x * 0.15) % 320;
     for (let x = -px - 320; x <= W + 320; x += 160) {
