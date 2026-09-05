@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON ORBIT — A gravidade é o seu motor</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  body.imersivo { background: #030917; }
+  body.imersivo::before, body.imersivo::after { display: none; }
+  .stage { --arw: 8; --arh: 5; --maxw: 1100px; border-color: #87ddcd55; background: #030917; box-shadow: 0 0 70px #56bbcb1a; }
+  .stage::before { display: none; }
+  .overlay { align-items: flex-start; text-align: left; padding: 10%; background: linear-gradient(90deg,#030917ed,#03091790 65%,#03091722); backdrop-filter: none; }
+  .overlay h2 { font-size: clamp(38px,8vw,86px); color: #e9fcf5; background: none; filter: none; animation: none; letter-spacing: -.04em; }
+  .overlay p { max-width: 360px; color: #b6cbd4; }
+  .eyebrow { color: #e5b478; font-size: 10px; letter-spacing: .26em; margin-bottom: 14px; }
+  .btn { background: #b9f6df; color: #07261f; box-shadow: 0 0 30px #8de8c333; letter-spacing: .12em; }
+  .controls-hint { justify-content: flex-start; max-width: 370px; }
+  .key { color: #b9c9d5; border-color: #93b4c033; box-shadow: none; }
+  .telemetry { position: absolute; top: 20px; left: 66px; right: 110px; display: flex; gap: 26px; z-index: 5; pointer-events: none; }
+  .telemetry span { display: block; color: #829da9; font-size: 8px; letter-spacing: .16em; }
+  .telemetry b { color: #ddf6f1; font: 700 16px Orbitron,sans-serif; }
+  .flight-controls { position: absolute; bottom: 20px; left: 24px; right: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 5; }
+  .flight-controls p { color: #aec4cc; font-size: 10px; max-width: 320px; }
+  .recover { background: #081723d9; border: 1px solid #a7c6cf55; color: #d4e9eb; padding: 12px 15px; border-radius: 8px; cursor: pointer; font: 10px 'Space Mono',monospace; }
+  .recover:disabled { opacity: .35; cursor: default; }
+  .stage:has(.overlay:not(.hidden)) .telemetry, .stage:has(.overlay:not(.hidden)) .flight-controls { visibility: hidden; }
+  .toast { top: 76px; max-width: calc(100% - 32px); white-space: normal; text-align: center; font-size: 10px; }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  @media (max-width: 560px) { .telemetry { top: 65px; left: 22px; right: 18px; gap: 20px; } .overlay { padding: 64px 26px 24px; } .flight-controls { left: 18px; right: 18px; } .flight-controls p { max-width: 175px; } }
+  @media (orientation: landscape) and (max-height: 520px) { .overlay { padding: 55px 8% 15px; } .overlay h2 { font-size: 40px; } .eyebrow { margin-bottom: 5px; } .controls-hint { margin-top: 8px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header><div class="brand"><a href="../index.html"><h1>NEON ORBIT</h1></a><div class="tag">// expedição 01 · a gravidade é o seu motor</div></div></header>
+  <div class="stage" id="stage">
+    <canvas id="game" width="960" height="600" aria-label="Nave em órbita. Espaço ou toque no espaço para saltar ao próximo planeta."></canvas>
+    <button class="sound-toggle" id="soundToggle" aria-label="Alternar som" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" aria-label="Pausar" title="Pausa (P)">⏸</button>
+    <div class="telemetry"><div><span>SINAIS</span><b id="signals">0 / 12</b></div><div><span>ESCUDOS</span><b id="shields">4</b></div><div><span>PONTOS</span><b id="score">0</b></div><div><span>RECORDE</span><b id="best" data-key="orbit">0</b></div></div>
+    <div class="flight-controls"><p id="hint">ESPERE A ROTA FICAR VERDE · TOQUE PARA SALTAR</p><button class="recover" id="recoverBtn" disabled>↶ RECUPERAR · R<br>custa 1 escudo</button></div>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="overlay" id="overlay">
+      <div class="eyebrow">UMA PEQUENA NAVE. UM IMENSO SILÊNCIO.</div>
+      <h2 id="overlayTitle">NEON ORBIT</h2>
+      <p id="overlayText">Você não tem motor. Use a órbita dos planetas para se lançar pelo vazio e reacender 12 sinais. O traço verde indica uma rota de chegada. Depois, encare as singularidades.</p>
+      <div class="sub" id="overlaySub"></div>
+      <button class="btn" id="startBtn">INICIAR EXPEDIÇÃO ↗</button>
+      <div class="controls-hint"><span class="key">ESPAÇO / TOQUE · saltar</span><span class="key">R · recuperar</span><span class="key">P · pausa</span></div>
+    </div>
+  </div>
+  <footer>// um toque, um salto · 3 setores · recorde salvo neste aparelho</footer>
+</div>
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const { W, H } = Neon.world(canvas, [960, 600], [540, 800]);
+  if (window.matchMedia('(max-height: 520px) and (orientation: landscape)').matches) document.body.classList.add('imersivo');
+  const TAU = Math.PI * 2;
+
+  // ── navegação: a previsão e o voo usam a mesma física ──
+  function expedition(height) {
+    const colors = ['#8ce8d1', '#9bb3ff', '#f3bb85'];
+    return Array.from({ length: 13 }, (_, i) => ({
+      x: 220 + i * 290, y: height * .5 + Math.sin(i * 1.73 + .4) * Math.min(112, height * .18),
+      r: 34 + (i * 7 % 15), color: colors[Math.min(2, Math.floor(Math.max(0, i - 1) / 4))],
+      name: ['ORIGEM', 'ÍRIS', 'VELA', 'LYRA', 'AURORA', 'NIX', 'ATLAS', 'CASSINI', 'UMBRA', 'SOLIS', 'KEPLER', 'ÉON', 'FAROL'][i],
+    }));
+  }
+  function hazards(route, height) {
+    return route.slice(5).filter((_, i) => i % 2 === 0).map(p => ({
+      x: p.x - 145, y: p.y < height / 2 ? height * .73 : height * .27, r: 23,
+    }));
+  }
+  function launchFrom(p, angle) {
+    return { x: p.x + Math.cos(angle) * (p.r + 27), y: p.y + Math.sin(angle) * (p.r + 27),
+      vx: -Math.sin(angle) * 310, vy: Math.cos(angle) * 310, age: 0 };
+  }
+  function flightStep(s, target, holes, dt) {
+    for (const p of [target, ...holes]) {
+      const dx = p.x - s.x, dy = p.y - s.y, d = Math.max(22, Math.hypot(dx, dy));
+      const force = (p === target ? 900000 : 620000) / (d * d * d);
+      s.vx += dx * force * dt; s.vy += dy * force * dt;
+    }
+    s.x += s.vx * dt; s.y += s.vy * dt; s.age += dt;
+    if (holes.some(p => Math.hypot(s.x - p.x, s.y - p.y) < p.r + 7)) return 'lost';
+    if (Math.hypot(s.x - target.x, s.y - target.y) <= target.r + 27) return 'arrived';
+    return s.age >= 5 ? 'lost' : 'flying';
+  }
+  // ── fim da navegação ──
+
+  const planets = expedition(H), holes = hazards(planets, H);
+  const particles = new Neon.Particles();
+  const stars = Array.from({ length: 180 }, () => ({ x: Neon.rand(0, W), y: Neon.rand(0, H), z: Neon.rand(.12, .6), r: Neon.rand(.5, 1.5) }));
+  const sectors = ['01 / JARDIM DE ÓRBITAS', '02 / MAR DE SOMBRAS', '03 / O ÚLTIMO FAROL'];
+  let state = 'menu', index = 0, angle = -Math.PI / 2, ship = launchFrom(planets[0], angle);
+  let score = 0, shields = 4, streak = 0, pb = Neon.best.get('orbit');
+  let flying = false, camera = 0, trail = [], arrival = 0, elapsed = 0, last = performance.now();
+  let prediction = { points: [], result: 'flying' };
+
+  function hud() {
+    Neon.$('signals').textContent = `${index} / ${planets.length - 1}`;
+    Neon.$('shields').textContent = shields;
+    Neon.$('score').textContent = score;
+    Neon.$('best').textContent = pb;
+    Neon.$('recoverBtn').disabled = !flying || state !== 'playing';
+    Neon.$('hint').textContent = flying ? 'EM TRÂNSITO · A GRAVIDADE GUIA VOCÊ' : 'ESPERE A ROTA VERDE · ESPAÇO OU TOQUE PARA SALTAR';
+  }
+  function start() {
+    Neon.audio.ensure();
+    index = 0; score = 0; shields = 4; streak = 0; angle = -Math.PI / 2;
+    flying = false; elapsed = 0; arrival = 0; camera = 0; trail = []; particles.clear();
+    ship = launchFrom(planets[0], angle); state = 'playing';
+    document.body.classList.add('imersivo');
+    Neon.overlay.hide(); Neon.audio.music.start(); hud();
+    last = performance.now();
+  }
+  function finish(won) {
+    state = 'over'; flying = false;
+    if (won) score += shields * 400;
+    pb = Neon.best.update('orbit', score);
+    hud(); Neon.audio.music.down();
+    if (won) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    Neon.overlay.show(won ? 'VOCÊ É O FAROL.' : 'SINAL PERDIDO',
+      `${index} sinais reacendidos · ${score} pontos. ${won ? 'Uma nave sem motor conectou um universo inteiro.' : 'Cada órbita tem sua hora. A linha verde mostra o momento de partir.'}`,
+      'NOVA EXPEDIÇÃO ↗', won ? 'record' : 'go');
+  }
+  function recover() {
+    if (state !== 'playing' || !flying) return;
+    particles.burst(ship.x, ship.y, '#f3bb85', 28);
+    shields--; streak = 0;
+    if (shields <= 0) return finish(false);
+    flying = false; angle = -Math.PI / 2; trail = [];
+    ship = launchFrom(planets[index], angle);
+    Neon.audio.sfx.wrong(); Neon.toast('DOBRA DE EMERGÊNCIA · −1 ESCUDO'); hud();
+  }
+  function launch() {
+    if (state !== 'playing' || flying) return;
+    ship = launchFrom(planets[index], angle); flying = true; trail = [];
+    Neon.audio.sfx.boost(); particles.wave(ship.x, ship.y, '#b9f6df', 45); hud();
+  }
+  function arrive() {
+    index++; flying = false; streak++;
+    angle = Math.atan2(ship.y - planets[index].y, ship.x - planets[index].x);
+    score += 250 + Math.min(streak, 5) * 50;
+    arrival = 1; trail = [];
+    particles.burst(ship.x, ship.y, planets[index].color, 32, 120);
+    particles.wave(planets[index].x, planets[index].y, planets[index].color, 160);
+    particles.float(planets[index].x, planets[index].y - 100, `SINAL ${String(index).padStart(2, '0')}`, '#e5fff2');
+    Neon.audio.sfx.level();
+    if (index === planets.length - 1) return finish(true);
+    if (index % 4 === 0) { shields = Math.min(4, shields + 1); Neon.toast('SETOR CONECTADO · +1 ESCUDO'); }
+    hud();
+  }
+  function pause() {
+    if (state === 'paused') {
+      state = 'playing'; last = performance.now(); Neon.overlay.hide(); Neon.audio.music.start(); hud();
+    } else if (state === 'playing') {
+      state = 'paused'; Neon.audio.music.stop(); hud();
+      Neon.overlay.show('EM SUSPENSÃO', 'Seu lugar no universo está guardado.', 'CONTINUAR ↗');
+    }
+  }
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') pause();
+    else if (state === 'menu' || state === 'over') start();
+    Neon.$('startBtn').blur();
+  });
+  Neon.$('recoverBtn').addEventListener('click', recover);
+  canvas.addEventListener('pointerdown', e => { if (e.button === 0) { e.preventDefault(); launch(); } });
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if ([' ', 'enter', 'p', 'r'].includes(k)) {
+      if ((k === ' ' || k === 'enter') && e.target.closest?.('button, a')) return;
+      e.preventDefault(); if (e.repeat) return;
+      if (k === 'p') pause();
+      else if (k === 'r') recover();
+      else if (state === 'playing') launch();
+      else Neon.$('startBtn').click();
+    }
+  });
+  Neon.onHide(() => { if (state === 'playing') pause(); });
+
+  function predict() {
+    const s = launchFrom(planets[index], angle), points = [{ x: s.x, y: s.y }];
+    const nearby = holes.filter(p => Math.abs(p.x - planets[index].x) < 650);
+    let result = 'flying';
+    for (let i = 0; i < 420; i++) {
+      result = flightStep(s, planets[index + 1], nearby, 1 / 120);
+      if (i % 7 === 0 || result !== 'flying') points.push({ x: s.x, y: s.y });
+      if (result !== 'flying' || s.y < 45 || s.y > H - 50) break;
+    }
+    return { points, result };
+  }
+  function update(dt) {
+    if (state !== 'playing') return;
+    elapsed += dt; arrival = Math.max(0, arrival - dt);
+    const targetCamera = Math.max(0, ship.x - W * .32);
+    camera += (targetCamera - camera) * (1 - Math.exp(-dt * 4));
+    if (flying) {
+      const nearby = holes.filter(p => Math.abs(p.x - planets[index].x) < 650);
+      let remaining = dt;
+      while (remaining > 0 && flying && state === 'playing') {
+        const step = Math.min(1 / 120, remaining); remaining -= step;
+        const result = flightStep(ship, planets[index + 1], nearby, step);
+        if (result === 'arrived') arrive();
+        else if (result === 'lost' || ship.y < 45 || ship.y > H - 50 || ship.x < planets[index].x - 450) recover();
+      }
+      if (flying) { trail.push({ x: ship.x, y: ship.y }); if (trail.length > 65) trail.shift(); }
+    } else {
+      angle += dt * .95;
+      ship = launchFrom(planets[index], angle);
+      prediction = predict();
+      Neon.$('hint').textContent = prediction.result === 'arrived' ? 'ROTA ALINHADA · SALTE AGORA' : 'ESPERE A ROTA VERDE · ESPAÇO OU TOQUE PARA SALTAR';
+    }
+    particles.update(dt);
+    Neon.audio.music.intensity(Math.min(1, index / 12 + (flying ? .2 : 0)));
+  }
+
+  function text(s, x, y, color, size = 11, align = 'center') {
+    ctx.fillStyle = color; ctx.font = `${size}px 'Space Mono',monospace`; ctx.textAlign = align; ctx.fillText(s, x, y);
+  }
+  function ring(x, y, r, color, width = 1) {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  }
+  function render(now) {
+    const t = Neon.motion.reduced ? 0 : now / 1000;
+    ctx.fillStyle = '#030917'; ctx.fillRect(0, 0, W, H);
+    const nebula = ctx.createRadialGradient(W * .65, H * .45, 0, W * .65, H * .45, W * .75);
+    nebula.addColorStop(0, index < 4 ? '#10333e' : index < 8 ? '#201b40' : '#342134'); nebula.addColorStop(1, '#030917');
+    ctx.fillStyle = nebula; ctx.fillRect(0, 0, W, H);
+    for (const s of stars) {
+      const x = ((s.x - camera * s.z) % W + W) % W;
+      ctx.globalAlpha = .35 + .35 * (1 + Math.sin(t * .6 + s.x));
+      Neon.circle(ctx, x, s.y, s.r, '#d8f3e8');
+    }
+    ctx.globalAlpha = 1;
+    ctx.save(); ctx.translate(-camera, 0);
+    // Liga os mundos no mapa; a trajetória de voo é a linha pontilhada mais clara.
+    ctx.setLineDash([2, 12]); ctx.strokeStyle = '#8da9b322'; ctx.beginPath();
+    planets.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); ctx.setLineDash([]);
+    for (const p of planets) {
+      if (p.x < camera - 150 || p.x > camera + W + 150) continue;
+      const i = planets.indexOf(p), active = i <= index + 1;
+      ctx.globalAlpha = active ? 1 : .28;
+      const aura = ctx.createRadialGradient(p.x, p.y, p.r * .6, p.x, p.y, p.r * 3.5);
+      aura.addColorStop(0, p.color + '32'); aura.addColorStop(1, p.color + '00');
+      Neon.circle(ctx, p.x, p.y, p.r * 3.5, aura);
+      ring(p.x, p.y, p.r + 27, p.color + (i === index + 1 ? '8a' : '35'));
+      if (i <= index) ring(p.x, p.y, p.r + 32, p.color + '25');
+      const surface = ctx.createRadialGradient(p.x - p.r * .45, p.y - p.r * .45, 1, p.x + p.r * .2, p.y + p.r * .2, p.r * 1.3);
+      surface.addColorStop(0, p.color); surface.addColorStop(.35, p.color + 'a0'); surface.addColorStop(1, '#05121f');
+      Neon.circle(ctx, p.x, p.y, p.r, surface);
+      ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.clip();
+      for (let j = -3; j < 5; j++) {
+        ctx.strokeStyle = '#08182836'; ctx.lineWidth = 5; ctx.beginPath();
+        ctx.ellipse(p.x - p.r * .3, p.y + j * 11, p.r * 1.6, 15, -.3, 0, TAU); ctx.stroke();
+      }
+      ctx.restore(); ring(p.x, p.y, p.r, p.color + 'a0');
+      if (i === index + 1) {
+        const a = -t * .4;
+        ctx.strokeStyle = '#ecfff0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 35, a, a + .6); ctx.stroke();
+        text('PRÓXIMO SINAL', p.x, p.y - p.r - 52, '#c4f2df', 9);
+      }
+      text(`${String(i).padStart(2, '0')} / ${p.name}`, p.x, p.y + p.r + 57, '#b9cfd9', 10);
+      if (i > 0 && i <= index) text('CONECTADO', p.x, p.y + p.r + 72, p.color, 8);
+    }
+    ctx.globalAlpha = 1;
+    for (const p of holes) {
+      if (p.x < camera - 130 || p.x > camera + W + 130) continue;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(-.3);
+      ctx.shadowBlur = Neon.motion.reduced ? 0 : 16; ctx.shadowColor = '#ff9865';
+      for (let j = 0; j < 5; j++) {
+        ctx.strokeStyle = `rgba(255,${140 + j * 15},100,${.5 - j * .08})`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 0, 45 + j * 7, 10 + j * 3, 0, 0, TAU); ctx.stroke();
+      }
+      ctx.shadowBlur = 0; Neon.circle(ctx, 0, 0, p.r, '#01030b'); ring(0, 0, p.r, '#ffb584', 2);
+      ctx.restore(); text('SINGULARIDADE', p.x, p.y + 70, '#cfa281', 8);
+    }
+    if (!flying && state === 'playing') {
+      const ok = prediction.result === 'arrived';
+      prediction.points.forEach((p, i) => { ctx.globalAlpha = 1 - i / prediction.points.length * .8; Neon.circle(ctx, p.x, p.y, i % 3 === 0 ? 2 : 1, ok ? '#a0ffc9' : '#d0d7e0'); });
+      ctx.globalAlpha = 1;
+      if (ok) { const end = prediction.points.at(-1); ring(end.x, end.y, 12, '#a0ffc9'); }
+    }
+    if (trail.length > 1) {
+      for (let i = 1; i < trail.length; i++) {
+        ctx.strokeStyle = `rgba(175,255,227,${i / trail.length * .7})`; ctx.lineWidth = i / trail.length * 3;
+        ctx.beginPath(); ctx.moveTo(trail[i - 1].x, trail[i - 1].y); ctx.lineTo(trail[i].x, trail[i].y); ctx.stroke();
+      }
+    }
+    ctx.save(); ctx.translate(ship.x, ship.y); ctx.rotate(flying ? Math.atan2(ship.vy, ship.vx) : angle + Math.PI / 2);
+    ctx.shadowColor = '#a0ffdd'; ctx.shadowBlur = 15; ctx.fillStyle = '#e4fff1';
+    ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-8, -6); ctx.lineTo(-4, 0); ctx.lineTo(-8, 6); ctx.closePath(); ctx.fill();
+    if (flying) { ctx.fillStyle = '#87dfd1'; ctx.beginPath(); ctx.moveTo(-6, -3); ctx.lineTo(-19 - Math.sin(t * 30) * 5, 0); ctx.lineTo(-6, 3); ctx.fill(); }
+    ctx.restore();
+    particles.draw(ctx); ctx.restore();
+    text(sectors[Math.min(2, Math.floor(index / 4))], W / 2, H - 92, '#8496a9', W < 600 ? 10 : 11);
+    if (arrival > 0 && !Neon.motion.reduced) { ctx.fillStyle = `rgba(150,255,220,${arrival * .06})`; ctx.fillRect(0, 0, W, H); }
+  }
+  function loop(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    update(dt); render(now); requestAnimationFrame(loop);
+  }
+  hud(); render(0); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

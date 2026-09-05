@@ -1264,6 +1264,83 @@ assert.deepStrictEqual(rioTeste.canalDe(fIlha, 360), [300, 430], 'River: barco �
 assert.deepStrictEqual(rioTeste.canalDe(fIlha, 540), [470, 600], 'River: barco à direita da ilha fica no canal direito');
 assert.deepStrictEqual(rioTeste.canalDe({ esq: 300, dir: 600, ilha: null }, 450), [300, 600], 'River: sem ilha o canal é o rio inteiro');
 
+// Orbit: cada salto precisa ter uma janela humana de acerto, nos dois formatos.
+const orbit = games.orbit;
+const orbital = new Function(orbit.slice(orbit.indexOf('  function expedition'), orbit.indexOf('  // ── fim da navegação')) +
+  '; return { expedition, hazards, launchFrom, flightStep };')();
+for (const height of [600, 800]) {
+  const route = orbital.expedition(height), holes = orbital.hazards(route, height);
+  assert.strictEqual(route.length, 13, 'Orbit: origem e 12 sinais');
+  for (let i = 0; i < route.length - 1; i++) {
+    const nearby = holes.filter(p => Math.abs(p.x - route[i].x) < 650);
+    let longestWindow = 0, window = 0;
+    for (let angle = -Math.PI; angle < Math.PI; angle += .025) {
+      const ship = orbital.launchFrom(route[i], angle);
+      let result;
+      for (let step = 0; step < 600; step++) {
+        result = orbital.flightStep(ship, route[i + 1], nearby, 1 / 120);
+        assert.ok(Number.isFinite(ship.x) && Number.isFinite(ship.y), 'Orbit: física finita');
+        if (result !== 'flying' || ship.y < 45 || ship.y > height - 50 || ship.x < route[i].x - 450) break;
+      }
+      window = result === 'arrived' ? window + .025 : 0;
+      longestWindow = Math.max(longestWindow, window);
+    }
+    assert.ok(longestWindow / .95 >= .3, `Orbit ${height}: salto ${i + 1} precisa de pelo menos 300 ms para acertar`);
+  }
+}
+{
+  const target = { x: 1000, y: 500, r: 40 }, hole = { x: 200, y: 200, r: 23 };
+  const ship = { x: 200, y: 200, vx: 0, vy: 0, age: 0 };
+  assert.strictEqual(orbital.flightStep(ship, target, [hole], 1 / 120), 'lost', 'Orbit: singularidade consome a nave');
+  Object.assign(ship, { x: 1000, y: 500, age: 0 });
+  assert.strictEqual(orbital.flightStep(ship, target, [], 1 / 120), 'arrived', 'Orbit: campo do alvo captura a nave');
+  Object.assign(ship, { x: 0, y: 0, vx: 0, vy: 0, age: 5 });
+  assert.strictEqual(orbital.flightStep(ship, target, [], 1 / 120), 'lost', 'Orbit: deriva não pode durar para sempre');
+}
+
+// Echo: o código real do gerador, busca e colisão, sem depender do canvas.
+const echo = games.echo;
+const abyss = new Function('CELL', echo.slice(echo.indexOf('  function neighbors'), echo.indexOf('  // ── fim da estação')) +
+  '; return { station, distances, pathTo, canStand, move, investigate };')(40);
+for (const [cols, rows] of [[23, 11], [13, 11], [23, 7]]) {
+  for (let seed = 1; seed <= 24; seed++) {
+    const map = abyss.station(cols, rows, seed), d = abyss.distances(map, map.start);
+    assert.deepStrictEqual(map, abyss.station(cols, rows, seed), 'Echo: mesma semente gera a mesma estação');
+    assert.ok(map.cells.every((wall, id) => wall || d[id] >= 0), 'Echo: todo corredor é acessível');
+    assert.strictEqual(new Set([map.start, map.exit, ...map.shards]).size, 5, 'Echo: origem, saída e memórias distintas');
+    assert.ok(map.patrols.length >= 3, 'Echo: há posições para os três sentinelas');
+    for (const id of [...map.shards, map.exit, ...map.patrols]) {
+      assert.ok(d[id] > 0 && !map.cells[id], 'Echo: objetivo ou sentinela fora de parede');
+      const route = abyss.pathTo(map, map.start, id);
+      assert.strictEqual(route.at(-1), id, 'Echo: caminho chega ao destino');
+      let previous = map.start;
+      for (const step of route) {
+        const distance = Math.abs(step % cols - previous % cols) + Math.abs(Math.floor(step / cols) - Math.floor(previous / cols));
+        assert.strictEqual(distance, 1, 'Echo: sentinela não corta paredes em diagonal');
+        previous = step;
+      }
+    }
+    const player = { x: 60, y: 60 };
+    for (let i = 0; i < 100; i++) abyss.move(map, player, -2, -2);
+    assert.ok(player.x >= 48 && player.y >= 48, 'Echo: paredes externas contêm o jogador com seu raio');
+    assert.ok(abyss.canStand(map, player.x, player.y, 8), 'Echo: colisão preserva uma posição válida');
+    for (let x = 0; x < cols; x++) assert.ok(map.cells[x] && map.cells[(rows - 1) * cols + x], 'Echo: bordas fechadas');
+  }
+}
+{
+  const map = abyss.station(23, 11, 7), hunter = { x: 64, y: 60, route: [], alert: 0 };
+  const sound = { x: 60, y: 60 };
+  assert.ok(abyss.investigate(map, hunter, sound, 420), 'Echo: sentinela escuta som próximo');
+  assert.strictEqual(hunter.route[0], map.start, 'Echo: primeiro centraliza para não cortar a quina');
+  const originalRoute = [...hunter.route];
+  sound.x = 800;
+  assert.deepStrictEqual(hunter.route, originalRoute, 'Echo: segue a origem do som, não o jogador em tempo real');
+  assert.ok(!abyss.investigate(map, hunter, sound, 100), 'Echo: som fora do alcance não alerta');
+  assert.deepStrictEqual(hunter.route, originalRoute, 'Echo: som distante não substitui o destino');
+}
+for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = Neon\\.best\\.update\\('${key}', score\\)`),
+  `${key}: o recorde deve usar a mesma chave do menu`);
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

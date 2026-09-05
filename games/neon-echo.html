@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON ECHO — O escuro está escutando</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#04001a">
+<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<style>
+  body.imersivo { background: #020d12; }
+  body.imersivo::before, body.imersivo::after { display: none; }
+  .stage { --arw: 3; --arh: 2; --maxw: 1100px; border-color: #5fffd755; background: #020d12; box-shadow: 0 0 70px #56cb9b1a; }
+  .stage::before { display: none; }
+  .overlay { align-items: flex-start; text-align: left; padding: 9%; background: linear-gradient(90deg,#020d12ef,#020d12bb 60%,#020d1255); backdrop-filter: none; }
+  .eyebrow { color: #e2aa78; font-size: 10px; letter-spacing: .25em; margin-bottom: 16px; }
+  .overlay h2 { font-size: clamp(40px,9vw,96px); color: #bcffe7; background: none; filter: none; animation: none; letter-spacing: .04em; }
+  .overlay p { color: #adc9c6; max-width: 380px; }
+  .btn { background: #a2ffd9; color: #05251e; box-shadow: 0 0 30px #6affbf22; letter-spacing: .12em; }
+  .key { border-color: #a2ffd933; color: #b3d9cc; box-shadow: none; }
+  .controls-hint { justify-content: flex-start; max-width: 390px; }
+  .telemetry { position: absolute; z-index: 5; top: 20px; left: 66px; right: 110px; display: flex; gap: 24px; pointer-events: none; }
+  .telemetry span { display: block; color: #6d9c92; font-size: 8px; letter-spacing: .16em; }
+  .telemetry b { font: 700 15px Orbitron,sans-serif; color: #caffea; }
+  .actions { position: absolute; z-index: 5; bottom: 22px; right: 24px; display: flex; gap: 10px; }
+  .action { padding: 13px 17px; border: 1px solid #72e9bf70; border-radius: 8px; background: #073025ed; color: #bcffe0; font: 700 11px 'Space Mono',monospace; cursor: pointer; min-height: 48px; }
+  .action small { display: block; font-size: 8px; font-weight: 400; opacity: .7; margin-top: 3px; }
+  .action:disabled { opacity: .45; cursor: default; }
+  .dpad { bottom: 18px; left: 22px; --k: 42px; }
+  .dpad button { border-color: #72e9bf66; color: #bcffe0; background: #07251be6; box-shadow: none; }
+  .stage:has(.overlay:not(.hidden)) .telemetry, .stage:has(.overlay:not(.hidden)) .actions { visibility: hidden; }
+  .toast { top: 75px; max-width: calc(100% - 32px); white-space: normal; text-align: center; font-size: 10px; }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  @media (max-width: 560px) { .telemetry { top: 64px; left: 24px; right: 20px; gap: 20px; } .telemetry .record { display: none; } .overlay { padding: 64px 26px 24px; } .actions { right: 16px; bottom: 26px; flex-direction: column; gap: 8px; } .action { padding: 10px 13px; } .toast { top: auto; bottom: 158px; } }
+  @media (orientation: landscape) and (max-height: 520px) { .overlay { padding: 54px 8% 15px; } .overlay h2 { font-size: 38px; } .eyebrow { margin-bottom: 6px; } .telemetry .record { display: none; } .actions { bottom: 10px; } .dpad { display: block; --k: 35px; bottom: 8px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header><div class="brand"><a href="../index.html"><h1>NEON ECHO</h1></a><div class="tag">// estação submersa · o escuro está escutando</div></div></header>
+  <div class="stage" id="stage">
+    <canvas id="game" width="960" height="640" aria-label="Labirinto de sonar. Mova com setas ou WASD, espaço revela o mapa, E deixa uma isca."></canvas>
+    <button class="sound-toggle" id="soundToggle" aria-label="Alternar som" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" aria-label="Pausar" title="Pausa (P)">⏸</button>
+    <div class="telemetry"><div><span>PROFUNDIDADE</span><b id="depth">200 m</b></div><div><span>MEMÓRIAS</span><b id="memories">0 / 3</b></div><div><span>INTEGRIDADE</span><b id="health">3</b></div><div><span>PONTOS</span><b id="score">0</b></div><div class="record"><span>RECORDE</span><b id="best" data-key="echo">0</b></div></div>
+    <div class="actions"><button class="action" id="decoyBtn">ISCA · E<small id="decoys">2 disponíveis</small></button><button class="action" id="sonarBtn">SONAR · ESPAÇO<small id="charge">PRONTO</small></button></div>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="overlay" id="overlay">
+      <div class="eyebrow">PROTOCOLO 02 / RECUPERAÇÃO ABISSAL</div>
+      <h2 id="overlayTitle">NEON ECHO</h2>
+      <p id="overlayText">O sonar revela a estação. E revela você. Recupere 3 memórias ◆ e encontre a saída ◇ em cada profundidade. Os sentinelas vermelhos seguem o som; deixe uma isca e desapareça.</p>
+      <div class="sub" id="overlaySub"></div>
+      <button class="btn" id="startBtn">MERGULHAR ↓</button>
+      <div class="controls-hint"><span class="key">WASD / SETAS · mover</span><span class="key">ESPAÇO · sonar</span><span class="key">E · isca</span><span class="key">P · pausa</span></div>
+    </div>
+    <div class="dpad"><button class="up" data-dir="up" aria-label="Mover para cima">▲</button><button class="left" data-dir="left" aria-label="Mover para a esquerda">◀</button><button class="right" data-dir="right" aria-label="Mover para a direita">▶</button><button class="down" data-dir="down" aria-label="Mover para baixo">▼</button></div>
+  </div>
+  <footer>// três profundidades · cada mergulho cria outra estação · também funciona sem som</footer>
+</div>
+<script src="../assets/js/neon-core.js"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const { W, H, retrato } = Neon.world(canvas, [960, 640], [540, 800]);
+  const shortScreen = window.matchMedia('(max-height: 520px) and (orientation: landscape)').matches;
+  if (shortScreen) document.body.classList.add('imersivo');
+  const CELL = 40, COLS = Math.floor((W - 48) / CELL) | 1;
+  const TOP = retrato ? 112 : shortScreen ? 100 : 80;
+  const ROWS = (Math.floor((H - TOP - (retrato ? 200 : shortScreen ? 220 : 120)) / CELL) - 1) | 1;
+  const OX = (W - COLS * CELL) / 2, OY = TOP;
+  const TAU = Math.PI * 2;
+
+  // ── estação: labirinto conectado, caminhos e colisão ──
+  function neighbors(map, id) {
+    const x = id % map.cols, y = Math.floor(id / map.cols), out = [];
+    for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, n = ny * map.cols + nx;
+      if (nx >= 0 && ny >= 0 && nx < map.cols && ny < map.rows && map.cells[n] === 0) out.push(n);
+    }
+    return out;
+  }
+  function distances(map, start) {
+    const d = Array(map.cells.length).fill(-1), queue = [start]; d[start] = 0;
+    for (let i = 0; i < queue.length; i++) for (const n of neighbors(map, queue[i])) {
+      if (d[n] !== -1) continue;
+      d[n] = d[queue[i]] + 1; queue.push(n);
+    }
+    return d;
+  }
+  function station(cols, rows, seed) {
+    const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+    const map = { cols, rows, cells: Array(cols * rows).fill(1), start: cols + 1 };
+    const stack = [map.start]; map.cells[map.start] = 0;
+    while (stack.length) {
+      const id = stack.at(-1), x = id % cols, y = Math.floor(id / cols), options = [];
+      for (const [dx, dy] of [[2, 0], [0, 2], [-2, 0], [0, -2]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx > 0 && ny > 0 && nx < cols - 1 && ny < rows - 1 && map.cells[ny * cols + nx]) options.push([nx, ny]);
+      }
+      if (!options.length) { stack.pop(); continue; }
+      const [nx, ny] = options[Math.floor(random() * options.length)];
+      map.cells[((y + ny) / 2) * cols + (x + nx) / 2] = 0;
+      map.cells[ny * cols + nx] = 0; stack.push(ny * cols + nx);
+    }
+    // Algumas passagens de retorno dão espaço para despistar os sentinelas.
+    for (let y = 1; y < rows - 1; y++) for (let x = 1; x < cols - 1; x++) {
+      const id = y * cols + x;
+      if (map.cells[id] && random() < .16 &&
+        ((!map.cells[id - 1] && !map.cells[id + 1]) || (!map.cells[id - cols] && !map.cells[id + cols]))) map.cells[id] = 0;
+    }
+    const d = distances(map, map.start);
+    const far = d.map((v, id) => ({ v, id })).filter(p => p.v > 0).sort((a, b) => b.v - a.v);
+    map.exit = far[0].id;
+    map.shards = [];
+    let separation = distances(map, map.exit);
+    for (let i = 0; i < 3; i++) {
+      const candidate = far.filter(p => p.id !== map.exit && !map.shards.includes(p.id))
+        .sort((a, b) => Math.min(d[b.id], separation[b.id]) - Math.min(d[a.id], separation[a.id]))[0].id;
+      map.shards.push(candidate);
+      const next = distances(map, candidate); separation = separation.map((v, id) => Math.min(v, next[id]));
+    }
+    map.patrols = far.filter(p => p.v >= Math.max(8, far[0].v * .6) && !map.shards.includes(p.id) && p.id !== map.exit).map(p => p.id);
+    return map;
+  }
+  function pathTo(map, from, to) {
+    const d = distances(map, to), route = [];
+    if (d[from] < 0) return route;
+    let current = from;
+    while (current !== to) {
+      const next = neighbors(map, current).find(n => d[n] === d[current] - 1);
+      if (next === undefined) break;
+      route.push(next); current = next;
+    }
+    return route;
+  }
+  function investigate(map, hunter, sound, range) {
+    if (Math.hypot(hunter.x - sound.x, hunter.y - sound.y) > range) return false;
+    const from = Math.floor(hunter.y / CELL) * map.cols + Math.floor(hunter.x / CELL);
+    const to = Math.floor(sound.y / CELL) * map.cols + Math.floor(sound.x / CELL);
+    // Volta ao centro antes de mudar de corredor, para não cortar uma quina.
+    hunter.route = [from, ...pathTo(map, from, to)]; hunter.alert = 8; hunter.repath = 8;
+    return true;
+  }
+  function canStand(map, x, y, radius) {
+    for (const dx of [-radius, radius]) for (const dy of [-radius, radius]) {
+      const cx = Math.floor((x + dx) / CELL), cy = Math.floor((y + dy) / CELL);
+      if (cx < 0 || cy < 0 || cx >= map.cols || cy >= map.rows || map.cells[cy * map.cols + cx]) return false;
+    }
+    return true;
+  }
+  function move(map, body, dx, dy) {
+    if (canStand(map, body.x + dx, body.y, 8)) body.x += dx;
+    if (canStand(map, body.x, body.y + dy, 8)) body.y += dy;
+  }
+  // ── fim da estação ──
+
+  const center = id => ({ x: (id % COLS + .5) * CELL, y: (Math.floor(id / COLS) + .5) * CELL });
+  const cellOf = p => Math.floor(p.y / CELL) * COLS + Math.floor(p.x / CELL);
+  let map, player, hunters = [], known = [], lit = [], shards = [], pulses = [], decoys = [];
+  let state = 'menu', level = 0, score = 0, health = 3, charges = 2, cooldown = 0, invulnerable = 0;
+  let clock = 0, levelTime = 0, pulseCount = 0, seed = 7, last = performance.now(), hitFlash = 0;
+  let pb = Neon.best.get('echo'), facing = 0;
+  const keys = new Set(), pointers = new Map(), particles = new Neon.Particles();
+
+  function enter() {
+    map = station(COLS, ROWS, seed + level * 997);
+    player = center(map.start); known = Array(map.cells.length).fill(false); lit = Array(map.cells.length).fill(0);
+    shards = map.shards.map(id => ({ id, taken: false }));
+    hunters = Array.from({ length: level + 1 }, (_, i) => {
+      const home = map.patrols[Math.floor(i * map.patrols.length / (level + 1))] || map.exit;
+      return { ...center(home), home, route: [], alert: 0, repath: 0 };
+    });
+    pulses = []; decoys = []; charges = 2; cooldown = 0; invulnerable = 2;
+    levelTime = 0; pulseCount = 0; keys.clear(); pointers.clear(); particles.clear();
+    reveal(player, 95, 1.5); hud();
+  }
+  function hud() {
+    Neon.$('depth').textContent = `${(level + 1) * 200} m`;
+    Neon.$('memories').textContent = `${shards.filter(s => s.taken).length} / 3`;
+    Neon.$('health').textContent = health;
+    Neon.$('score').textContent = score;
+    Neon.$('best').textContent = pb;
+    Neon.$('decoys').textContent = `${charges} ${charges === 1 ? 'disponível' : 'disponíveis'}`;
+    Neon.$('decoyBtn').disabled = charges <= 0 || state !== 'playing';
+  }
+  function start() {
+    Neon.audio.ensure(); seed = Math.floor(Math.random() * 4294967296);
+    level = 0; score = 0; health = 3; clock = 0; hitFlash = 0; state = 'playing';
+    enter(); document.body.classList.add('imersivo');
+    Neon.overlay.hide(); Neon.audio.music.start(); last = performance.now();
+    Neon.toast('◆ RECUPERE 3 MEMÓRIAS · ◇ ENCONTRE A SAÍDA');
+  }
+  function finish(won) {
+    state = 'over'; keys.clear(); pointers.clear();
+    if (won) score += health * 300;
+    pb = Neon.best.update('echo', score); hud(); Neon.audio.music.down();
+    if (won) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    Neon.overlay.show(won ? 'O SILÊNCIO VOLTOU.' : 'ECO INTERROMPIDO',
+      `${score} pontos · ${(level + 1) * 200} metros. ${won ? 'As nove memórias chegaram à superfície.' : 'Use o sonar e saia de onde estava. Os sentinelas procuram o som, e a isca compra tempo.'}`,
+      'MERGULHAR DE NOVO ↓', won ? 'record' : 'go');
+  }
+  function exitLevel() {
+    score += 600 + Math.max(0, 600 - Math.floor(levelTime) * 2) + Math.max(0, 300 - pulseCount * 20);
+    if (level === 2) return finish(true);
+    state = 'between'; keys.clear(); pointers.clear(); Neon.audio.music.stop(); Neon.audio.sfx.level();
+    Neon.overlay.show('MEMÓRIAS A SALVO',
+      `${score} pontos. Mais fundo há mais sentinelas. Integridade +1; duas novas iscas à disposição.`, 'DESCER MAIS 200 m ↓');
+  }
+  function pause() {
+    keys.clear(); pointers.clear();
+    if (state === 'paused') { state = 'playing'; last = performance.now(); Neon.overlay.hide(); Neon.audio.music.start(); hud(); }
+    else if (state === 'playing') { state = 'paused'; Neon.audio.music.stop(); hud(); Neon.overlay.show('SILÊNCIO ABSOLUTO', 'A estação pode esperar.', 'CONTINUAR ↓'); }
+  }
+  function reveal(p, radius, duration) {
+    for (let id = 0; id < map.cells.length; id++) {
+      const c = center(id);
+      if (Math.hypot(c.x - p.x, c.y - p.y) <= radius) { known[id] = true; lit[id] = Math.max(lit[id], clock + duration); }
+    }
+  }
+  function emit(p, decoy = false) {
+    pulses.push({ x: p.x, y: p.y, radius: 0, max: decoy ? 300 : 440, decoy });
+    for (const h of hunters) investigate(map, h, p, decoy ? 520 : 420);
+    // Reusa os timbres do núcleo: o jogo continua legível com áudio desligado.
+    Neon.audio.sfx.note(decoy ? 330 : 660);
+  }
+  function sonar() {
+    if (state !== 'playing' || cooldown > 0) return;
+    emit(player); cooldown = 3.2; pulseCount++;
+  }
+  function decoy() {
+    if (state !== 'playing' || !charges) return;
+    charges--; decoys.push({ ...player, fuse: 1.2, life: 5, beat: 0 });
+    Neon.audio.sfx.click(); Neon.toast('ISCA ARMADA · AFASTE-SE'); hud();
+  }
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') return pause();
+    if (state === 'between') { level++; health = Math.min(3, health + 1); state = 'playing'; enter(); Neon.overlay.hide(); Neon.audio.music.start(); last = performance.now(); }
+    else if (state === 'menu' || state === 'over') start();
+    Neon.$('startBtn').blur();
+  });
+  Neon.$('sonarBtn').addEventListener('click', sonar);
+  Neon.$('decoyBtn').addEventListener('click', decoy);
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'e', 'p', 'enter'].includes(k)) {
+      if ((k === ' ' || k === 'enter') && e.target.closest?.('button, a')) return;
+      e.preventDefault();
+      if (state === 'playing') keys.add(k);
+      if (e.repeat) return;
+      if (k === 'p') pause();
+      else if (k === 'e') decoy();
+      else if (k === ' ' && state === 'playing') sonar();
+      else if ((k === 'enter' || k === ' ') && state !== 'playing') Neon.$('startBtn').click();
+    }
+  });
+  document.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+  for (const b of document.querySelectorAll('[data-dir]')) {
+    b.addEventListener('pointerdown', e => { if (state === 'playing') { e.preventDefault(); pointers.set(e.pointerId, b.dataset.dir); } });
+  }
+  window.addEventListener('pointerup', e => pointers.delete(e.pointerId));
+  window.addEventListener('pointercancel', e => pointers.delete(e.pointerId));
+  Neon.onHide(() => { if (state === 'playing') pause(); });
+
+  function hurt(h) {
+    if (invulnerable > 0) return;
+    health--; invulnerable = 2.5; hitFlash = .5;
+    Neon.audio.sfx.hit(); particles.wave(player.x, player.y, '#ff796e', 100);
+    Object.assign(h, center(h.home), { route: [], alert: 0 });
+    hud();
+    if (!health) finish(false); else Neon.toast('CONTATO · −1 INTEGRIDADE');
+  }
+  function update(dt) {
+    if (state !== 'playing') return;
+    clock += dt; levelTime += dt; cooldown = Math.max(0, cooldown - dt);
+    invulnerable = Math.max(0, invulnerable - dt); hitFlash = Math.max(0, hitFlash - dt);
+    const touch = [...pointers.values()];
+    let dx = Number(keys.has('d') || keys.has('arrowright') || touch.includes('right')) - Number(keys.has('a') || keys.has('arrowleft') || touch.includes('left'));
+    let dy = Number(keys.has('s') || keys.has('arrowdown') || touch.includes('down')) - Number(keys.has('w') || keys.has('arrowup') || touch.includes('up'));
+    const length = Math.hypot(dx, dy);
+    if (length) { dx /= length; dy /= length; facing = Math.atan2(dy, dx); move(map, player, dx * 128 * dt, dy * 128 * dt); }
+    reveal(player, 70, .2);
+    for (const p of pulses) {
+      const old = p.radius; p.radius += 340 * dt;
+      if (!p.decoy) for (let id = 0; id < map.cells.length; id++) {
+        const c = center(id), distance = Math.hypot(c.x - p.x, c.y - p.y);
+        if (distance >= old - 24 && distance <= p.radius + 24) { known[id] = true; lit[id] = clock + 3.2; }
+      }
+    }
+    pulses = pulses.filter(p => p.radius < p.max);
+    for (const d of decoys) {
+      d.fuse -= dt;
+      if (d.fuse > 0) continue;
+      d.life -= dt; d.beat -= dt;
+      if (d.beat <= 0) { emit(d, true); d.beat = 1.3; }
+    }
+    decoys = decoys.filter(d => d.life > 0);
+    for (const h of hunters) {
+      h.alert = Math.max(0, h.alert - dt); h.repath -= dt;
+      if (!h.route.length && h.alert <= 0 && h.repath <= 0) {
+        const options = neighbors(map, cellOf(h));
+        if (options.length) h.route = [Neon.choice(options)];
+        h.repath = 1;
+      }
+      if (h.route.length) {
+        const target = center(h.route[0]), distance = Math.hypot(target.x - h.x, target.y - h.y);
+        const step = Math.min(distance, (h.alert > 0 ? 73 + level * 8 : 38) * dt);
+        if (distance > 0) { h.x += (target.x - h.x) / distance * step; h.y += (target.y - h.y) / distance * step; }
+        if (distance <= step + .1) h.route.shift();
+      }
+      if (Math.hypot(h.x - player.x, h.y - player.y) < 21) hurt(h);
+      if (state !== 'playing') return;
+    }
+    for (const s of shards) if (!s.taken) {
+      const c = center(s.id);
+      if (Math.hypot(c.x - player.x, c.y - player.y) < 19) {
+        s.taken = true; score += 200;
+        particles.burst(c.x, c.y, '#ffd792', 18, 80); Neon.audio.sfx.golden(); hud();
+        Neon.toast(shards.every(s => s.taken) ? 'MEMÓRIAS COMPLETAS · SIGA PARA ◇' : 'MEMÓRIA RECUPERADA');
+      }
+    }
+    const exit = center(map.exit);
+    if (Math.hypot(exit.x - player.x, exit.y - player.y) < 20 && shards.every(s => s.taken)) return exitLevel();
+    particles.update(dt);
+    Neon.$('charge').textContent = cooldown > 0 ? `RECARGA ${cooldown.toFixed(1)} s` : 'PRONTO';
+    Neon.$('sonarBtn').disabled = cooldown > 0;
+    Neon.audio.music.intensity(hunters.some(h => h.alert > 0) ? .8 : .1);
+  }
+
+  function label(s, x, y, color, size = 10, align = 'center') {
+    ctx.font = `${size}px 'Space Mono',monospace`; ctx.fillStyle = color; ctx.textAlign = align; ctx.fillText(s, x, y);
+  }
+  function diamond(x, y, r, color, filled) {
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath();
+    if (filled) ctx.fill(); else ctx.stroke();
+  }
+  function render(now) {
+    const t = Neon.motion.reduced ? 0 : now / 1000;
+    ctx.fillStyle = '#020d12'; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, W * .7);
+    glow.addColorStop(0, '#07322b'); glow.addColorStop(1, '#020d12'); ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#83ffcf06'; ctx.lineWidth = 1;
+    for (let x = 20; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 60); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 60; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    ctx.save(); ctx.translate(OX, OY);
+    const demo = state === 'menu';
+    for (let id = 0; id < map.cells.length; id++) {
+      const p = center(id), near = Math.max(0, 1 - Math.hypot(p.x - player.x, p.y - player.y) / 100);
+      const light = demo ? .2 + Math.max(0, Math.sin(Math.hypot(p.x - 280, p.y - 180) / 110 - t * 1.2)) * .6 : Math.max(near, Math.min(1, (lit[id] - clock) / 3.2));
+      if (!known[id] && !demo && !near) continue;
+      ctx.globalAlpha = Math.max(map.cells[id] ? .12 : .17, light);
+      const x = p.x - CELL / 2, y = p.y - CELL / 2;
+      if (map.cells[id]) {
+        ctx.fillStyle = '#153d36'; ctx.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+        ctx.strokeStyle = '#4ab49b'; ctx.lineWidth = 1;
+        for (const [dx, dy, ax, ay, bx, by] of [[1, 0, CELL, 0, CELL, CELL], [-1, 0, 0, 0, 0, CELL], [0, -1, 0, 0, CELL, 0], [0, 1, 0, CELL, CELL, CELL]]) {
+          const nx = id % COLS + dx, ny = Math.floor(id / COLS) + dy;
+          if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS && !map.cells[ny * COLS + nx]) { ctx.beginPath(); ctx.moveTo(x + ax, y + ay); ctx.lineTo(x + bx, y + by); ctx.stroke(); }
+        }
+      } else {
+        ctx.fillStyle = '#145b4b'; ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+        Neon.circle(ctx, p.x, p.y, 1, '#79a999');
+      }
+    }
+    ctx.globalAlpha = 1;
+    for (const s of shards) {
+      if (s.taken || (!known[s.id] && !demo)) continue;
+      const p = center(s.id); ctx.shadowColor = '#ffd792'; ctx.shadowBlur = 16;
+      diamond(p.x, p.y, 7 + Math.sin(t * 2) * 1.5, '#ffd792', true); ctx.shadowBlur = 0;
+    }
+    const exit = center(map.exit), open = shards.every(s => s.taken);
+    if (known[map.exit] || open || demo) {
+      ctx.shadowColor = '#a2ffdc'; ctx.shadowBlur = open ? 20 : 0;
+      diamond(exit.x, exit.y, 15, open ? '#bcffe0' : '#547c70', false);
+      diamond(exit.x, exit.y, 9, open ? '#bcffe0' : '#547c70', false); ctx.shadowBlur = 0;
+    }
+    for (const p of pulses) {
+      ctx.globalAlpha = Math.max(0, 1 - p.radius / p.max);
+      ctx.strokeStyle = p.decoy ? '#e5a1ff' : '#baffdf'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, TAU); ctx.stroke();
+      ctx.lineWidth = 10; ctx.globalAlpha *= .1; ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    for (const d of decoys) {
+      diamond(d.x, d.y, 5, '#e5a1ff', true);
+      label(d.fuse > 0 ? 'ISCA ARMADA' : 'ISCA ATIVA', d.x, d.y - 17, '#e5a1ff', 8);
+    }
+    for (const h of hunters) {
+      const id = cellOf(h), near = Math.hypot(h.x - player.x, h.y - player.y) < 105;
+      if (!demo && !near && lit[id] <= clock) continue;
+      ctx.globalAlpha = near || h.alert > 0 ? 1 : .55; ctx.shadowColor = '#ff776b'; ctx.shadowBlur = 16;
+      diamond(h.x, h.y, 11, '#ff776b', false);
+      Neon.circle(ctx, h.x, h.y, 3, '#ffb0a1'); ctx.shadowBlur = 0;
+      if (h.alert > 0) label('!', h.x, h.y - 19, '#ff9585', 13);
+      ctx.globalAlpha = 1;
+    }
+    const halo = ctx.createRadialGradient(player.x, player.y, 2, player.x, player.y, 60);
+    halo.addColorStop(0, '#c2ffdf20'); halo.addColorStop(1, '#c2ffdf00'); Neon.circle(ctx, player.x, player.y, 60, halo);
+    ctx.save(); ctx.translate(player.x, player.y); ctx.rotate(facing);
+    ctx.globalAlpha = invulnerable > 0 && !Neon.motion.reduced ? .5 + .5 * Math.abs(Math.sin(t * 8)) : 1;
+    ctx.shadowColor = '#baffdd'; ctx.shadowBlur = 18; Neon.circle(ctx, 0, 0, 7, '#d8fff0');
+    ctx.shadowBlur = 0; ctx.fillStyle = '#062f23'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-1, -3); ctx.lineTo(-1, 3); ctx.fill(); ctx.restore();
+    particles.draw(ctx); ctx.restore();
+    const alert = hunters.some(h => h.alert > 0);
+    label(alert ? '△ SOM DETECTADO · MUDE DE POSIÇÃO' : '◌ SILÊNCIO · VOCÊ ESTÁ INVISÍVEL AOS SENSORES', W / 2, OY + ROWS * CELL + 28, alert ? '#ed9b88' : '#719e8f', retrato ? 9 : 10);
+    // Bússola aponta a próxima memória; não entrega o caminho pelo labirinto.
+    const target = shards.find(s => !s.taken), aim = center(target ? target.id : map.exit);
+    const a = Math.atan2(aim.y - player.y, aim.x - player.x), bx = retrato ? W / 2 : W / 2 - 40, by = H - 53;
+    ctx.save(); ctx.translate(bx, by); ctx.rotate(a); ctx.fillStyle = '#e5c091'; ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-6, -5); ctx.lineTo(-6, 5); ctx.closePath(); ctx.fill(); ctx.restore();
+    label(target ? 'MEMÓRIA' : 'SAÍDA', bx, by + 25, '#a5b8a5', 8);
+    if (hitFlash > 0 && !Neon.motion.reduced) { ctx.fillStyle = `rgba(255,90,75,${hitFlash * .14})`; ctx.fillRect(0, 0, W, H); }
+  }
+  function loop(now) {
+    const dt = Math.min(.04, (now - last) / 1000); last = now;
+    update(dt); render(now); requestAnimationFrame(loop);
+  }
+  enter(); render(0); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

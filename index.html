@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>NEON ARCADE — Suíte de clássicos</title>
+<title>NEON ARCADE — Jogos em neon</title>
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -36,6 +36,8 @@
   const Neon = window.Neon;
 
   const GAMES = [
+    { key: 'orbit',  emoji: '🪐', name: 'NEON ORBIT',   desc: 'Sem motor. Salte entre órbitas, escape de singularidades e reacenda 12 mundos.', href: 'games/neon-orbit.html', color: '#b9f6df' },
+    { key: 'echo',   emoji: '📡', name: 'NEON ECHO',    desc: 'O sonar revela o labirinto — e você. Recupere memórias e despiste quem escuta.', href: 'games/neon-echo.html', color: '#a2ffd9' },
     { key: 'snake',  emoji: '🐍', name: 'NEON SERPENT', desc: 'Maçãs, combos, boosts e velocidade crescente.', href: 'games/neon-snake.html',   color: '#39ff7a' },
     { key: 'tetris', emoji: '🧱', name: 'NEON BLOCKS',  desc: 'Tetris com limpeza em cascata e nível por 10 linhas.', href: 'games/neon-blocks.html', color: '#00f0ff' },
     { key: 'pong',   emoji: '🏓', name: 'NEON PONG',    desc: 'Pong contra a IA — primeiro a 7 acelera o rally.', href: 'games/neon-pong.html',   color: '#ff2bd6' },
@@ -66,7 +68,7 @@
   };
 
   // contagem sai do GAMES: incluir um jogo nao pede mais editar texto nenhum
-  Neon.$('tag').textContent = `// ${GAMES.length} clássicos · estética synthwave · sessões curtas`;
+  Neon.$('tag').textContent = `// ${GAMES.length} jogos · estética synthwave · sessões curtas`;
 
   const tiles = Neon.$('tiles');
   tiles.innerHTML = '';
