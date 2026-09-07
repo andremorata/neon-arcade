@@ -8,8 +8,8 @@
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#04001a">
-<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   .stage { --arw: 3; --arh: 2; --maxw: 900px; }
 </style>
@@ -27,7 +27,7 @@
     <div class="stat"><span class="lbl">Rodada</span><span class="val" id="round">1</span></div>
     <div class="stat"><span class="lbl">Você</span><span class="val" id="you">0</span></div>
     <div class="stat"><span class="lbl">Bot</span><span class="val" id="bot">0</span></div>
-    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="darts">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="darts">0</span></div>
   </div>
 
   <div class="stage" id="stage">
@@ -44,7 +44,7 @@
         <div class="fstat"><span>Bot</span><b id="fsBot" class="pink">0</b></div>
         <div class="fstat"><span>Melhor dardo</span><b id="fsBest" class="gold">0</b></div>
       </div>
-      <button class="btn" id="startBtn">START</button>
+      <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
         <span class="key">SPACE / Clique</span><span class="key">Toque</span><span class="key">P pausa</span>
       </div>
@@ -54,7 +54,7 @@
   <footer>// <a href="../index.html">← arcade</a> · anel externo dobra · anel do meio triplica · centro vale 50 · as réguas aceleram a cada rodada</footer>
 </div>
 
-<script src="../assets/js/neon-core.js"></script>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
@@ -76,7 +76,7 @@
   // rubber band do bot: erro em px cresce quando ele abre vantagem e encolhe quando fica atras
   const BOT_SIGMA = 30, BOT_K = 0.30, BOT_MIN = 9, BOT_MAX = 62, BOT_AIM_T = 0.7;
 
-  const CYAN = '#00f0ff', MAGENTA = '#ff2bd6', GOLD = '#ffd700', GREEN = '#39ff7a', RED = '#ff3b5c';
+  const CYAN = '#9be7ce', MAGENTA = '#afa3f5', GOLD = '#e9b77c', GREEN = '#a8dba0', RED = '#ed887f';
 
   const els = {
     round: Neon.$('round'), you: Neon.$('you'), bot: Neon.$('bot'), best: Neon.$('best'),
@@ -125,13 +125,13 @@
       b.fill();
     };
 
-    b.fillStyle = '#0a0322';
+    b.fillStyle = '#111d2c';
     b.beginPath(); b.arc(CX, CY, R * 1.115, 0, Math.PI * 2); b.fill();
 
     for (let i = 0; i < 20; i++) {
       const a0 = (-99 + i * 18) * Math.PI / 180, a1 = (-81 + i * 18) * Math.PI / 180;
       const dark = i % 2 === 0;
-      const single = dark ? '#0b0326' : '#1b0a3e';
+      const single = dark ? '#111d2c' : '#26304a';
       const ring = dark ? CYAN : MAGENTA;
       wedge(R * RING.bullOut, R * RING.tripIn, a0, a1, single);
       wedge(R * RING.tripIn, R * RING.tripOut, a0, a1, ring);
@@ -145,7 +145,7 @@
     b.beginPath(); b.arc(CX, CY, R * RING.bullIn, 0, Math.PI * 2); b.fill();
 
     // arames
-    b.strokeStyle = 'rgba(0, 240, 255, 0.3)';
+    b.strokeStyle = 'rgba(155,231,206, 0.3)';
     b.lineWidth = 1;
     for (let i = 0; i < 20; i++) {
       const a = (-99 + i * 18) * Math.PI / 180;
@@ -205,7 +205,7 @@
     state = 'paused';
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
-    Neon.overlay.show('PAUSADO', 'Aperte P para voltar ao alvo.', 'RESUME');
+    Neon.overlay.show('PAUSADO', 'Aperte P para voltar ao alvo.', 'CONTINUAR');
   }
   function resumeGame() {
     state = resumeState;
@@ -513,7 +513,7 @@
     const yl = H - 84, yv = H - 52;
     const pActive = turn === 'player', live = state !== 'menu' && state !== 'gameover';
 
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.18)';
+    ctx.strokeStyle = 'rgba(155,231,206, 0.18)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(40, H - 116); ctx.lineTo(W - 40, H - 116); ctx.stroke();
 
@@ -524,7 +524,7 @@
       ctx.textAlign = isYou ? 'left' : 'right';
       const x = isYou ? 46 : W - 46;
       ctx.font = '700 11px "Orbitron", "Space Mono", monospace';
-      ctx.fillStyle = on ? color : 'rgba(234, 246, 255, 0.4)';
+      ctx.fillStyle = on ? color : 'rgba(237,244,240, 0.4)';
       ctx.fillText(isYou ? 'VOCÊ' : 'BOT', x, yl);
       ctx.font = '900 36px "Orbitron", "Space Mono", monospace';
       ctx.fillStyle = color;
@@ -548,17 +548,17 @@
       ctx.globalAlpha = 1;
     }
     ctx.font = '700 15px "Space Mono", monospace';
-    ctx.fillStyle = state === 'resolve' ? (lastLabel === 'FORA' ? RED : CYAN) : 'rgba(234, 246, 255, 0.7)';
+    ctx.fillStyle = state === 'resolve' ? (lastLabel === 'FORA' ? RED : CYAN) : 'rgba(237,244,240, 0.7)';
     ctx.fillText(statusText(), CX, H - 52);
     ctx.textAlign = 'left';
   }
 
   function render() {
-    ctx.fillStyle = '#05001a';
+    ctx.fillStyle = '#080d1c';
     ctx.fillRect(0, 0, W, H);
     const g = ctx.createRadialGradient(CX, CY, 0, CX, CY, 470);
-    g.addColorStop(0, 'rgba(80, 0, 160, 0.35)');
-    g.addColorStop(1, 'rgba(4, 0, 26, 0)');
+    g.addColorStop(0, 'rgba(65,59,102, 0.35)');
+    g.addColorStop(1, 'rgba(8,13,28, 0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 

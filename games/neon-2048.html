@@ -8,8 +8,8 @@
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#04001a">
-<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   .stage { --arw: 1; --arh: 1; --maxw: 500px; }
 </style>
@@ -25,7 +25,7 @@
 
   <div class="dashboard" style="--dash-cols:2;">
     <div class="stat"><span class="lbl">Score</span><span class="val" id="score">0</span></div>
-    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="2048">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="2048">0</span></div>
   </div>
 
   <div class="stage" id="stage">
@@ -42,7 +42,7 @@
         <div class="fstat"><span>Maior bloco</span><b id="fsBig">2</b></div>
         <div class="fstat"><span>Jogadas</span><b id="fsMoves">0</b></div>
       </div>
-      <button class="btn" id="startBtn">START</button>
+      <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
         <span class="key">← ↑ → ↓</span><span class="key">WASD</span><span class="key">Swipe</span><span class="key">P pausa</span>
       </div>
@@ -52,7 +52,7 @@
   <footer>// <a href="../index.html">← arcade</a> · 90% das novas peças são 2 · alcance 2048 para vencer</footer>
 </div>
 
-<script src="../assets/js/neon-core.js"></script>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
@@ -170,7 +170,7 @@
       state = 'playing-won';
       Neon.toast('🏆 2048! Continue se quiser.');
       Neon.audio.sfx.record();
-      if (!Neon.motion.reduced) flash = { t: 400, color: 'rgba(255, 215, 0,' };
+      if (!Neon.motion.reduced) flash = { t: 400, color: 'rgba(233,183,124,' };
     }
     if (!canMove()) gameOver(big);
   }
@@ -203,7 +203,7 @@
     state = 'paused';
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
-    Neon.overlay.show('PAUSADO', 'Aperte P para continuar.', 'RESUME');
+    Neon.overlay.show('PAUSADO', 'Aperte P para continuar.', 'CONTINUAR');
   }
   function resumeGame() {
     state = 'playing';
@@ -269,10 +269,10 @@
     const hue = hueOf(val);
     ctx.globalAlpha = alpha;
     const g = ctx.createRadialGradient(cx - s * 0.15, cy - s * 0.2, 2, cx, cy, s / 1.3);
-    g.addColorStop(0, `hsl(${hue}, 100%, ${Math.min(88, 66 + Math.log2(val) * 2)}%)`);
-    g.addColorStop(1, `hsl(${hue}, 100%, 52%)`);
+    g.addColorStop(0, `hsl(${hue}, 55%, ${Math.min(88, 66 + Math.log2(val) * 2)}%)`);
+    g.addColorStop(1, `hsl(${hue}, 55%, 68%)`);
     ctx.fillStyle = g;
-    Neon.glow(ctx, `hsl(${hue}, 100%, 60%)`, Math.min(22, 6 + Math.log2(val) * 2.2));
+    Neon.glow(ctx, `hsl(${hue}, 55%, 60%)`, Math.min(22, 6 + Math.log2(val) * 2.2));
     ctx.beginPath();
     ctx.roundRect ? ctx.roundRect(cx - s / 2, cy - s / 2, s, s, 10) : ctx.rect(cx - s / 2, cy - s / 2, s, s);
     ctx.fill();
@@ -284,7 +284,7 @@
       ctx.rect(cx - s / 2 + 3, cy - s / 2 + 3, s - 6, s - 6);
       ctx.stroke();
     }
-    ctx.fillStyle = val >= 128 ? 'rgba(255,255,255,0.95)' : 'rgba(10,0,40,0.75)';
+    ctx.fillStyle = '#080d1c';
     ctx.font = `900 ${val >= 1024 ? 26 : val >= 128 ? 34 : 40}px Orbitron, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -293,15 +293,15 @@
   }
 
   function render(now) {
-    ctx.fillStyle = '#05001a';
+    ctx.fillStyle = '#080d1c';
     ctx.fillRect(0, 0, SIZE, SIZE);
     const g = ctx.createRadialGradient(SIZE / 2, SIZE / 2, 0, SIZE / 2, SIZE / 2, 360);
-    g.addColorStop(0, 'rgba(80, 0, 160, 0.32)');
-    g.addColorStop(1, 'rgba(4, 0, 26, 0)');
+    g.addColorStop(0, 'rgba(65,59,102, 0.32)');
+    g.addColorStop(1, 'rgba(8,13,28, 0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, SIZE, SIZE);
 
-    ctx.fillStyle = 'rgba(155, 48, 255, 0.07)';
+    ctx.fillStyle = 'rgba(142,131,200, 0.07)';
     for (let y = 0; y < N; y++) {
       for (let x = 0; x < N; x++) {
         ctx.beginPath();

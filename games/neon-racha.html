@@ -8,10 +8,14 @@
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#04001a">
-<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   .stage { --arw: 3; --arh: 4; --maxw: 460px; }
+  @media (orientation: landscape) and (max-height: 520px) {
+    .overlay { padding-top: 58px; }
+    .overlay h2 { font-size: 14px; }
+  }
 </style>
 </head>
 <body>
@@ -25,7 +29,7 @@
 
   <div class="dashboard" style="--dash-cols:4;">
     <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
-    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="racha">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="racha">0</span></div>
     <div class="stat"><span class="lbl">Nível</span><span class="val" id="nivel">1</span></div>
     <div class="stat"><span class="lbl">Marcha</span><span class="val" id="marcha">1</span></div>
   </div>
@@ -37,14 +41,14 @@
     <canvas id="game" width="600" height="800"></canvas>
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON RACHA</h2>
-      <p id="overlayText">Arrancada de 400 metros. O acelerador é automático e você só troca a marcha. Troque dentro da faixa verde do conta-giros: cedo demais o carro morre de torque, tarde demais o corte de giro rouba a velocidade. Dez níveis, um rival melhor em cada.</p>
+      <p id="overlayText">Toque ou use SPACE/↑ para trocar na faixa verde. Vença 10 rivais.</p>
       <div class="sub" id="overlaySub"></div>
       <div class="final-stats" id="finalStats" style="display:none;">
         <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
         <div class="fstat"><span>Nível</span><b id="fsNivel">1</b></div>
         <div class="fstat"><span>Trocas certas</span><b id="fsPerf">0</b></div>
       </div>
-      <button class="btn" id="startBtn">START</button>
+      <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
         <span class="key">Toque na tela</span><span class="key">SPACE troca</span><span class="key">↑ troca</span><span class="key">P pausa</span>
       </div>
@@ -54,7 +58,7 @@
   <footer>// <a href="../index.html">← arcade</a> · 6 marchas · a cor do rival diz o nível · troca perfeita vale ponto</footer>
 </div>
 
-<script src="../assets/js/neon-core.js"></script>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
@@ -82,11 +86,11 @@
   // Tres faixas em volta do ponto. Verde fininho no meio, amarelo em volta,
   // laranja na borda. Fora das tres, a troca sai errada e cobra caro.
   const ZONAS = [
-    { nome: 'verde',   raio: 0.022, cor: '#39ff7a', pontos: 260, boost: 1.05, rend: 1.00 },
-    { nome: 'amarelo', raio: 0.055, cor: '#ffe600', pontos: 110, boost: 1.015, rend: 0.94 },
-    { nome: 'laranja', raio: 0.100, cor: '#ff8c1a', pontos: 35,  boost: 1.0,  rend: 0.86 },
+    { nome: 'verde',   raio: 0.022, cor: '#a8dba0', pontos: 260, boost: 1.05, rend: 1.00 },
+    { nome: 'amarelo', raio: 0.055, cor: '#efce95', pontos: 110, boost: 1.015, rend: 0.94 },
+    { nome: 'laranja', raio: 0.100, cor: '#dda077', pontos: 35,  boost: 1.0,  rend: 0.86 },
   ];
-  const FORA = { nome: 'fora', cor: '#ff3b5c', pontos: 0, boost: 0.93, rend: 0.72 };
+  const FORA = { nome: 'fora', cor: '#ed887f', pontos: 0, boost: 0.93, rend: 0.72 };
   const CORTE = 1.0;                 // acima disso o limitador atua
 
   // Em que faixa caiu a troca daquela marcha.
@@ -107,8 +111,8 @@
 
   // A cor do rival avisa o nivel que vem. Cor nao atrapalha a ultrapassagem,
   // ela ensina o jogador a temer o que esta por vir.
-  const CORES_NIVEL = ['#39ff7a', '#00f0ff', '#4d7dff', '#9b30ff', '#ffe600',
-                       '#ff8c1a', '#ff2bd6', '#ff3b5c', '#ffffff', '#ff0055'];
+  const CORES_NIVEL = ['#a8dba0', '#9be7ce', '#8faef2', '#8e83c8', '#efce95',
+                       '#dda077', '#afa3f5', '#ed887f', '#ffffff', '#ff0055'];
 
   const pDeZ = z => Math.pow(Math.max(0, 1 - z / ZFAR), 2.2);
   const zDeP = p => (1 - Math.pow(Math.max(0, p), 1 / 2.2)) * ZFAR;
@@ -166,7 +170,7 @@
   }
 
   function mostrarAviso(t, cor) { aviso = t; avisoT = 900; aviso_cor = cor; }
-  let aviso_cor = '#39ff7a';
+  let aviso_cor = '#a8dba0';
 
   function pensarBot(dt) {
     const rpm = rpmDe(bot);
@@ -206,7 +210,7 @@
     state = 'paused';
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
-    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar.', 'RESUME');
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar.', 'CONTINUAR');
   }
   function resumeGame() {
     if (state !== 'paused') return;
@@ -242,11 +246,11 @@
       score += 1000 + Math.round(Math.max(0, bot.dist - eu.dist + PISTA) * 2);
       els.score.textContent = score;
       Neon.audio.sfx.record();
-      flashAt('rgba(57, 255, 122,', 300);
+      flashAt('rgba(168,219,160,', 300);
       Neon.toast(nivel >= NIVEIS ? '🏆 CAMPEÃO!' : `✅ NÍVEL ${nivel + 1}`);
     } else {
       Neon.audio.sfx.death();
-      flashAt('rgba(255, 59, 92,', 300);
+      flashAt('rgba(237,136,127,', 300);
       Neon.toast('💀 PERDEU');
     }
   }
@@ -314,9 +318,9 @@
     ctx.fillStyle = cor;
     ctx.fillRect(x - larg / 2, y - alt, larg, alt);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(5, 0, 26, 0.8)';
+    ctx.fillStyle = 'rgba(8,13,28, 0.8)';
     ctx.fillRect(x - larg * 0.33, y - alt * 0.84, larg * 0.66, alt * 0.4);
-    ctx.fillStyle = '#ff3b5c';
+    ctx.fillStyle = '#ed887f';
     ctx.fillRect(x - larg / 2, y - alt * 0.18, larg * 0.18, alt * 0.14);
     ctx.fillRect(x + larg * 0.32, y - alt * 0.18, larg * 0.18, alt * 0.14);
   }
@@ -337,14 +341,14 @@
       ctx.arc(cx, cy, r, a0 + (a1 - a0) * (ponto - z.raio), a0 + (a1 - a0) * (ponto + z.raio));
       ctx.stroke();
     }
-    ctx.strokeStyle = '#ff3b5c';
-    ctx.shadowColor = '#ff3b5c';
+    ctx.strokeStyle = '#ed887f';
+    ctx.shadowColor = '#ed887f';
     ctx.beginPath();
     ctx.arc(cx, cy, r, a0 + (a1 - a0) * CORTE, a1);
     ctx.stroke();
     ctx.shadowBlur = 0;
     const ang = a0 + (a1 - a0) * Neon.clamp(rpm, 0, 1.08);
-    ctx.strokeStyle = rpm >= CORTE ? '#ff3b5c' : zonaDa(eu.marcha, rpm).cor;
+    ctx.strokeStyle = rpm >= CORTE ? '#ed887f' : zonaDa(eu.marcha, rpm).cor;
     ctx.lineWidth = 4;
     Neon.glow(ctx, ctx.strokeStyle, 14);
     ctx.beginPath();
@@ -354,14 +358,14 @@
     ctx.shadowBlur = 0;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '700 30px Orbitron, sans-serif';
-    ctx.fillStyle = '#ffe600';
+    ctx.fillStyle = '#efce95';
     ctx.fillText(String(eu.marcha + 1), cx, cy + 6);
     ctx.font = '700 10px Orbitron, sans-serif';
-    ctx.fillStyle = 'rgba(232,230,245,0.55)';
+    ctx.fillStyle = 'rgba(237,244,240,0.55)';
     ctx.fillText('MARCHA', cx, cy + 30);
     if (rendimento < 1) {
       ctx.font = '700 11px Orbitron, sans-serif';
-      ctx.fillStyle = rendimento > 0.9 ? '#ffe600' : '#ff3b5c';
+      ctx.fillStyle = rendimento > 0.9 ? '#efce95' : '#ed887f';
       ctx.fillText(`${Math.round(rendimento * 100)}% DE MOTOR`, cx, cy + 52);
     }
   }
@@ -374,12 +378,12 @@
     }
 
     const ceu = ctx.createLinearGradient(0, 0, 0, HY);
-    ceu.addColorStop(0, '#14023a');
-    ceu.addColorStop(1, '#5b1080');
+    ceu.addColorStop(0, '#111d2c');
+    ceu.addColorStop(1, '#434363');
     ctx.fillStyle = ceu;
     ctx.fillRect(0, 0, W, HY);
-    ctx.fillStyle = '#ffe600';
-    Neon.glow(ctx, '#ff8c1a', 40);
+    ctx.fillStyle = '#efce95';
+    Neon.glow(ctx, '#dda077', 40);
     Neon.circle(ctx, W / 2, HY - 40, 34);
     ctx.shadowBlur = 0;
 
@@ -389,14 +393,14 @@
       const { cx, meia } = estrada(p);
       const banda = ((z * 1.4) | 0) % 2;
       const luz = 0.7 + p * 0.3;
-      ctx.fillStyle = banda ? `rgb(${(30 * luz) | 0},${(10 * luz) | 0},${(74 * luz) | 0})`
-                            : `rgb(${(21 * luz) | 0},${(6 * luz) | 0},${(58 * luz) | 0})`;
+      ctx.fillStyle = banda ? `rgb(${(28 * luz) | 0},${(38 * luz) | 0},${(55 * luz) | 0})`
+                            : `rgb(${(20 * luz) | 0},${(29 * luz) | 0},${(44 * luz) | 0})`;
       ctx.fillRect(0, y, W, PASSO);
       ctx.fillStyle = `rgb(${(52 * luz) | 0},${(52 * luz) | 0},${(68 * luz) | 0})`;
       ctx.fillRect(cx - meia, y, meia * 2, PASSO);
       const borda = Math.max(2, meia * 0.055);
-      ctx.fillStyle = banda ? `rgb(${(255 * luz) | 0},${(60 * luz) | 0},${(110 * luz) | 0})`
-                            : `rgb(${(240 * luz) | 0},${(240 * luz) | 0},${(255 * luz) | 0})`;
+      ctx.fillStyle = banda ? `rgb(${(237 * luz) | 0},${(136 * luz) | 0},${(127 * luz) | 0})`
+                            : `rgb(${(240 * luz) | 0},${(240 * luz) | 0},${(237 * luz) | 0})`;
       ctx.fillRect(cx - meia, y, borda, PASSO);
       ctx.fillRect(cx + meia - borda, y, borda, PASSO);
       if (banda && p > 0.12) {
@@ -424,15 +428,15 @@
     const bBot = estrada(pBot);
     carro(bBot.cx + bot.faixa * bBot.meia, yDeP(pBot), bBot.meia * 0.34, corBot, 1);
     const pEu = 0.95, bEu = estrada(pEu);
-    carro(bEu.cx + eu.faixa * bEu.meia, yDeP(pEu), bEu.meia * 0.34, '#00f0ff', 1.2);
+    carro(bEu.cx + eu.faixa * bEu.meia, yDeP(pEu), bEu.meia * 0.34, '#9be7ce', 1.2);
 
     // barra de progresso da pista, os dois no mesmo trilho
     ctx.fillStyle = 'rgba(255,255,255,0.14)';
     ctx.fillRect(0, 0, W, 7);
     ctx.fillStyle = corBot;
     ctx.fillRect(0, 0, W * Neon.clamp(bot.dist / PISTA, 0, 1), 3);
-    ctx.fillStyle = '#00f0ff';
-    Neon.glow(ctx, '#00f0ff', 8);
+    ctx.fillStyle = '#9be7ce';
+    Neon.glow(ctx, '#9be7ce', 8);
     ctx.fillRect(0, 3, W * Neon.clamp(eu.dist / PISTA, 0, 1), 4);
     ctx.shadowBlur = 0;
 
@@ -442,7 +446,7 @@
     if (largada > 0) {
       const n = Math.ceil(largada / 1000);
       ctx.font = '700 96px Orbitron, sans-serif';
-      ctx.fillStyle = n > 1 ? '#ffe600' : '#39ff7a';
+      ctx.fillStyle = n > 1 ? '#efce95' : '#a8dba0';
       Neon.glow(ctx, ctx.fillStyle, 30);
       ctx.fillText(n > 1 ? String(n - 1) : 'VAI!', W / 2, HY + 90);
       ctx.shadowBlur = 0;
@@ -460,11 +464,11 @@
     }
 
     ctx.font = '700 13px Orbitron, sans-serif';
-    ctx.fillStyle = 'rgba(232,230,245,0.75)';
+    ctx.fillStyle = 'rgba(237,244,240,0.75)';
     ctx.textAlign = 'left';
     ctx.fillText(`${Math.max(0, Math.round(PISTA - eu.dist))} m`, 16, 30);
     ctx.textAlign = 'right';
-    ctx.fillStyle = gap > 0 ? '#ff3b5c' : '#39ff7a';
+    ctx.fillStyle = gap > 0 ? '#ed887f' : '#a8dba0';
     ctx.fillText(`${gap > 0 ? '' : '+'}${Math.round(-gap)} m`, W - 16, 30);
 
     particles.draw(ctx);

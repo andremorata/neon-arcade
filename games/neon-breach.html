@@ -8,14 +8,14 @@
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#04001a">
-<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   .stage { --arw: 8; --arh: 5; --maxw: 940px; }
   /* FPS não cabe em pé: em vez de espremer o quadro, exige girar o telefone. */
   #gire {
     display: none; position: absolute; inset: 0; z-index: 30;
-    background: rgba(5, 0, 26, 0.97);
+    background: rgba(8,13,28, 0.97);
     flex-direction: column; align-items: center; justify-content: center;
     text-align: center; padding: 20px; gap: 14px;
   }
@@ -43,7 +43,7 @@
 
   <div class="dashboard" style="--dash-cols:4;">
     <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
-    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="breach">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="breach">0</span></div>
     <div class="stat"><span class="lbl">Sala</span><span class="val" id="sala">1</span></div>
     <div class="stat"><span class="lbl">Vida</span><span class="val" id="vida">100</span></div>
   </div>
@@ -63,7 +63,7 @@
         <div class="fstat"><span>Salas</span><b id="fsSalas">1</b></div>
         <div class="fstat"><span>Precisão</span><b id="fsMira">0%</b></div>
       </div>
-      <button class="btn" id="startBtn">START</button>
+      <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
         <span class="key">WASD anda</span><span class="key">Mouse gira</span><span class="key">Clique atira</span><span class="key">1 2 3 arma</span><span class="key">P pausa</span>
       </div>
@@ -73,7 +73,7 @@
   <footer>// <a href="../index.html">← arcade</a> · <b>1</b> pistola · <b>2</b> escopeta · <b>3</b> metralhadora · ❤️ vida · 🔫 munição · 📦 arma nova</footer>
 </div>
 
-<script src="../assets/js/neon-core.js"></script>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
@@ -123,7 +123,7 @@
   let sala = 0;
   let MAPA = SALAS[0].planta;
   const MAPA_L = MAPA[0].length, MAPA_A = MAPA.length;
-  const CORES = { 1: [0, 240, 255], 2: [255, 43, 214], 3: [155, 48, 255] };
+  const CORES = { 1: [155, 231, 206], 2: [175, 163, 245], 3: [142, 131, 200] };
 
   const celula = (x, y) => {
     if (x < 0 || y < 0 || x >= MAPA_L || y >= MAPA_A) return 1;
@@ -185,18 +185,18 @@
 
   // ── inimigos ──────────────────────────────────────
   const TIPOS = {
-    corredor: { vida: 40, vel: 1.6, cor: '#ff3b5c', raio: 0.3, dano: 12, alcance: 0.7, recarga: 900 },
-    atirador: { vida: 30, vel: 0.8, cor: '#ffe600', raio: 0.28, dano: 8, alcance: 7, recarga: 1600 },
-    tanque:   { vida: 110, vel: 0.55, cor: '#ff8c1a', raio: 0.42, dano: 20, alcance: 0.9, recarga: 1400 },
-    chefe:    { vida: 620, vel: 0.95, cor: '#ff2bd6', raio: 0.6, dano: 22, alcance: 8, recarga: 850, pontos: 2500, alto: 1.5 },
+    corredor: { vida: 40, vel: 1.6, cor: '#ed887f', raio: 0.3, dano: 12, alcance: 0.7, recarga: 900 },
+    atirador: { vida: 30, vel: 0.8, cor: '#efce95', raio: 0.28, dano: 8, alcance: 7, recarga: 1600 },
+    tanque:   { vida: 110, vel: 0.55, cor: '#dda077', raio: 0.42, dano: 20, alcance: 0.9, recarga: 1400 },
+    chefe:    { vida: 620, vel: 0.95, cor: '#afa3f5', raio: 0.6, dano: 22, alcance: 8, recarga: 850, pontos: 2500, alto: 1.5 },
   };
   const PONTOS = { corredor: 100, atirador: 140, tanque: 260, chefe: 2500 };
 
   // Item cai de quem morre. Sem isso o jogador trava na pistola e nunca vira o jogo.
   const ITENS = {
-    vida:  { emoji: '❤️', cor: '#ff3b5c' },
-    muni:  { emoji: '🔫', cor: '#ffe600' },
-    arma:  { emoji: '📦', cor: '#00f0ff' },
+    vida:  { emoji: '❤️', cor: '#ed887f' },
+    muni:  { emoji: '🔫', cor: '#efce95' },
+    arma:  { emoji: '📦', cor: '#9be7ce' },
   };
 
   // Bolsao fechado na planta poe inimigo onde o jogador nunca chega, e a sala
@@ -293,7 +293,7 @@
     kills++;
     pontuar(PONTOS[e.tipo] || 100);
     Neon.audio.sfx.golden();
-    if (e.tipo === 'chefe') { flashAt('rgba(255, 43, 214,', 400); shakeAt(16, 500); }
+    if (e.tipo === 'chefe') { flashAt('rgba(175,163,245,', 400); shakeAt(16, 500); }
     // 40% de chance de largar algo. Vida so cai se estiver fazendo falta.
     if (Math.random() < 0.4) {
       const tipo = jog.vida < 60 && Math.random() < 0.6 ? 'vida' : 'muni';
@@ -336,7 +336,7 @@
   function levarDano(q) {
     jog.vida = Math.max(0, jog.vida - q);
     els.vida.textContent = jog.vida;
-    flashAt('rgba(255, 59, 92,', 240);
+    flashAt('rgba(237,136,127,', 240);
     shakeAt(9, 220);
     Neon.audio.sfx.hit();
     if (jog.vida <= 0) fim();
@@ -554,13 +554,13 @@
     }
 
     const teto = ctx.createLinearGradient(0, 0, 0, H / 2);
-    teto.addColorStop(0, '#1a0240');
-    teto.addColorStop(1, '#05001a');
+    teto.addColorStop(0, '#19243b');
+    teto.addColorStop(1, '#080d1c');
     ctx.fillStyle = teto;
     ctx.fillRect(0, 0, W, H / 2);
     const chao = ctx.createLinearGradient(0, H / 2, 0, H);
-    chao.addColorStop(0, '#05001a');
-    chao.addColorStop(1, '#241046');
+    chao.addColorStop(0, '#080d1c');
+    chao.addColorStop(1, '#26304a');
     ctx.fillStyle = chao;
     ctx.fillRect(0, H / 2, W, H / 2);
 
@@ -611,14 +611,14 @@
       // olhos e barra de vida: le o estado sem HUD extra
       if (zbuf[Math.round(sx / LARG_COL)] > d) {
         ctx.globalAlpha = k;
-        ctx.fillStyle = '#05001a';
+        ctx.fillStyle = '#080d1c';
         ctx.fillRect(sx - larg * 0.26, y0 + alt * 0.16, larg * 0.16, alt * 0.1);
         ctx.fillRect(sx + larg * 0.1, y0 + alt * 0.16, larg * 0.16, alt * 0.1);
         const vv = e.vida / e.vidaMax;
         if (vv < 1) {
           ctx.fillStyle = 'rgba(0,0,0,0.6)';
           ctx.fillRect(sx - larg / 2, y0 - 9, larg, 5);
-          ctx.fillStyle = vv > 0.5 ? '#39ff7a' : '#ff3b5c';
+          ctx.fillStyle = vv > 0.5 ? '#a8dba0' : '#ed887f';
           ctx.fillRect(sx - larg / 2, y0 - 9, larg * vv, 5);
         }
         ctx.globalAlpha = 1;
@@ -647,12 +647,12 @@
     }
 
     if (clarao > 0) {
-      ctx.fillStyle = `rgba(255, 230, 180, ${clarao / 400})`;
+      ctx.fillStyle = `rgba(255,230,180, ${clarao / 400})`;
       ctx.fillRect(0, 0, W, H);
     }
 
     // mira
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.85)';
+    ctx.strokeStyle = 'rgba(155,231,206, 0.85)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(W / 2 - 12, H / 2); ctx.lineTo(W / 2 - 4, H / 2);
@@ -663,7 +663,7 @@
 
     // arma na mão: dois trapézios, o suficiente pra ancorar a visão
     const recuo = recarga > 0 ? Math.min(14, recarga / 8) : 0;
-    ctx.fillStyle = '#12043a';
+    ctx.fillStyle = '#152136';
     ctx.strokeStyle = CORES[1] && `rgb(${CORES[1][0]},${CORES[1][1]},${CORES[1][2]})`;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -673,24 +673,24 @@
     ctx.lineTo(W / 2 + 34, H + 4);
     ctx.closePath();
     ctx.fill(); ctx.stroke();
-    ctx.fillStyle = ARMAS[jog.arma].nome === 'ESCOPETA' ? '#ff8c1a' : '#00f0ff';
+    ctx.fillStyle = ARMAS[jog.arma].nome === 'ESCOPETA' ? '#dda077' : '#9be7ce';
     ctx.fillRect(W / 2 - 8, H - 100 + recuo, 16, 6);
 
     // controles de toque desenhados no quadro
     if (dedo && state === 'playing') {
       ctx.globalAlpha = 0.5;
-      ctx.strokeStyle = '#00f0ff';
+      ctx.strokeStyle = '#9be7ce';
       ctx.lineWidth = 2;
       const base = manche ? { x: manche.ox, y: manche.oy } : { x: 110, y: H - 100 };
       ctx.beginPath(); ctx.arc(base.x, base.y, 52, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = 'rgba(0, 240, 255, 0.3)';
+      ctx.fillStyle = 'rgba(155,231,206, 0.3)';
       const px = base.x + (manche ? manche.dx * 40 : 0), py = base.y + (manche ? manche.dy * 40 : 0);
       Neon.circle(ctx, px, py, 24);
-      ctx.strokeStyle = '#ff3b5c';
-      ctx.fillStyle = segurandoTiro ? 'rgba(255, 59, 92, 0.45)' : 'rgba(255, 59, 92, 0.18)';
+      ctx.strokeStyle = '#ed887f';
+      ctx.fillStyle = segurandoTiro ? 'rgba(237,136,127, 0.45)' : 'rgba(237,136,127, 0.18)';
       ctx.beginPath(); ctx.arc(BOTAO.x, BOTAO.y, BOTAO.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.globalAlpha = 0.85;
-      ctx.fillStyle = '#ff3b5c';
+      ctx.fillStyle = '#ed887f';
       ctx.font = `700 13px Orbitron, sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('FOGO', BOTAO.x, BOTAO.y);
@@ -699,23 +699,23 @@
 
     // Faixa de HUD dentro do quadro. O painel grande de fora comia metade da altura
     // em celular deitado; aqui ele custa 30px e o jogo fica com a tela inteira.
-    ctx.fillStyle = 'rgba(5, 0, 26, 0.55)';
+    ctx.fillStyle = 'rgba(8,13,28, 0.92)';
     ctx.fillRect(0, 0, W, 30);
-    ctx.fillStyle = 'rgba(0, 240, 255, 0.25)';
+    ctx.fillStyle = 'rgba(155,231,206, 0.25)';
     ctx.fillRect(0, 30, W, 1);
     ctx.textBaseline = 'middle';
     ctx.font = `700 12px Orbitron, sans-serif`;
     const campos = [
-      ['VIDA', jog.vida, jog.vida > 50 ? '#39ff7a' : jog.vida > 25 ? '#ffe600' : '#ff3b5c'],
-      [ARMAS[jog.arma].nome, municao[jog.arma] === Infinity ? '∞' : municao[jog.arma], '#ffe600'],
-      ['SALA', `${sala + 1}/${SALAS.length}`, '#00f0ff'],
-      ['RESTAM', inimigos.length, '#ff2bd6'],
-      ['PONTOS', score, '#39ff7a'],
+      ['VIDA', jog.vida, jog.vida > 50 ? '#a8dba0' : jog.vida > 25 ? '#efce95' : '#ed887f'],
+      [ARMAS[jog.arma].nome, municao[jog.arma] === Infinity ? '∞' : municao[jog.arma], '#efce95'],
+      ['SALA', `${sala + 1}/${SALAS.length}`, '#9be7ce'],
+      ['RESTAM', inimigos.length, '#afa3f5'],
+      ['PONTOS', score, '#a8dba0'],
     ];
-    let cx = 16;
+    let cx = 72 * W / canvas.clientWidth; // reserva o botão de voltar em pixels CSS
     ctx.textAlign = 'left';
     for (const [rot, val, cor] of campos) {
-      ctx.fillStyle = 'rgba(232, 230, 245, 0.5)';
+      ctx.fillStyle = '#a8b9c8';
       ctx.font = `700 9px Orbitron, sans-serif`;
       ctx.fillText(rot, cx, 15);
       cx += ctx.measureText(rot).width + 8;

@@ -8,8 +8,8 @@
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#04001a">
-<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   .stage { --arw: 3; --arh: 4; --maxw: 480px; }
   /* segundo botao redondo, ao lado do som */
@@ -28,7 +28,7 @@
 
   <div class="dashboard" style="--dash-cols:5;">
     <div class="stat"><span class="lbl">Carros</span><span class="val" id="score">0</span></div>
-    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="enduro">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="enduro">0</span></div>
     <div class="stat"><span class="lbl">Dia</span><span class="val" id="dia">1</span></div>
     <div class="stat"><span class="lbl">Faltam</span><span class="val" id="faltam">18</span></div>
     <div class="stat"><span class="lbl">Lata</span><span class="val" id="lata">100%</span>
@@ -51,7 +51,7 @@
         <div class="fstat"><span>Dias</span><b id="fsDias">1</b></div>
         <div class="fstat"><span>Lata</span><b id="fsLata">100%</b></div>
       </div>
-      <button class="btn" id="startBtn">START</button>
+      <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
         <span class="key">Toque nas laterais</span><span class="key">Base = freio</span><span class="key">← ↑ → ↓ no teclado</span><span class="key">⏩ liga o auto</span><span class="key">P pausa</span>
       </div>
@@ -61,7 +61,7 @@
   <footer>// <a href="../index.html">← arcade</a> · a meta sobe a cada dia · fora da pista come lata e velocidade</footer>
 </div>
 
-<script src="../assets/js/neon-core.js"></script>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
@@ -80,9 +80,9 @@
   // Estado geral do carro. A cor e o quanto ele esta amassado saem daqui, entao
   // o jogador le a saude olhando o proprio carro, sem tirar o olho da pista.
   const ESTADOS = [
-    { min: 67, cor: '#00f0ff', amassos: 0 },
-    { min: 34, cor: '#ffe600', amassos: 2 },
-    { min: 0,  cor: '#ff3b5c', amassos: 4 },
+    { min: 67, cor: '#9be7ce', amassos: 0 },
+    { min: 34, cor: '#efce95', amassos: 2 },
+    { min: 0,  cor: '#ed887f', amassos: 4 },
   ];
   const estadoLata = l => ESTADOS.find(e => l >= e.min) || ESTADOS[ESTADOS.length - 1];
 
@@ -101,11 +101,11 @@
   // ── céu ───────────────────────────────────────────
   // Quatro fotos do dia; o resto e interpolacao. Mais barato que somar camadas.
   const CEU = [
-    { t: 0.00, topo: [26, 2, 64],  baixo: [122, 24, 150] },
-    { t: 0.45, topo: [62, 8, 92],  baixo: [255, 108, 40] },
-    { t: 0.62, topo: [3, 0, 20],   baixo: [26, 0, 66] },
-    { t: 0.88, topo: [10, 2, 44],  baixo: [84, 32, 124] },
-    { t: 1.00, topo: [26, 2, 64],  baixo: [122, 24, 150] },
+    { t: 0.00, topo: [17, 29, 44],  baixo: [70, 66, 94] },
+    { t: 0.45, topo: [38, 48, 74],  baixo: [201, 146, 104] },
+    { t: 0.62, topo: [8, 13, 28],   baixo: [20, 30, 49] },
+    { t: 0.88, topo: [17, 29, 44],  baixo: [67, 68, 91] },
+    { t: 1.00, topo: [17, 29, 44],  baixo: [70, 66, 94] },
   ];
   const misturar = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
   const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
@@ -175,7 +175,7 @@
   function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
 
   // sem amarelo nem ciano: essas duas cores sao a saude do carro do jogador
-  const CORES_RIVAL = ['#ff2bd6', '#ff8c1a', '#39ff7a', '#9b30ff'];
+  const CORES_RIVAL = ['#afa3f5', '#dda077', '#a8dba0', '#8e83c8'];
   const metaBatida = () => faltam <= 0;
 
   function nascerRival() {
@@ -208,7 +208,7 @@
     state = 'paused';
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
-    Neon.overlay.show('PAUSADO', 'Aperte P para retomar — o dia para junto.', 'RESUME');
+    Neon.overlay.show('PAUSADO', 'Aperte P para retomar — o dia para junto.', 'CONTINUAR');
   }
   function resumeGame() {
     state = 'playing';
@@ -258,7 +258,7 @@
       if (faltam === 0) {
         Neon.toast('🏁 META BATIDA! SÓ CHEGAR NO FIM DO DIA');
         Neon.audio.sfx.record();
-        flashAt('rgba(57, 255, 122,', 260);
+        flashAt('rgba(168,219,160,', 260);
       } else {
         Neon.audio.sfx.point();
       }
@@ -281,7 +281,7 @@
     Neon.audio.sfx.hit();
     shakeAt(11, 300);
     bateuLata(LATA_BATIDA, 'A lata acabou numa batida.');
-    flashAt('rgba(255, 59, 92,', 200);
+    flashAt('rgba(237,136,127,', 200);
     const p = pDeZ(0.2), { cx, meia } = estrada(p, curva);
     particles.burst(cx + r.faixa * meia, yDeP(p), '#ffffff', 18, 200, 3);
   }
@@ -470,13 +470,13 @@
     ctx.fillStyle = cor;
     ctx.fillRect(x - larg / 2, y - alt, larg, alt);
     ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(5, 0, 26, 0.75)';
+    ctx.fillStyle = 'rgba(8,13,28, 0.75)';
     ctx.fillRect(x - larg * 0.34, y - alt * 0.82, larg * 0.68, alt * 0.42);
-    ctx.fillStyle = farol ? '#ffe600' : 'rgba(255,255,255,0.55)';
+    ctx.fillStyle = farol ? '#efce95' : 'rgba(255,255,255,0.55)';
     ctx.fillRect(x - larg / 2, y - alt * 0.16, larg * 0.2, alt * 0.16);
     ctx.fillRect(x + larg * 0.3, y - alt * 0.16, larg * 0.2, alt * 0.16);
     if (!amassos) return;
-    ctx.strokeStyle = 'rgba(5, 0, 26, 0.85)';
+    ctx.strokeStyle = 'rgba(8,13,28, 0.85)';
     ctx.lineWidth = Math.max(1, larg * 0.05);
     for (let i = 0; i < amassos; i++) {
       const px = x - larg / 2 + larg * (0.16 + i * 0.22);
@@ -493,19 +493,19 @@
     const a = Math.min(0.5, dicaT / 1400);
     ctx.save();
     ctx.globalAlpha = a;
-    ctx.fillStyle = 'rgba(0, 240, 255, 0.16)';
+    ctx.fillStyle = 'rgba(155,231,206, 0.16)';
     ctx.fillRect(0, HY, W * 0.42, H - HY);
     ctx.fillRect(W * 0.58, HY, W * 0.42, H - HY);
-    ctx.fillStyle = 'rgba(255, 43, 214, 0.2)';
+    ctx.fillStyle = 'rgba(175,163,245, 0.2)';
     ctx.fillRect(W * 0.34, H * 0.85, W * 0.32, H * 0.15);
     ctx.globalAlpha = Math.min(0.9, a * 2);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#0af6ff';
+    ctx.fillStyle = '#9be7ce';
     ctx.font = '700 44px Orbitron, sans-serif';
     ctx.fillText('◀', W * 0.11, H * 0.6);
     ctx.fillText('▶', W * 0.89, H * 0.6);
-    ctx.fillStyle = '#ff2bd6';
+    ctx.fillStyle = '#afa3f5';
     ctx.font = '700 18px Orbitron, sans-serif';
     ctx.fillText('FREIO', W / 2, H * 0.94);
     ctx.restore();
@@ -533,8 +533,8 @@
     // sol de dia, lua de noite, os dois presos na curva
     const astroX = W / 2 + curva * 150;
     ctx.globalAlpha = 0.9;
-    ctx.fillStyle = noite > 0.5 ? '#e8e8ff' : '#ffe600';
-    Neon.glow(ctx, noite > 0.5 ? '#9fd8ff' : '#ff8c1a', 40);
+    ctx.fillStyle = noite > 0.5 ? '#e8e8ff' : '#efce95';
+    Neon.glow(ctx, noite > 0.5 ? '#9fd8ff' : '#dda077', 40);
     Neon.circle(ctx, astroX, HY - 46 - (1 - Math.abs(prog * 2 - 1)) * 40, 30);
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
@@ -548,15 +548,15 @@
       const luz = brilho * (0.7 + p * 0.3);
 
       ctx.fillStyle = banda
-        ? `rgb(${(28 * luz) | 0},${(10 * luz) | 0},${(72 * luz) | 0})`
-        : `rgb(${(20 * luz) | 0},${(6 * luz) | 0},${(56 * luz) | 0})`;
+        ? `rgb(${(28 * luz) | 0},${(38 * luz) | 0},${(55 * luz) | 0})`
+        : `rgb(${(20 * luz) | 0},${(29 * luz) | 0},${(44 * luz) | 0})`;
       ctx.fillRect(0, y, W, PASSO);
 
       ctx.fillStyle = `rgb(${(52 * luz) | 0},${(52 * luz) | 0},${(68 * luz) | 0})`;
       ctx.fillRect(cx - meia, y, meia * 2, PASSO);
 
       const borda = Math.max(2, meia * 0.06);
-      ctx.fillStyle = banda ? `rgb(${(255 * luz) | 0},${(60 * luz) | 0},${(110 * luz) | 0})` : `rgb(${(240 * luz) | 0},${(240 * luz) | 0},${(255 * luz) | 0})`;
+      ctx.fillStyle = banda ? `rgb(${(237 * luz) | 0},${(136 * luz) | 0},${(127 * luz) | 0})` : `rgb(${(240 * luz) | 0},${(240 * luz) | 0},${(237 * luz) | 0})`;
       ctx.fillRect(cx - meia, y, borda, PASSO);
       ctx.fillRect(cx + meia - borda, y, borda, PASSO);
 
@@ -574,7 +574,7 @@
       const p = pDeZ(r.z);
       const { cx, meia } = estrada(p, curva);
       ctx.globalAlpha = vis;
-      carro(cx + r.faixa * meia, yDeP(p), Math.max(6, meia * 0.34), metaBatida() ? '#4d7dff' : r.cor, false, 0);
+      carro(cx + r.faixa * meia, yDeP(p), Math.max(6, meia * 0.34), metaBatida() ? '#8faef2' : r.cor, false, 0);
       ctx.globalAlpha = 1;
     }
 
@@ -586,12 +586,12 @@
 
     // farol: cone claro no escuro, some de dia
     if (noite > 0.05) {
-      ctx.fillStyle = `rgba(6, 2, 26, ${noite * 0.4})`;
+      ctx.fillStyle = `rgba(6,2,26, ${noite * 0.4})`;
       ctx.fillRect(0, HY, W, H - HY);
       const fx = pc.cx + carX * pc.meia;
       const cone = ctx.createLinearGradient(0, yDeP(P_CARRO), 0, HY + 40);
-      cone.addColorStop(0, `rgba(255, 240, 180, ${noite * 0.3})`);
-      cone.addColorStop(1, 'rgba(255, 240, 180, 0)');
+      cone.addColorStop(0, `rgba(255,240,180, ${noite * 0.3})`);
+      cone.addColorStop(1, 'rgba(255,240,180, 0)');
       ctx.fillStyle = cone;
       ctx.beginPath();
       ctx.moveTo(fx - 26, yDeP(P_CARRO));
@@ -604,15 +604,15 @@
 
     if (fog > 0) {
       const n = ctx.createLinearGradient(0, HY - 40, 0, H * 0.95);
-      n.addColorStop(0, `rgba(214, 222, 255, ${fog})`);
-      n.addColorStop(0.55, `rgba(214, 222, 255, ${fog * 0.5})`);
-      n.addColorStop(1, 'rgba(214, 222, 255, 0)');
+      n.addColorStop(0, `rgba(214,222,255, ${fog})`);
+      n.addColorStop(0.55, `rgba(214,222,255, ${fog * 0.5})`);
+      n.addColorStop(1, 'rgba(214,222,255, 0)');
       ctx.fillStyle = n;
       ctx.fillRect(0, 0, W, H);
     }
 
     if (chuva > 0.15) {
-      ctx.strokeStyle = `rgba(190, 214, 255, ${0.16 + chuva * 0.3})`;
+      ctx.strokeStyle = `rgba(190,214,255, ${0.16 + chuva * 0.3})`;
       ctx.lineWidth = 1.4;
       ctx.beginPath();
       for (const g of pingos) {
@@ -622,14 +622,14 @@
       ctx.stroke();
       // vidro embaçado: a chuva tambem tira contraste do fundo
       const molhado = ctx.createLinearGradient(0, HY, 0, H);
-      molhado.addColorStop(0, `rgba(18, 26, 66, ${chuva * 0.5})`);
-      molhado.addColorStop(1, 'rgba(18, 26, 66, 0)');
+      molhado.addColorStop(0, `rgba(18,26,66, ${chuva * 0.5})`);
+      molhado.addColorStop(1, 'rgba(18,26,66, 0)');
       ctx.fillStyle = molhado;
       ctx.fillRect(0, HY, W, H - HY);
     }
 
     if (clarao > 0) {
-      ctx.fillStyle = `rgba(226, 236, 255, ${clarao * 0.42})`;
+      ctx.fillStyle = `rgba(226,236,255, ${clarao * 0.42})`;
       ctx.fillRect(0, 0, W, H);
     }
 
@@ -656,8 +656,8 @@
     // barra do dia
     ctx.fillStyle = 'rgba(255,255,255,0.16)';
     ctx.fillRect(0, 0, W, 6);
-    ctx.fillStyle = metaBatida() ? '#39ff7a' : '#00f0ff';
-    Neon.glow(ctx, metaBatida() ? '#39ff7a' : '#00f0ff', 10);
+    ctx.fillStyle = metaBatida() ? '#a8dba0' : '#9be7ce';
+    Neon.glow(ctx, metaBatida() ? '#a8dba0' : '#9be7ce', 10);
     ctx.fillRect(0, 0, W * Neon.clamp(prog, 0, 1), 6);
     ctx.shadowBlur = 0;
 

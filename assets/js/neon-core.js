@@ -39,6 +39,17 @@ window.Neon = (function () {
     el.classList.add('show');
   }
 
+  // Tela cheia parte do gesto de iniciar. Se não houver suporte/permissão,
+  // o layout compacto continua funcionando. Não insiste após o jogador sair.
+  function enterGameView() {
+    if (document.body.classList.contains('jogando')) return;
+    document.body.classList.add('jogando');
+    const root = document.documentElement;
+    if (document.fullscreenElement || !root.requestFullscreen) return;
+    try { root.requestFullscreen({ navigationUI: 'hide' }).catch(() => {}); }
+    catch (_) { /* O navegador mantém a partida na área disponível. */ }
+  }
+
   // ── overlay ────────────────────────────────────────
   const overlay = {
     show(title, text, btn, cls = '', extra = '') {
@@ -51,6 +62,7 @@ window.Neon = (function () {
       if (o) o.classList.remove('hidden');
     },
     hide() {
+      enterGameView();
       const o = $('overlay');
       if (o) o.classList.add('hidden');
       const fs = $('finalStats');
@@ -370,7 +382,7 @@ window.Neon = (function () {
       for (const p of this.list) {
         const a = Math.max(0, p.life / p.maxLife);
         ctx.globalAlpha = a;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 6;
         ctx.shadowColor = p.color;
         ctx.fillStyle = p.color;
         ctx.beginPath();
@@ -381,7 +393,7 @@ window.Neon = (function () {
         ctx.globalAlpha = w.life * 0.7;
         ctx.strokeStyle = w.color;
         ctx.lineWidth = 3 * w.life;
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 8;
         ctx.shadowColor = w.color;
         ctx.beginPath();
         ctx.arc(w.x, w.y, (1 - w.life) * w.r, 0, Math.PI * 2);
@@ -393,7 +405,7 @@ window.Neon = (function () {
         for (const f of this.floats) {
           ctx.globalAlpha = Math.min(1, f.life * 1.6);
           ctx.font = `700 ${f.size}px Orbitron, sans-serif`;
-          ctx.shadowBlur = 12;
+          ctx.shadowBlur = 0;
           ctx.shadowColor = f.color;
           ctx.fillStyle = f.color;
           ctx.fillText(f.text, f.x, f.y);
@@ -440,7 +452,7 @@ window.Neon = (function () {
   }
   function glow(ctx, color, blur) {
     ctx.shadowColor = color;
-    ctx.shadowBlur = blur;
+    ctx.shadowBlur = blur * 0.55;
   }
 
   // ── pausa ao trocar de aba ─────────────────────────
@@ -484,6 +496,7 @@ window.Neon = (function () {
     const arw = parseFloat(cs.getPropertyValue('--arw'));
     const arh = parseFloat(cs.getPropertyValue('--arh'));
     if (!(arw / arh >= 1.4)) return; // 4:3 pra baixo girar nao compensa
+    stage.classList.add('landscape-game');
     const hint = document.createElement('div');
     hint.className = 'rotate-hint';
     hint.textContent = '↻ gire o telefone para um quadro maior';
@@ -539,10 +552,6 @@ window.Neon = (function () {
     bindPauseToggle();
     const cv = $('game');
     if (cv && cv.getContext) fitCanvas(cv);
-    // O glitch do logo e uma copia do titulo em outra cor. attr() precisa do
-    // dado no elemento, entao copia daqui em vez de repetir em 14 arquivos.
-    const h1 = document.querySelector('.brand h1');
-    if (h1) h1.dataset.glitch = h1.textContent.trim();
     addBackButton();
     travaAlturaPWA();
     addRotateHint();

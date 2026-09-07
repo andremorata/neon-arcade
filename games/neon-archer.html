@@ -8,8 +8,8 @@
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#04001a">
-<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   /* cursor fica visivel pra posicionar a mao antes do tiro; some quando o reticulo assume */
   .stage { --arw: 3; --arh: 2; --maxw: 900px; cursor: crosshair; }
@@ -30,7 +30,7 @@
     <div class="stat"><span class="lbl">Rodada</span><span class="val" id="round">1</span></div>
     <div class="stat"><span class="lbl">Você</span><span class="val" id="you">0</span></div>
     <div class="stat"><span class="lbl">Bot</span><span class="val" id="bot">0</span></div>
-    <div class="stat"><span class="lbl">Best</span><span class="val" id="best" data-key="archer">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="archer">0</span></div>
   </div>
 
   <div class="stage" id="stage">
@@ -47,7 +47,7 @@
         <div class="fstat"><span>Bot</span><b id="fsBot" class="pink">0</b></div>
         <div class="fstat"><span>Melhor flecha</span><b id="fsBest" class="gold">0</b></div>
       </div>
-      <button class="btn" id="startBtn">START</button>
+      <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
         <span class="key">Segurar + mover</span><span class="key">Toque e arraste</span><span class="key">SPACE</span><span class="key">P pausa</span>
       </div>
@@ -57,7 +57,7 @@
   <footer>// <a href="../index.html">← arcade</a> · 5 rodadas de 3 virotes contra o bot · centro vale 10 · carga cheia voa reto · corrija o vento</footer>
 </div>
 
-<script src="../assets/js/neon-core.js"></script>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
@@ -94,7 +94,7 @@
   // bot de dificuldade media, com rubber band mais suave que o do Darts
   const BOT_SIGMA = 26, BOT_K = 0.55, BOT_MIN = 12, BOT_MAX = 44, BOT_AIM_T = 0.9;
 
-  const CYAN = '#00f0ff', MAGENTA = '#ff2bd6', GOLD = '#ffd700', GREEN = '#39ff7a', RED = '#ff3b5c';
+  const CYAN = '#9be7ce', MAGENTA = '#afa3f5', GOLD = '#e9b77c', GREEN = '#a8dba0', RED = '#ed887f';
 
   const els = {
     round: Neon.$('round'), you: Neon.$('you'), bot: Neon.$('bot'), best: Neon.$('best'),
@@ -118,7 +118,7 @@
     if (d > TR) return 0;
     return Math.min(10, Math.max(1, 11 - Math.ceil(d / (TR / 10))));
   };
-  const ringColor = s => s >= 9 ? GOLD : s >= 7 ? RED : s >= 5 ? CYAN : s >= 3 ? '#9b30ff' : '#8ea3c0';
+  const ringColor = s => s >= 9 ? GOLD : s >= 7 ? RED : s >= 5 ? CYAN : s >= 3 ? '#8e83c8' : '#8ea3c0';
 
   // ── fundo pre-renderizado (ceu + sol + cidade + grid + alvo nao mudam) ──
   const scene = document.createElement('canvas');
@@ -130,9 +130,9 @@
 
     // ceu
     const sky = b.createLinearGradient(0, 0, 0, HY);
-    sky.addColorStop(0, '#100033');
-    sky.addColorStop(0.55, '#3d0a5c');
-    sky.addColorStop(1, '#8a1a6b');
+    sky.addColorStop(0, '#111d2c');
+    sky.addColorStop(0.55, '#29314a');
+    sky.addColorStop(1, '#62465d');
     b.fillStyle = sky;
     b.fillRect(0, 0, W, HY);
 
@@ -142,11 +142,11 @@
     // grande de proposito: o alvo fica na frente, entao o sol tem que sobrar como halo
     const SR = 172, SY = HY - 10;
     const sun = b.createLinearGradient(0, SY - SR, 0, SY + SR);
-    sun.addColorStop(0, '#ffe600');
-    sun.addColorStop(0.45, '#ff8c1a');
-    sun.addColorStop(1, '#ff2bd6');
+    sun.addColorStop(0, '#efce95');
+    sun.addColorStop(0.45, '#dda077');
+    sun.addColorStop(1, '#afa3f5');
     b.fillStyle = sun;
-    b.shadowColor = '#ff8c1a'; b.shadowBlur = 70;
+    b.shadowColor = '#dda077'; b.shadowBlur = 70;
     b.beginPath(); b.arc(VPX, SY, SR, 0, Math.PI * 2); b.fill();
     b.shadowBlur = 0;
     b.fillStyle = sky;                                     // fatias: barras da cor do ceu
@@ -164,12 +164,12 @@
     for (let i = 0; bx < W + 40; i++) {
       const bw = 34 + (seed[i % seed.length] % 5) * 11;
       const bh = seed[i % seed.length];
-      b.fillStyle = '#12002e';
+      b.fillStyle = '#111d2c';
       b.fillRect(bx, HY - bh, bw, bh);
-      b.strokeStyle = 'rgba(0, 240, 255, 0.28)';
+      b.strokeStyle = 'rgba(155,231,206, 0.28)';
       b.lineWidth = 1;
       b.strokeRect(bx + 0.5, HY - bh + 0.5, bw - 1, bh);
-      b.fillStyle = 'rgba(0, 240, 255, 0.5)';              // janelas
+      b.fillStyle = 'rgba(155,231,206, 0.5)';              // janelas
       for (let wy = HY - bh + 8; wy < HY - 6; wy += 11) {
         for (let wx = bx + 5; wx < bx + bw - 5; wx += 9) {
           if ((wx * 7 + wy * 13 + i * 31) % 5 < 2) b.fillRect(wx, wy, 3, 4);
@@ -180,18 +180,18 @@
     b.restore();
 
     // chao
-    b.fillStyle = '#0a0122';
+    b.fillStyle = '#0b1324';
     b.fillRect(0, HY, W, H - HY);
 
     // grid em fuga
-    b.strokeStyle = 'rgba(255, 43, 214, 0.45)';
+    b.strokeStyle = 'rgba(175,163,245, 0.45)';
     b.lineWidth = 1.5;
     b.shadowColor = MAGENTA; b.shadowBlur = 8;
     for (let i = 1; i <= 20; i++) {
       const t = i / 20, y = HY + (H - HY) * t * t;
       b.beginPath(); b.moveTo(0, y); b.lineTo(W, y); b.stroke();
     }
-    b.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+    b.strokeStyle = 'rgba(155,231,206, 0.35)';
     b.shadowColor = CYAN;
     for (let i = -12; i <= 12; i++) {
       b.beginPath();
@@ -209,14 +209,14 @@
     b.shadowBlur = 0;
 
     // poste do alvo
-    b.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+    b.strokeStyle = 'rgba(155,231,206, 0.5)';
     b.lineWidth = 5;
     b.beginPath(); b.moveTo(TX, TY); b.lineTo(TX, HY + 46); b.stroke();
 
     // alvo: 10 aneis, do maior pro menor
     b.shadowColor = GOLD; b.shadowBlur = 22;
     b.beginPath(); b.arc(TX, TY, TR + 7, 0, Math.PI * 2);
-    b.fillStyle = '#05001a'; b.fill();
+    b.fillStyle = '#080d1c'; b.fill();
     b.shadowBlur = 0;
     for (let s = 1; s <= 10; s++) {
       b.beginPath();
@@ -226,7 +226,7 @@
       b.fill();
     }
     b.globalAlpha = 1;
-    b.strokeStyle = 'rgba(5, 0, 26, 0.55)';
+    b.strokeStyle = 'rgba(8,13,28, 0.55)';
     b.lineWidth = 1;
     for (let s = 1; s <= 9; s++) {
       b.beginPath(); b.arc(TX, TY, TR * (11 - s) / 10, 0, Math.PI * 2); b.stroke();
@@ -271,7 +271,7 @@
     setDrawing(false); draw = 0; holdT = 0;
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
-    Neon.overlay.show('PAUSADO', 'Aperte P para voltar ao campo.', 'RESUME');
+    Neon.overlay.show('PAUSADO', 'Aperte P para voltar ao campo.', 'CONTINUAR');
   }
   function resumeGame() {
     state = resumeState;
@@ -578,7 +578,7 @@
     ctx.lineTo(-40, 20);
     ctx.lineTo(-210, 34);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(9, 2, 36, 0.95)';
+    ctx.fillStyle = 'rgba(9,2,36, 0.95)';
     ctx.fill();
     Neon.glow(ctx, col, 16 + 10 * d);
     ctx.strokeStyle = col;
@@ -592,7 +592,7 @@
     ctx.lineTo(-118, 132);
     ctx.lineTo(-176, 128);
     ctx.closePath();
-    ctx.fillStyle = 'rgba(9, 2, 36, 0.95)';
+    ctx.fillStyle = 'rgba(9,2,36, 0.95)';
     ctx.fill();
     ctx.lineWidth = 3.5;
     ctx.stroke();
@@ -620,7 +620,7 @@
     }
 
     // corda armada, das pontas ate o nock
-    ctx.strokeStyle = 'rgba(234, 246, 255, 0.95)';
+    ctx.strokeStyle = 'rgba(237,244,240, 0.95)';
     ctx.lineWidth = 3;
     Neon.glow(ctx, '#eaf6ff', 10);
     ctx.beginPath();
@@ -701,7 +701,7 @@
     const col = strong ? RED : CYAN;
     const w = 150, x = VPX - w / 2, y = 22, h = 32;
     ctx.save();
-    ctx.fillStyle = 'rgba(5, 0, 26, 0.78)';
+    ctx.fillStyle = 'rgba(8,13,28, 0.78)';
     ctx.strokeStyle = col;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -727,7 +727,7 @@
 
     ctx.textAlign = 'left';
     ctx.font = '700 10px "Orbitron", "Space Mono", monospace';
-    ctx.fillStyle = 'rgba(234, 246, 255, 0.6)';
+    ctx.fillStyle = 'rgba(237,244,240, 0.6)';
     ctx.fillText('VENTO', x + 62, cy - 3);
     ctx.font = '900 15px "Orbitron", "Space Mono", monospace';
     ctx.fillStyle = col;
@@ -767,9 +767,9 @@
     const yl = H - 84, yv = H - 52;
     const pActive = turn === 'player', live = state !== 'menu' && state !== 'gameover';
 
-    ctx.fillStyle = 'rgba(5, 0, 26, 0.72)';
+    ctx.fillStyle = 'rgba(8,13,28, 0.72)';
     ctx.fillRect(0, H - 116, W, 116);
-    ctx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+    ctx.strokeStyle = 'rgba(155,231,206, 0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, H - 116); ctx.lineTo(W, H - 116); ctx.stroke();
 
@@ -780,7 +780,7 @@
       ctx.textAlign = isYou ? 'left' : 'right';
       const x = isYou ? 46 : W - 46;
       ctx.font = '700 11px "Orbitron", "Space Mono", monospace';
-      ctx.fillStyle = on ? color : 'rgba(234, 246, 255, 0.4)';
+      ctx.fillStyle = on ? color : 'rgba(237,244,240, 0.4)';
       ctx.fillText(isYou ? 'VOCÊ' : 'BOT', x, yl);
       ctx.font = '900 36px "Orbitron", "Space Mono", monospace';
       ctx.fillStyle = color;
@@ -805,7 +805,7 @@
 
       // barra de armamento: enche ate o arco cheio, depois vira aviso de tremor
       const bw = 200, bx = VPX - bw / 2, by = H - 74;
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.fillStyle = 'rgba(255,255,255, 0.12)';
       ctx.fillRect(bx, by, bw, 7);
       const fat = Math.min(1, holdT / FATIGUE_T);
       const barCol = draw < 1 ? CYAN : fat > 0.45 ? RED : GOLD;
@@ -814,14 +814,14 @@
       ctx.fillRect(bx, by, bw * draw, 7);
       ctx.shadowBlur = 0;
       if (draw >= 1 && fat > 0) {                          // quanto ja se perdeu segurando
-        ctx.fillStyle = 'rgba(255, 59, 92, 0.85)';
+        ctx.fillStyle = 'rgba(237,136,127, 0.85)';
         ctx.fillRect(bx + bw * (1 - fat), by, bw * fat, 7);
       }
     }
     ctx.font = '700 14px "Space Mono", monospace';
     ctx.fillStyle = state === 'resolve'
       ? (lastLabel === 'ERROU' ? RED : CYAN)
-      : (draw >= 1 && holdT > FATIGUE_T * 0.45 ? RED : 'rgba(234, 246, 255, 0.7)');
+      : (draw >= 1 && holdT > FATIGUE_T * 0.45 ? RED : 'rgba(237,244,240, 0.7)');
     ctx.fillText(statusText(), VPX, H - 48);
     ctx.textAlign = 'left';
   }

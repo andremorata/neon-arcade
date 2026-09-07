@@ -267,6 +267,29 @@ assert.ok(caindo.vx < 0, 'A laje deve tombar para o lado que perdeu o apoio');
 // fitCanvas: o backing store cresce com o devicePixelRatio e o contexto volta pras
 // coordenadas do jogo, senao tudo desenha no lugar errado depois do resize.
 const core = read('assets/js/neon-core.js');
+// Iniciar amplia o jogo mesmo sem API ou com recusa. Retomar não força nova entrada.
+const makeGameView = new Function('document', `${block(core, '  function enterGameView()')}; return enterGameView;`);
+assert.match(block(core, '    hide()'), /enterGameView\(\)/, 'Iniciar a partida deve ativar a visão ampliada');
+for (const mode of ['ok', 'unsupported', 'rejected', 'throws', 'already-fullscreen']) {
+  const classes = new Set();
+  let requests = 0;
+  const doc = {
+    body: { classList: { contains: c => classes.has(c), add: c => classes.add(c) } },
+    fullscreenElement: mode === 'already-fullscreen' ? {} : null,
+    documentElement: {},
+  };
+  if (mode !== 'unsupported') doc.documentElement.requestFullscreen = options => {
+    requests++;
+    assert.strictEqual(options.navigationUI, 'hide');
+    if (mode === 'throws') throw new Error('Bloqueado');
+    return mode === 'rejected' ? Promise.reject(new Error('Recusado')) : Promise.resolve();
+  };
+  const enter = makeGameView(doc);
+  enter(); enter();
+  assert.ok(classes.has('jogando'), `${mode}: mantém a partida ampliada`);
+  assert.strictEqual(requests, ['unsupported', 'already-fullscreen'].includes(mode) ? 0 : 1,
+    `${mode}: não insiste em tela cheia ao retomar`);
+}
 const fitSrc = block(core, '  function fitCanvas(canvas)');
 const makeFit = new Function('clamp', 'canvas', 'window', `${fitSrc}; return fitCanvas(canvas);`);
 const fakeCanvas = (cssW, W, H) => {
@@ -897,9 +920,11 @@ const hintSrc = block(core, '  function addRotateHint()');
 const makeHint = new Function('document', 'getComputedStyle', `${hintSrc}; return addRotateHint;`);
 const hintFor = (arw, arh) => {
   const filhos = [];
-  const stage = { querySelector: () => filhos[0] || null, appendChild: c => filhos.push(c) };
+  const stage = { classList: new Set(), querySelector: () => filhos[0] || null, appendChild: c => filhos.push(c) };
   const doc = { querySelector: () => stage, createElement: () => ({}) };
   makeHint(doc, () => ({ getPropertyValue: k => (k === '--arw' ? arw : arh) }))();
+  assert.strictEqual(stage.classList.has('landscape-game'), filhos.length > 0,
+    'Só jogos horizontais recebem a composição compacta da entrada');
   return filhos.length;
 };
 assert.strictEqual(hintFor(3, 2), 1, 'Jogo 3:2 deve pedir pra girar o telefone');
@@ -1137,9 +1162,9 @@ assert.match(core, /window\.addEventListener\('blur', fn\)/,
 // estao ligados juntos. Phantom tem que ganhar, senao a cobra atravessa parede
 // pintada de turbo e o jogador nao ve que esta invulneravel.
 const pele = new Function(`${block(games.snake, '  function peleDaCobra(')}; return peleDaCobra;`)();
-assert.strictEqual(pele(true, true, true, true).glow, '#00f0ff', 'Phantom manda na cor acima de tudo');
+assert.strictEqual(pele(true, true, true, true).glow, '#9be7ce', 'Phantom manda na cor acima de tudo');
 assert.strictEqual(pele(false, true, true, true).glow, '#ffb300', 'Turbo vem depois do phantom');
-assert.strictEqual(pele(false, false, true, true).glow, '#ff8c1a', 'Frenzy vem depois do turbo');
+assert.strictEqual(pele(false, false, true, true).glow, '#dda077', 'Frenzy vem depois do turbo');
 assert.strictEqual(pele(false, false, false, true).glow, '#5b8cff', 'Slow é o último boost');
 const padrao = pele(false, false, false, false);
 assert.ok(padrao.a && padrao.b && padrao.glow, 'Sem boost nenhum a cobra ainda tem cor');
@@ -1151,10 +1176,21 @@ for (const [nome, p] of [['phantom', pele(true)], ['turbo', pele(0, 1)], ['padr�
 assert.match(games.snake, /swipe\.x = e\.clientX; swipe\.y = e\.clientY;/,
   'O swipe do Snake precisa reancorar a origem a cada curva');
 
-// o glitch do logo lê o texto de um data-, preenchido pelo core em vez de 14 arquivos
-assert.match(css, /content: attr\(data-glitch\)/, 'O tema precisa do ::after com attr(data-glitch)');
-assert.match(core, /h1\.dataset\.glitch = h1\.textContent\.trim\(\)/,
-  'O core precisa preencher data-glitch, senão o ::after fica vazio');
+// Aurora: textos e ação principal precisam manter contraste no fundo comum.
+const token = name => css.match(new RegExp(`--${name}: (#[0-9a-f]{6});`))[1];
+const luminancia = hex => {
+  const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+    .map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+};
+const contraste = (a, b) => {
+  const [claro, escuro] = [luminancia(a), luminancia(b)].sort((x, y) => y - x);
+  return (claro + 0.05) / (escuro + 0.05);
+};
+for (const fundo of ['bg', 'bg-deep']) for (const texto of ['text', 'text-dim', 'title']) {
+  assert.ok(contraste(token(texto), token(fundo)) >= 4.5, `${texto} precisa ser legível em ${fundo}`);
+}
+assert.ok(contraste(token('bg'), token('neon-cyan')) >= 4.5, 'Texto do botão precisa contrastar com a menta');
 
 // Asteroid em pé: o campo dá a volta, então o que tem que ficar igual é a fração
 // de tela ocupada por rocha. E os limiares de ponto são relativos ao raio grande;
@@ -1349,18 +1385,18 @@ const shell = sw.match(/const SHELL = \[([\s\S]*?)\]/)[1].match(/'([^']+)'/g).ma
 const icons = JSON.parse(read('manifest.webmanifest')).icons.map(i => i.src);
 for (const file of [...shell, ...icons]) {
   if (file === '.') continue;
-  assert.ok(fs.existsSync(path.join(__dirname, file)), `PWA: arquivo referenciado não existe — ${file}`);
+  assert.ok(fs.existsSync(path.join(__dirname, file.split('?')[0])), `PWA: arquivo referenciado não existe — ${file}`);
 }
 assert.ok(menu.includes(`caches.open('${cacheName}')`), `index.html deve pré-carregar no cache '${cacheName}'`);
 assert.ok(menu.includes('manifest.webmanifest'), 'index.html deve linkar o manifest');
 
 // sem theme-color a barra de status do PWA volta pro branco ao entrar num jogo
 for (const [name, html] of Object.entries(games)) {
-  assert.ok(html.includes('<meta name="theme-color" content="#04001a">'),
+  assert.ok(html.includes('<meta name="theme-color" content="#080d1c">'),
     `${name}: falta a theme-color, o PWA fica branco fora do quadro`);
   assert.ok(html.includes('rel="manifest"'), `${name}: falta o link do manifest`);
 }
-assert.ok(JSON.parse(read('manifest.webmanifest')).theme_color === '#04001a',
+assert.ok(JSON.parse(read('manifest.webmanifest')).theme_color === '#080d1c',
   'A theme_color do manifest tem que bater com a das páginas');
 
 // o sw manda codigo do proprio site pela rede primeiro; o resto sai do cache
@@ -1370,6 +1406,8 @@ const req = (url, mode) => ({ url, mode: mode || 'no-cors' });
 assert.ok(ehCodigo(req('https://exemplo.com/games/neon-siege.html', 'navigate')), 'Página do jogo vem da rede');
 assert.ok(ehCodigo(req('https://exemplo.com/assets/js/neon-core.js')), 'O core vem da rede');
 assert.ok(ehCodigo(req('https://exemplo.com/assets/css/neon-theme.css')), 'O tema vem da rede');
+assert.ok(ehCodigo(req('https://exemplo.com/games/neon-pong.html')), 'O preload de jogos também revalida');
+assert.ok(ehCodigo(req('https://exemplo.com/manifest.webmanifest')), 'O manifest acompanha o tema');
 assert.ok(!ehCodigo(req('https://exemplo.com/assets/fonts/space-mono-400-latin.woff2')), 'Fonte sai do cache');
 assert.ok(!ehCodigo(req('https://exemplo.com/assets/icon-192.png')), 'Ícone sai do cache');
 assert.ok(!ehCodigo(req('https://fonts.googleapis.com/css2?family=X', 'navigate')), 'Cross-origin sai do cache');

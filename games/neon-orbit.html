@@ -8,26 +8,20 @@
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#04001a">
-<link rel="stylesheet" href="../assets/css/neon-theme.css">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
-  body.imersivo { background: #030917; }
-  body.imersivo::before, body.imersivo::after { display: none; }
-  .stage { --arw: 8; --arh: 5; --maxw: 1100px; border-color: #87ddcd55; background: #030917; box-shadow: 0 0 70px #56bbcb1a; }
-  .stage::before { display: none; }
-  .overlay { align-items: flex-start; text-align: left; padding: 10%; background: linear-gradient(90deg,#030917ed,#03091790 65%,#03091722); backdrop-filter: none; }
-  .overlay h2 { font-size: clamp(38px,8vw,86px); color: #e9fcf5; background: none; filter: none; animation: none; letter-spacing: -.04em; }
-  .overlay p { max-width: 360px; color: #b6cbd4; }
-  .eyebrow { color: #e5b478; font-size: 10px; letter-spacing: .26em; margin-bottom: 14px; }
-  .btn { background: #b9f6df; color: #07261f; box-shadow: 0 0 30px #8de8c333; letter-spacing: .12em; }
+  .stage { --arw: 8; --arh: 5; --maxw: 1100px; }
+  .overlay { align-items: flex-start; text-align: left; padding: 10%; background: linear-gradient(90deg, #080d1cf5, #080d1cd9 60%, #080d1c80); backdrop-filter: none; }
+  .overlay p { max-width: 380px; }
+  .eyebrow { color: var(--neon-gold); font-size: 10px; letter-spacing: .2em; margin-bottom: 16px; }
   .controls-hint { justify-content: flex-start; max-width: 370px; }
-  .key { color: #b9c9d5; border-color: #93b4c033; box-shadow: none; }
   .telemetry { position: absolute; top: 20px; left: 66px; right: 110px; display: flex; gap: 26px; z-index: 5; pointer-events: none; }
-  .telemetry span { display: block; color: #829da9; font-size: 8px; letter-spacing: .16em; }
-  .telemetry b { color: #ddf6f1; font: 700 16px Orbitron,sans-serif; }
+  .telemetry span { display: block; color: var(--text-dim); font-size: 8px; letter-spacing: .16em; }
+  .telemetry b { color: var(--text); font: 700 16px Orbitron,sans-serif; }
   .flight-controls { position: absolute; bottom: 20px; left: 24px; right: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; z-index: 5; }
-  .flight-controls p { color: #aec4cc; font-size: 10px; max-width: 320px; }
-  .recover { background: #081723d9; border: 1px solid #a7c6cf55; color: #d4e9eb; padding: 12px 15px; border-radius: 8px; cursor: pointer; font: 10px 'Space Mono',monospace; }
+  .flight-controls p { color: var(--text-dim); font-size: 10px; max-width: 320px; }
+  .recover { background: #111d2cf2; border: 1px solid #a7c6cf55; color: var(--text); padding: 12px 15px; border-radius: 8px; cursor: pointer; font: 10px 'Space Mono',monospace; }
   .recover:disabled { opacity: .35; cursor: default; }
   .stage:has(.overlay:not(.hidden)) .telemetry, .stage:has(.overlay:not(.hidden)) .flight-controls { visibility: hidden; }
   .toast { top: 76px; max-width: calc(100% - 32px); white-space: normal; text-align: center; font-size: 10px; }
@@ -57,7 +51,7 @@
   </div>
   <footer>// um toque, um salto · 3 setores · recorde salvo neste aparelho</footer>
 </div>
-<script src="../assets/js/neon-core.js"></script>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
@@ -69,7 +63,7 @@
 
   // ── navegação: a previsão e o voo usam a mesma física ──
   function expedition(height) {
-    const colors = ['#8ce8d1', '#9bb3ff', '#f3bb85'];
+    const colors = ['#9be7ce', '#afa3f5', '#e9b77c'];
     return Array.from({ length: 13 }, (_, i) => ({
       x: 220 + i * 290, y: height * .5 + Math.sin(i * 1.73 + .4) * Math.min(112, height * .18),
       r: 34 + (i * 7 % 15), color: colors[Math.min(2, Math.floor(Math.max(0, i - 1) / 4))],
@@ -136,7 +130,7 @@
   }
   function recover() {
     if (state !== 'playing' || !flying) return;
-    particles.burst(ship.x, ship.y, '#f3bb85', 28);
+    particles.burst(ship.x, ship.y, '#e9b77c', 28);
     shields--; streak = 0;
     if (shields <= 0) return finish(false);
     flying = false; angle = -Math.PI / 2; trail = [];
@@ -146,7 +140,7 @@
   function launch() {
     if (state !== 'playing' || flying) return;
     ship = launchFrom(planets[index], angle); flying = true; trail = [];
-    Neon.audio.sfx.boost(); particles.wave(ship.x, ship.y, '#b9f6df', 45); hud();
+    Neon.audio.sfx.boost(); particles.wave(ship.x, ship.y, '#9be7ce', 45); hud();
   }
   function arrive() {
     index++; flying = false; streak++;
@@ -233,9 +227,9 @@
   }
   function render(now) {
     const t = Neon.motion.reduced ? 0 : now / 1000;
-    ctx.fillStyle = '#030917'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#080d1c'; ctx.fillRect(0, 0, W, H);
     const nebula = ctx.createRadialGradient(W * .65, H * .45, 0, W * .65, H * .45, W * .75);
-    nebula.addColorStop(0, index < 4 ? '#10333e' : index < 8 ? '#201b40' : '#342134'); nebula.addColorStop(1, '#030917');
+    nebula.addColorStop(0, index < 4 ? '#162f38' : index < 8 ? '#24243b' : '#302738'); nebula.addColorStop(1, '#080d1c');
     ctx.fillStyle = nebula; ctx.fillRect(0, 0, W, H);
     for (const s of stars) {
       const x = ((s.x - camera * s.z) % W + W) % W;
@@ -298,12 +292,12 @@
       }
     }
     ctx.save(); ctx.translate(ship.x, ship.y); ctx.rotate(flying ? Math.atan2(ship.vy, ship.vx) : angle + Math.PI / 2);
-    ctx.shadowColor = '#a0ffdd'; ctx.shadowBlur = 15; ctx.fillStyle = '#e4fff1';
+    ctx.shadowColor = '#a0ffdd'; ctx.shadowBlur = 8; ctx.fillStyle = '#e4fff1';
     ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(-8, -6); ctx.lineTo(-4, 0); ctx.lineTo(-8, 6); ctx.closePath(); ctx.fill();
     if (flying) { ctx.fillStyle = '#87dfd1'; ctx.beginPath(); ctx.moveTo(-6, -3); ctx.lineTo(-19 - Math.sin(t * 30) * 5, 0); ctx.lineTo(-6, 3); ctx.fill(); }
     ctx.restore();
     particles.draw(ctx); ctx.restore();
-    text(sectors[Math.min(2, Math.floor(index / 4))], W / 2, H - 92, '#8496a9', W < 600 ? 10 : 11);
+    text(sectors[Math.min(2, Math.floor(index / 4))], W / 2, H - 92, '#a8b9c8', W < 600 ? 10 : 11);
     if (arrival > 0 && !Neon.motion.reduced) { ctx.fillStyle = `rgba(150,255,220,${arrival * .06})`; ctx.fillRect(0, 0, W, H); }
   }
   function loop(now) {

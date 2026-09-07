@@ -7,20 +7,20 @@
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#04001a">
+<meta name="theme-color" content="#080d1c">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- iOS < 16.4 ignora o manifest: standalone e nome da tela inicial vem daqui -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="NEON ARCADE">
-<link rel="stylesheet" href="assets/css/neon-theme.css">
+<link rel="stylesheet" href="assets/css/neon-theme.css?v=fullscreen-1">
 </head>
 <body>
 <div class="app">
   <header>
     <div class="brand">
       <h1>NEON ARCADE</h1>
-      <div class="tag" id="tag">// estética synthwave · sessões curtas</div>
+      <div class="tag" id="tag">// Aurora Arcade · sessões curtas</div>
     </div>
   </header>
 
@@ -29,37 +29,37 @@
   <footer>// Setas/WASD/SPACE em cada jogo · P pausa · sons 100% sintetizados · recordes salvos localmente</footer>
 </div>
 
-<script src="assets/js/neon-core.js"></script>
+<script src="assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
 (() => {
   'use strict';
   const Neon = window.Neon;
 
   const GAMES = [
-    { key: 'orbit',  emoji: '🪐', name: 'NEON ORBIT',   desc: 'Sem motor. Salte entre órbitas, escape de singularidades e reacenda 12 mundos.', href: 'games/neon-orbit.html', color: '#b9f6df' },
-    { key: 'echo',   emoji: '📡', name: 'NEON ECHO',    desc: 'O sonar revela o labirinto — e você. Recupere memórias e despiste quem escuta.', href: 'games/neon-echo.html', color: '#a2ffd9' },
-    { key: 'snake',  emoji: '🐍', name: 'NEON SERPENT', desc: 'Maçãs, combos, boosts e velocidade crescente.', href: 'games/neon-snake.html',   color: '#39ff7a' },
-    { key: 'tetris', emoji: '🧱', name: 'NEON BLOCKS',  desc: 'Tetris com limpeza em cascata e nível por 10 linhas.', href: 'games/neon-blocks.html', color: '#00f0ff' },
-    { key: 'pong',   emoji: '🏓', name: 'NEON PONG',    desc: 'Pong contra a IA — primeiro a 7 acelera o rally.', href: 'games/neon-pong.html',   color: '#ff2bd6' },
-    { key: 'simon',  emoji: '🎵', name: 'NEON SIMON',   desc: 'Memória musical com 4 campos sintetizados.', href: 'games/neon-simon.html',   color: '#ffe600' },
-    { key: 'asteroid', emoji: '☄️', name: 'NEON ASTEROID', desc: 'Asteroids vetorial — rochas dividem ao explodir.', href: 'games/neon-asteroid.html', color: '#ff8c1a' },
-    { key: 'flappy', emoji: '🐤', name: 'NEON FLAPPY',  desc: 'Voe entre pilares que aceleram a cada ponto.', href: 'games/neon-flappy.html',  color: '#ffd700' },
-    { key: '2048',   emoji: '🔢', name: 'NEON 2048',    desc: 'Fundição de blocos com animação e glow por valor.', href: 'games/neon-2048.html', color: '#9b30ff' },
-    { key: 'mines',  emoji: '💣', name: 'NEON MINES',   desc: 'Campo minado — melhor tempo é o recorde.', href: 'games/neon-mines.html',  color: '#ff3b5c' },
-    { key: 'whack',  emoji: '🐹', name: 'NEON WHACK',   desc: '30 segundos de whack-a-mole com combos.', href: 'games/neon-whack.html',  color: '#4d7dff' },
+    { key: 'orbit',  emoji: '🪐', name: 'NEON ORBIT',   desc: 'Sem motor. Salte entre órbitas, escape de singularidades e reacenda 12 mundos.', href: 'games/neon-orbit.html', color: '#9be7ce' },
+    { key: 'echo',   emoji: '📡', name: 'NEON ECHO',    desc: 'O sonar revela o labirinto — e você. Recupere memórias e despiste quem escuta.', href: 'games/neon-echo.html', color: '#9be7ce' },
+    { key: 'snake',  emoji: '🐍', name: 'NEON SERPENT', desc: 'Maçãs, combos, boosts e velocidade crescente.', href: 'games/neon-snake.html',   color: '#a8dba0' },
+    { key: 'tetris', emoji: '🧱', name: 'NEON BLOCKS',  desc: 'Tetris com limpeza em cascata e nível por 10 linhas.', href: 'games/neon-blocks.html', color: '#9be7ce' },
+    { key: 'pong',   emoji: '🏓', name: 'NEON PONG',    desc: 'Pong contra a IA — primeiro a 7 acelera o rally.', href: 'games/neon-pong.html',   color: '#afa3f5' },
+    { key: 'simon',  emoji: '🎵', name: 'NEON SIMON',   desc: 'Memória musical com 4 campos sintetizados.', href: 'games/neon-simon.html',   color: '#efce95' },
+    { key: 'asteroid', emoji: '☄️', name: 'NEON ASTEROID', desc: 'Asteroids vetorial — rochas dividem ao explodir.', href: 'games/neon-asteroid.html', color: '#dda077' },
+    { key: 'flappy', emoji: '🐤', name: 'NEON FLAPPY',  desc: 'Voe entre pilares que aceleram a cada ponto.', href: 'games/neon-flappy.html',  color: '#e9b77c' },
+    { key: '2048',   emoji: '🔢', name: 'NEON 2048',    desc: 'Fundição de blocos com animação e glow por valor.', href: 'games/neon-2048.html', color: '#8e83c8' },
+    { key: 'mines',  emoji: '💣', name: 'NEON MINES',   desc: 'Campo minado — melhor tempo é o recorde.', href: 'games/neon-mines.html',  color: '#ed887f' },
+    { key: 'whack',  emoji: '🐹', name: 'NEON WHACK',   desc: '30 segundos de whack-a-mole com combos.', href: 'games/neon-whack.html',  color: '#8faef2' },
     { key: 'hoops',  emoji: '🏀', name: 'NEON HOOPS',   desc: 'Basquete flappy — passe pelo aro na direção certa e pegue fogo.', href: 'games/neon-hoops.html', color: '#ff4d00' },
     { key: 'siege',  emoji: '🏰', name: 'NEON SIEGE',   desc: 'Estilingue contra fortalezas — poderes no toque, fases infinitas.', href: 'games/neon-siege.html', color: '#00ffc3' },
     { key: 'darts',  emoji: '🎯', name: 'NEON DARTS',   desc: 'Trave a mira em dois toques e dispute 5 rodadas contra o bot.', href: 'games/neon-darts.html', color: '#b9ff2b' },
     { key: 'archer', emoji: '🏹', name: 'NEON ARCHER',  desc: 'Besta neon: mira pesada, vento e queda do virote contra o bot.', href: 'games/neon-archer.html', color: '#ff2b7a' },
     { key: 'piano',  emoji: '🎹', name: 'NEON PIANO',   desc: 'Piano tiles: toque a trilha certa e a melodia sai nota por nota.', href: 'games/neon-piano.html', color: '#e6e6ff' },
-    { key: 'bomber', emoji: '💣', name: 'NEON BOMBER',  desc: 'Bomberman: labirinto, cruz de fogo, power-ups e bots por fase.', href: 'games/neon-bomber.html', color: '#ff8c1a' },
-    { key: 'enduro', emoji: '🏎️', name: 'NEON ENDURO',  desc: 'Corrida do 2600: cota de carros por dia, pôr do sol, noite e neblina.', href: 'games/neon-enduro.html', color: '#00f0ff' },
-    { key: 'breach', emoji: '🔫', name: 'NEON BREACH',  desc: 'FPS de grade: cinco salas, três armas e um chefe no núcleo.', href: 'games/neon-breach.html', color: '#ff3b5c' },
-    { key: 'racha',  emoji: '🏁', name: 'NEON RACHA',   desc: 'Arrancada de 400m: o pé é automático, a marcha é sua.', href: 'games/neon-racha.html', color: '#39ff7a' },
-    { key: 'slug',   emoji: '💥', name: 'NEON SLUG',    desc: 'Run-and-gun: três fases, mira automática e um chefe no fim.', href: 'games/neon-slug.html', color: '#ff2bd6' },
-    { key: 'wheels', emoji: '🏎️', name: 'NEON WHEELS',  desc: 'Acrobacia em pista de neon: 12 fases, loops, saltos e três estrelas em cada.', href: 'games/neon-wheels.html', color: '#ff2bd6' },
-    { key: 'runner', emoji: '🚕', name: 'NEON RUNNER',  desc: 'Cidade de cima: entrega contra o relógio com a polícia atrás.', href: 'games/neon-runner.html', color: '#ffe600' },
-    { key: 'river',  emoji: '🛩️', name: 'NEON RIVER',   desc: 'River Raid do 2600: rio procedural, pontes, gasolina e cápsulas que trocam o tiro.', href: 'games/neon-river.html', color: '#00f0ff' },
+    { key: 'bomber', emoji: '💣', name: 'NEON BOMBER',  desc: 'Bomberman: labirinto, cruz de fogo, power-ups e bots por fase.', href: 'games/neon-bomber.html', color: '#dda077' },
+    { key: 'enduro', emoji: '🏎️', name: 'NEON ENDURO',  desc: 'Corrida do 2600: cota de carros por dia, pôr do sol, noite e neblina.', href: 'games/neon-enduro.html', color: '#9be7ce' },
+    { key: 'breach', emoji: '🔫', name: 'NEON BREACH',  desc: 'FPS de grade: cinco salas, três armas e um chefe no núcleo.', href: 'games/neon-breach.html', color: '#ed887f' },
+    { key: 'racha',  emoji: '🏁', name: 'NEON RACHA',   desc: 'Arrancada de 400m: o pé é automático, a marcha é sua.', href: 'games/neon-racha.html', color: '#a8dba0' },
+    { key: 'slug',   emoji: '💥', name: 'NEON SLUG',    desc: 'Run-and-gun: três fases, mira automática e um chefe no fim.', href: 'games/neon-slug.html', color: '#afa3f5' },
+    { key: 'wheels', emoji: '🏎️', name: 'NEON WHEELS',  desc: 'Acrobacia em pista de neon: 12 fases, loops, saltos e três estrelas em cada.', href: 'games/neon-wheels.html', color: '#afa3f5' },
+    { key: 'runner', emoji: '🚕', name: 'NEON RUNNER',  desc: 'Cidade de cima: entrega contra o relógio com a polícia atrás.', href: 'games/neon-runner.html', color: '#efce95' },
+    { key: 'river',  emoji: '🛩️', name: 'NEON RIVER',   desc: 'River Raid do 2600: rio procedural, pontes, gasolina e cápsulas que trocam o tiro.', href: 'games/neon-river.html', color: '#9be7ce' },
   ];
 
   const fmtBest = (key, val) => {
@@ -68,7 +68,7 @@
   };
 
   // contagem sai do GAMES: incluir um jogo nao pede mais editar texto nenhum
-  Neon.$('tag').textContent = `// ${GAMES.length} jogos · estética synthwave · sessões curtas`;
+  Neon.$('tag').textContent = `// ${GAMES.length} jogos · Aurora Arcade · sessões curtas`;
 
   const tiles = Neon.$('tiles');
   tiles.innerHTML = '';

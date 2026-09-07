@@ -25,18 +25,20 @@
 }
 
 :root {
-  --bg: #04001a;
-  --bg-deep: #0a0228;
-  --neon-pink: #ff2bd6;
-  --neon-cyan: #00f0ff;
-  --neon-purple: #9b30ff;
-  --neon-yellow: #ffe600;
-  --neon-green: #39ff7a;
-  --neon-orange: #ff8c1a;
-  --neon-gold: #ffd700;
-  --neon-red: #ff3b5c;
-  --text: #eaf6ff;
-  --text-dim: rgba(234, 246, 255, 0.55);
+  --bg: #080d1c;
+  --bg-deep: #111d2c;
+  --neon-pink: #afa3f5;
+  --neon-cyan: #9be7ce;
+  --neon-purple: #8e83c8;
+  --neon-yellow: #efce95;
+  --neon-green: #a8dba0;
+  --neon-orange: #dda077;
+  --neon-gold: #e9b77c;
+  --neon-red: #ed887f;
+  --text: #edf4f0;
+  --title: #f5e7ce;
+  --line: rgba(155, 231, 206, 0.3);
+  --text-dim: #a8b9c8;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -49,9 +51,9 @@ html, body {
   min-height: 100%;
   background-color: var(--bg);              /* overscroll do iOS nao herda gradiente */
   background:
-    radial-gradient(ellipse at 20% 0%, rgba(155, 48, 255, 0.25) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 100%, rgba(255, 43, 214, 0.18) 0%, transparent 55%),
-    radial-gradient(ellipse at 50% 50%, #0a0228 0%, #04001a 100%);
+    radial-gradient(ellipse at 20% 0%, rgba(175, 163, 245, 0.09) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(155, 231, 206, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 50%, #111d2c 0%, #080d1c 100%);
   background-attachment: fixed;
   color: var(--text);
   font-family: 'Space Mono', monospace;
@@ -64,40 +66,14 @@ html, body {
 }
 
 button, a { touch-action: manipulation; }
+button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 3px;
+}
+.tile:focus-visible { outline-offset: -4px; }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent 0, transparent 3px,
-    rgba(255, 255, 255, 0.018) 3px, rgba(255, 255, 255, 0.018) 4px
-  );
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Nevoa: manchas borradas que derivam devagar. z-index 0, nao negativo: o body
-   tem fundo proprio, e -1 pintaria atras dele e sumiria. */
-body::after {
-  content: '';
-  position: fixed;
-  inset: -30%;
-  z-index: 0;
-  pointer-events: none;
-  filter: blur(70px);
-  opacity: 0.5;
-  background:
-    radial-gradient(38vmax 38vmax at 18% 22%, rgba(155, 48, 255, 0.27), transparent 62%),
-    radial-gradient(34vmax 34vmax at 84% 18%, rgba(0, 240, 255, 0.20), transparent 62%),
-    radial-gradient(40vmax 40vmax at 78% 84%, rgba(255, 43, 214, 0.23), transparent 62%);
-  animation: haze-drift 30s ease-in-out infinite alternate;
-}
-@keyframes haze-drift {
-  from { transform: translate3d(-4%, -3%, 0) scale(1); }
-  to   { transform: translate3d(5%, 4%, 0) scale(1.15); }
-}
+/* A atmosfera fica no fundo; nenhuma faixa animada passa sobre o jogo. */
+body.imersivo { background: var(--bg); }
 
 .app {
   position: relative;
@@ -122,15 +98,8 @@ header { display: flex; justify-content: center; text-align: center; }
   font-weight: 900;
   font-size: clamp(34px, 4.6vw, 56px);
   letter-spacing: 0.05em;
-  line-height: 1;
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-pink) 50%, var(--neon-yellow));
-  background-size: 220% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: gradient-slide 6s ease-in-out infinite;
-  filter: drop-shadow(0 0 22px rgba(255, 43, 214, 0.45));
-  position: relative;                       /* ancora do ::after do glitch */
+  line-height: 1.15;
+  color: var(--title);
 }
 
 .brand .tag {
@@ -143,31 +112,15 @@ header { display: flex; justify-content: center; text-align: center; }
 
 .brand a { text-decoration: none; color: inherit; }
 
-/* Glitch: uma copia rosa do titulo que pisca em fatias. O texto vem do
-   data-glitch, que o neon-core preenche a partir do proprio h1.
-   O bloco de movimento reduzido zera a duracao, entao some sozinho. */
-.brand h1::after {
-  content: attr(data-glitch);
-  position: absolute;
-  left: 0;
-  top: 0;
-  color: var(--neon-pink);
-  -webkit-text-fill-color: var(--neon-pink);
-  mix-blend-mode: screen;
-  opacity: 0.55;
-  pointer-events: none;
-  animation: logo-glitch 4.6s steps(1) infinite;
-}
-@keyframes logo-glitch {
-  0%, 88%, 100% { clip-path: inset(0 0 100% 0); transform: none; }
-  90% { clip-path: inset(12% 0 62% 0); transform: translate(-3px, 1px); }
-  93% { clip-path: inset(58% 0 22% 0); transform: translate(3px, -1px); }
-  96% { clip-path: inset(32% 0 44% 0); transform: translate(-2px, 0); }
-}
+.app:has(.stage) .brand::after { display: none; }
 
-@keyframes gradient-slide {
-  0%, 100% { background-position: 0% 50%; }
-  50%      { background-position: 100% 50%; }
+.brand::after {
+  content: '';
+  display: block;
+  width: 72px;
+  height: 2px;
+  margin: 16px auto 0;
+  background: var(--neon-cyan);
 }
 
 /* ── Dashboard (HUD) ──────────────────────────────── */
@@ -179,12 +132,9 @@ header { display: flex; justify-content: center; text-align: center; }
   max-width: 900px;
   margin: 0 auto;
   padding: 12px 18px;
-  background: linear-gradient(135deg, rgba(155, 48, 255, 0.12), rgba(0, 240, 255, 0.06));
-  border: 1px solid rgba(155, 48, 255, 0.35);
-  border-radius: 14px;
-  box-shadow:
-    0 0 28px rgba(155, 48, 255, 0.25),
-    inset 0 0 32px rgba(155, 48, 255, 0.08);
+  background: var(--bg-deep);
+  border: 1px solid var(--line);
+  border-radius: 12px;
 }
 
 .stat {
@@ -199,7 +149,7 @@ header { display: flex; justify-content: center; text-align: center; }
   top: 12%;
   bottom: 12%;
   width: 1px;
-  background: linear-gradient(180deg, transparent, rgba(0, 240, 255, 0.35), transparent);
+  background: linear-gradient(180deg, transparent, rgba(155, 231, 206, 0.35), transparent);
 }
 
 .stat .lbl {
@@ -216,18 +166,18 @@ header { display: flex; justify-content: center; text-align: center; }
   font-weight: 900;
   font-size: 28px;
   color: var(--neon-cyan);
-  text-shadow: 0 0 14px var(--neon-cyan), 0 0 30px rgba(0, 240, 255, 0.6);
+  text-shadow: none;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   display: inline-block;
   transition: transform 0.1s;
 }
 
-.stat:nth-child(2) .val { color: var(--neon-pink); text-shadow: 0 0 14px var(--neon-pink), 0 0 30px rgba(255, 43, 214, 0.6); }
-.stat:nth-child(3) .val { color: var(--neon-yellow); text-shadow: 0 0 14px var(--neon-yellow), 0 0 30px rgba(255, 230, 0, 0.6); }
-.stat:nth-child(4) .val { color: var(--neon-green); text-shadow: 0 0 14px var(--neon-green), 0 0 30px rgba(57, 255, 122, 0.6); }
-.stat:nth-child(5) .val { color: var(--neon-orange); text-shadow: 0 0 14px var(--neon-orange), 0 0 30px rgba(255, 140, 26, 0.6); }
-.stat:nth-child(6) .val { color: var(--neon-purple); text-shadow: 0 0 14px var(--neon-purple), 0 0 30px rgba(155, 48, 255, 0.6); }
+.stat:nth-child(2) .val { color: var(--neon-pink); text-shadow: none; }
+.stat:nth-child(3) .val { color: var(--neon-yellow); text-shadow: none; }
+.stat:nth-child(4) .val { color: var(--neon-green); text-shadow: none; }
+.stat:nth-child(5) .val { color: var(--neon-orange); text-shadow: none; }
+.stat:nth-child(6) .val { color: var(--neon-purple); text-shadow: none; }
 
 .stat .val.pop { animation: val-pop 0.25s ease; }
 @keyframes val-pop {
@@ -254,17 +204,14 @@ header { display: flex; justify-content: center; text-align: center; }
 
 /* ── Stage / canvas ───────────────────────────────── */
 .stage {
+
   position: relative;
-  border-radius: 18px;
+  border-radius: 12px;
   overflow: hidden;
   touch-action: none;
-  background:
-    radial-gradient(ellipse at center, #1a0240 0%, #05001a 100%);
-  border: 1px solid rgba(255, 43, 214, 0.35);
-  box-shadow:
-    0 0 48px rgba(155, 48, 255, 0.35),
-    0 0 96px rgba(255, 43, 214, 0.18),
-    inset 0 0 80px rgba(155, 48, 255, 0.12);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.22);
   width: 100%;
   /* Cada jogo sobrescreve --arw/--arh/--maxw. O quadro nunca passa da altura util
      da tela, entao no celular ele para de exigir scroll pra ser jogado.
@@ -281,36 +228,14 @@ header { display: flex; justify-content: center; text-align: center; }
 
 canvas { display: block; width: 100%; height: 100%; }
 
-/* Varredura: uma faixa de luz que desce o quadro. */
-.stage::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 34%;
-  z-index: 3;
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent, rgba(0, 240, 255, 0.06) 45%,
-              rgba(255, 255, 255, 0.055) 50%, rgba(0, 240, 255, 0.06) 55%, transparent);
-  animation: stage-sweep 7s linear infinite;
-}
-@keyframes stage-sweep {
-  from { transform: translateY(-120%); }
-  to   { transform: translateY(320%); }
-}
-
-/* Scanlines finas e vinheta, por cima do canvas e por baixo do overlay. */
+/* Vinheta discreta, sem textura por cima dos textos ou controles. */
 .stage::after {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 4;
   pointer-events: none;
-  mix-blend-mode: multiply;
-  opacity: 0.28;                            /* o tema ja e escuro; mais que isso apaga o jogo */
-  background:
-    repeating-linear-gradient(180deg, transparent 0 2px, rgba(0, 0, 0, 0.35) 2px 3px),
-    radial-gradient(120% 100% at 50% 50%, transparent 58%, rgba(0, 0, 0, 0.4));
+  background: radial-gradient(120% 100% at 50% 50%, transparent 65%, rgba(8, 13, 28, 0.16));
 }
 
 /* ── Sound toggle ─────────────────────────────────── */
@@ -323,9 +248,9 @@ canvas { display: block; width: 100%; height: 100%; }
   z-index: 20;
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  border: 1px solid rgba(0, 240, 255, 0.5);
-  background: rgba(5, 0, 24, 0.75);
+  border-radius: 10px;
+  border: 1px solid rgba(155, 231, 206, 0.5);
+  background: rgba(17, 29, 44, 0.94);
   color: var(--neon-cyan);
   font-size: 17px;
   cursor: pointer;
@@ -333,7 +258,7 @@ canvas { display: block; width: 100%; height: 100%; }
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(4px);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+  box-shadow: none;
   transition: transform 0.15s, box-shadow 0.15s;
 }
 .sound-toggle:active,
@@ -351,7 +276,7 @@ canvas { display: block; width: 100%; height: 100%; }
   font-size: 20px;
   line-height: 1;
 }
-.sound-toggle.muted { color: var(--text-dim); border-color: rgba(255,255,255,0.25); box-shadow: none; }
+.sound-toggle.muted { color: var(--text-dim); border-color: rgba(255, 255, 255,0.25); box-shadow: none; }
 /* Pausa: no celular nao existe tecla P, entao sem este botao nao da pra pausar.
    Some com o overlay aberto, porque ali o proprio botao do overlay retoma. */
 .pause-toggle { right: 58px; }
@@ -395,8 +320,8 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   letter-spacing: 0.2em;
   color: var(--neon-gold);
   border: 1px solid var(--neon-gold);
-  background: rgba(5, 0, 24, 0.88);
-  box-shadow: 0 0 24px rgba(255, 215, 0, 0.5), 0 0 48px rgba(255, 215, 0, 0.2);
+  background: rgba(8, 13, 28, 0.88);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s;
@@ -428,18 +353,18 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   align-items: center;
   gap: 8px;
   padding: 5px 11px;
-  background: rgba(5, 0, 24, 0.85);
+  background: rgba(8, 13, 28, 0.85);
   border: 1px solid var(--accent, var(--neon-cyan));
   border-radius: 999px;
   font-family: 'Orbitron', sans-serif;
   font-size: 9px;
   letter-spacing: 0.15em;
   color: var(--accent, var(--neon-cyan));
-  box-shadow: 0 0 14px var(--accent, var(--neon-cyan)), 0 0 28px rgba(0, 0, 0, 0.5);
+  box-shadow: none;
   backdrop-filter: blur(4px);
 }
 .badge .emoji { font-size: 13px; filter: drop-shadow(0 0 4px var(--accent, var(--neon-cyan))); }
-.badge .bar { width: 46px; height: 4px; background: rgba(255,255,255,0.12); border-radius: 2px; overflow: hidden; }
+.badge .bar { width: 46px; height: 4px; background: rgba(255, 255, 255,0.12); border-radius: 2px; overflow: hidden; }
 .badge .fill { height: 100%; background: var(--accent, var(--neon-cyan)); box-shadow: 0 0 6px var(--accent, var(--neon-cyan)); transition: width 0.1s linear; }
 
 /* ── Overlay ──────────────────────────────────────── */
@@ -449,11 +374,11 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   text-align: center;
-  background: rgba(5, 0, 24, 0.78);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(8, 13, 28, 0.90);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
   transition: opacity 0.3s;
   padding: 24px 16px;
   z-index: 10;
@@ -470,27 +395,12 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   font-family: 'Orbitron', sans-serif;
   font-weight: 900;
   font-size: clamp(30px, 4.6vw, 48px);
-  background: linear-gradient(90deg, var(--neon-pink), var(--neon-cyan));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  letter-spacing: 0.08em;
+  color: var(--title);
+  letter-spacing: 0.04em;
   margin-bottom: 12px;
-  filter: drop-shadow(0 0 20px rgba(255, 43, 214, 0.5));
-  animation: title-glow 1.6s ease-in-out infinite;
 }
-.overlay h2.go { background: linear-gradient(90deg, var(--neon-pink), var(--neon-yellow)); -webkit-background-clip: text; background-clip: text; }
-.overlay h2.record {
-  background: linear-gradient(90deg, var(--neon-gold), var(--neon-yellow));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 26px rgba(255, 215, 0, 0.7));
-}
-@keyframes title-glow {
-  0%, 100% { filter: drop-shadow(0 0 14px rgba(255, 43, 214, 0.35)); }
-  50%      { filter: drop-shadow(0 0 30px rgba(255, 43, 214, 0.7)); }
-}
+.overlay h2.go { color: var(--neon-red); }
+.overlay h2.record { color: var(--neon-gold); }
 
 .overlay p {
   color: var(--text-dim);
@@ -500,6 +410,7 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   font-size: 13px;
 }
 .overlay .sub { margin-bottom: 18px; }
+.overlay .sub:empty { display: none; }
 
 .final-stats {
   display: grid;
@@ -510,8 +421,8 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   margin-bottom: 18px;
 }
 .fstat {
-  background: rgba(155, 48, 255, 0.08);
-  border: 1px solid rgba(155, 48, 255, 0.25);
+  background: rgba(142, 131, 200, 0.08);
+  border: 1px solid rgba(142, 131, 200, 0.25);
   border-radius: 10px;
   padding: 10px 8px;
 }
@@ -527,39 +438,34 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   font-family: 'Orbitron', sans-serif;
   font-size: 15px;
   color: var(--neon-cyan);
-  text-shadow: 0 0 8px var(--neon-cyan);
+  text-shadow: none;
   font-variant-numeric: tabular-nums;
 }
-.fstat b.gold { color: var(--neon-gold); text-shadow: 0 0 8px var(--neon-gold); }
-.fstat b.pink { color: var(--neon-pink); text-shadow: 0 0 8px var(--neon-pink); }
+.fstat b.gold { color: var(--neon-gold); text-shadow: none; }
+.fstat b.pink { color: var(--neon-pink); text-shadow: none; }
 
 /* ── Botões e hints ───────────────────────────────── */
 .btn {
   font-family: 'Orbitron', sans-serif;
   font-weight: 700;
   font-size: 13px;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.14em;
   padding: 14px 36px;
-  background: linear-gradient(135deg, var(--neon-pink), var(--neon-purple));
-  color: white;
-  border: none;
+  min-height: 48px;
+  background: var(--neon-cyan);
+  color: var(--bg);
+  border: 1px solid var(--neon-cyan);
   border-radius: 10px;
   cursor: pointer;
   text-transform: uppercase;
-  box-shadow:
-    0 0 20px rgba(255, 43, 214, 0.6),
-    0 4px 16px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  transition: transform 0.15s, box-shadow 0.15s;
+  box-shadow: 0 4px 20px rgba(155, 231, 206, 0.10);
+  transition: transform 0.15s, background 0.15s;
 }
 @media (hover: hover) {
   .btn:hover {
     transform: translateY(-2px);
-    box-shadow:
-      0 0 32px rgba(255, 43, 214, 0.9),
-      0 8px 24px rgba(0, 0, 0, 0.6),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  }
+    background: #b7f1dd;
+}
 }
 .btn:active { transform: translateY(0); }
 
@@ -574,12 +480,12 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   font-family: 'Orbitron', sans-serif;
   font-size: 9px;
   padding: 5px 9px;
-  border: 1px solid rgba(0, 240, 255, 0.45);
+  border: 1px solid rgba(155, 231, 206, 0.45);
   border-radius: 5px;
   color: var(--neon-cyan);
-  background: rgba(0, 240, 255, 0.06);
+  background: rgba(155, 231, 206, 0.06);
   letter-spacing: 0.15em;
-  box-shadow: 0 0 8px rgba(0, 240, 255, 0.15);
+  box-shadow: none;
 }
 
 /* ── Mini legend (cards) ──────────────────────────── */
@@ -590,8 +496,8 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
 }
 .boost-card {
   background:
-    linear-gradient(135deg, rgba(155, 48, 255, 0.08), rgba(0, 240, 255, 0.04));
-  border: 1px solid rgba(155, 48, 255, 0.3);
+    linear-gradient(135deg, rgba(142, 131, 200, 0.08), rgba(155, 231, 206, 0.04));
+  border: 1px solid rgba(142, 131, 200, 0.3);
   border-radius: 12px;
   padding: 12px;
   position: relative;
@@ -606,7 +512,7 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   letter-spacing: 0.18em;
   color: var(--accent);
   margin-bottom: 3px;
-  text-shadow: 0 0 12px var(--accent);
+  text-shadow: none;
 }
 .boost-card .desc { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
 
@@ -628,20 +534,20 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   width: var(--k);
   height: var(--k);
   border-radius: 12px;
-  border: 1px solid rgba(0, 240, 255, 0.5);
-  background: rgba(5, 0, 24, 0.6);
+  border: 1px solid rgba(155, 231, 206, 0.5);
+  background: rgba(8, 13, 28, 0.6);
   color: var(--neon-cyan);
   font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(4px);
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+  box-shadow: none;
   touch-action: none;
   cursor: pointer;
   padding: 0;
 }
-.dpad button:active { background: rgba(0, 240, 255, 0.25); }
+.dpad button:active { background: rgba(155, 231, 206, 0.25); }
 .dpad .up    { top: 0; left: var(--k); }
 .dpad .left  { top: var(--k); left: 0; }
 .dpad .right { top: var(--k); left: calc(var(--k) * 2); }
@@ -662,7 +568,7 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--neon-cyan);
-  text-shadow: 0 0 12px rgba(0, 240, 255, 0.7);
+  text-shadow: none;
   pointer-events: none;
 }
 .overlay.hidden ~ .rotate-hint { display: none; }
@@ -673,29 +579,30 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 18px;
 }
-.tile { position: relative; display: flex; border-radius: 18px; padding: 2.5px; overflow: hidden; text-decoration: none; }
-.tile::before {
-  content: '';
-  position: absolute;
-  inset: -60%;
-  background: conic-gradient(from 0deg, var(--neon-pink), var(--neon-cyan), var(--neon-green), var(--neon-yellow), var(--neon-pink));
-  animation: tile-spin 6s linear infinite;
+.tile {
+  position: relative;
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  text-decoration: none;
+  transition: border-color 0.2s;
 }
-@keyframes tile-spin { to { transform: rotate(360deg); } }
+@media (hover: hover) { .tile:hover { border-color: var(--neon-cyan); } }
 
 .tile .inner {
   position: relative;
-  border-radius: 16px;
+  border-radius: 11px;
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(155, 48, 255, 0.16), transparent 60%),
-    linear-gradient(160deg, #0d0330, #050018);
+    radial-gradient(ellipse at 50% 0%, rgba(142, 131, 200, 0.16), transparent 60%),
+    linear-gradient(160deg, #111d2c, #080d1c);
   padding: 22px 18px 18px;
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  min-height: 168px;
+  min-height: 184px;
   flex: 1;                   /* sem isto, cards mais baixos mostravam a borda animada embaixo */
   justify-content: center;
   transition: transform 0.2s;
@@ -704,18 +611,15 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
 
 .tile .t-emoji {
   font-size: 44px;
-  filter: drop-shadow(0 0 14px var(--ticon, var(--neon-pink)));
+  filter: drop-shadow(0 0 5px var(--ticon, var(--neon-cyan)));
   line-height: 1.2;
 }
 .tile .t-name {
   font-family: 'Orbitron', sans-serif;
   font-weight: 900;
   font-size: 17px;
-  letter-spacing: 0.12em;
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-pink));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  letter-spacing: 0.08em;
+  color: var(--title);
 }
 .tile .t-desc { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
 .tile .t-best {
@@ -723,7 +627,7 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   font-size: 10px;
   letter-spacing: 0.2em;
   color: var(--neon-gold);
-  text-shadow: 0 0 10px rgba(255, 215, 0, 0.6);
+  text-shadow: none;
   margin-top: 4px;
 }
 .tile .t-go {
@@ -732,7 +636,7 @@ body.imersivo .stage { --maxw: 3000px; --chrome: 0px; border-radius: 0; border-w
   font-size: 10px;
   letter-spacing: 0.3em;
   color: var(--neon-cyan);
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.2s;
 }
 @media (hover: hover) { .tile:hover .t-go { opacity: 1; } }
@@ -796,10 +700,10 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
   .stat .lbl { font-size: 7px; margin-bottom: 1px; }
   .stage { --chrome: calc(118px + env(safe-area-inset-top) + env(safe-area-inset-bottom)); }
   .overlay { padding: 10px; }
-  .overlay h2 { font-size: 26px; margin-bottom: 6px; }
-  .overlay p { font-size: 11px; line-height: 1.4; margin-bottom: 8px; }
+  .overlay h2 { font-size: 22px; margin-bottom: 6px; }
+  .overlay p { font-size: 10px; line-height: 1.4; margin-bottom: 8px; }
   .final-stats { margin-bottom: 10px; }
-  .controls-hint { margin-top: 8px; }
+  .controls-hint { display: none; }
 }
 
 /* ── Celular em pe: so o placar e o quadro ──────────────────────────
@@ -838,6 +742,43 @@ footer a { color: var(--neon-cyan); text-decoration: none; }
     border-right: 0;
   }
   .rotate-hint { display: block; }
+  /* Nos jogos horizontais, instrução e ação ficam lado a lado em pé.
+     O recuo deixa livres os controles, sem alterar o formato do canvas. */
+  .stage.landscape-game .overlay {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-content: safe center;
+    align-items: center;
+    gap: 6px 12px;
+    padding: 58px 12px 24px;
+    text-align: left;
+  }
+  .stage.landscape-game .overlay h2 { grid-column: 1 / -1; font-size: 16px; margin: 0; }
+  .stage.landscape-game .overlay p { font-size: 10px; line-height: 1.3; margin: 0; }
+  .stage.landscape-game .overlay .btn { padding: 10px 12px; font-size: 10px; letter-spacing: .06em; }
+  .stage.landscape-game .overlay .controls-hint { display: none; }
+  .stage.landscape-game .overlay .sub,
+  .stage.landscape-game .overlay .final-stats { grid-column: 1 / -1; }
+}
+
+/* Partida ocupa a viewport, inclusive sem Fullscreen API. Jogos com HUD
+   externo conservam o placar; os que já usam imersivo mantêm seu HUD interno. */
+body.jogando .app > :not(.stage):not(.dashboard) { display: none; }
+body.jogando:not(.imersivo) .app {
+  max-width: none;
+  min-height: 100dvh;
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  gap: 8px;
+  justify-content: center;
+}
+body.jogando:not(.imersivo) .dashboard { padding: 4px 8px; gap: 2px; }
+body.jogando:not(.imersivo) .stat { padding: 2px 4px; }
+body.jogando:not(.imersivo) .stat .val { font-size: 17px; }
+body.jogando:not(.imersivo) .stat .lbl { font-size: 7px; margin-bottom: 2px; }
+body.jogando:not(.imersivo) .stage {
+  --maxw: 3000px;
+  --chrome: calc(80px + env(safe-area-inset-top) + env(safe-area-inset-bottom));
 }
 
 /* ── Movimento reduzido ─────────────────────────────────────────────
