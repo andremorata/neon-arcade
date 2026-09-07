@@ -545,6 +545,15 @@ window.Neon = (function () {
     window.addEventListener('resize', ajusta);
   }
 
+  // pageshow também registra jogos reabertos pelo histórico do navegador.
+  function rememberVisit() {
+    const key = $('best')?.dataset.key;
+    if (!key) return;
+    try { localStorage.setItem('neon-last-played-' + key, Date.now()); }
+    catch (_) { /* Sem armazenamento, o jogo continua funcionando. */ }
+  }
+  window.addEventListener('pageshow', rememberVisit);
+
   // ── inicialização de página padrão ─────────────────
   // Espera DOM pronto e aplica: fontes, sound toggle, best keys.
   function initPage() {

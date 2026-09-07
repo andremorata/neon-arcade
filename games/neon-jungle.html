@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON JUNGLE — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  .stage { --arw: 5; --arh: 3; --maxw: 960px; }
+  .jungle-controls { position: absolute; inset: auto 12px 12px; display: flex; gap: 8px; z-index: 4; }
+  .jungle-controls button { min-width: 52px; min-height: 48px; padding: 8px 14px; border: 1px solid #9be7ce66; border-radius: 10px; background: #080d1cbb; color: #d6eee2; font: 700 12px monospace; touch-action: none; cursor: pointer; }
+  .jungle-controls button:last-child { margin-left: auto; }
+  .jungle-controls button:active { background: #386b56; }
+  .overlay:not(.hidden) ~ .jungle-controls { visibility: hidden; }
+  @media (max-width: 560px) { .jungle-controls { bottom: 6px; inset-inline: 6px; gap: 5px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header><div class="brand">
+    <a href="../index.html"><h1>NEON JUNGLE</h1></a>
+    <div class="tag">// expedição 2600 · a selva guarda o caminho</div>
+  </div></header>
+  <div class="dashboard" style="--dash-cols:5">
+    <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="jungle">0</span></div>
+    <div class="stat"><span class="lbl">Tesouros</span><span class="val" id="treasures">0/6</span></div>
+    <div class="stat"><span class="lbl">Tempo</span><span class="val" id="time">3:00</span></div>
+    <div class="stat"><span class="lbl">Vidas</span><span class="val" id="lives">♥♥♥</span></div>
+  </div>
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som" aria-label="Alternar som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)" aria-label="Pausar ou continuar">⏸</button>
+    <div class="toast" id="toast" role="status"></div>
+    <canvas id="game" width="800" height="480" aria-label="Aventura de plataforma na selva. Use as setas para andar e espaço para pular ou soltar o cipó."></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">A SELVA CHAMA</h2>
+      <p id="overlayText">Seis tesouros, três vidas e três minutos. Pule troncos e cobras. Salte em direção ao cipó para agarrar; pule de novo para soltar. Reúna os tesouros e alcance o templo à direita.</p>
+      <div class="sub" id="overlaySub"></div>
+      <button class="btn" id="startBtn">EXPLORAR</button>
+      <div class="controls-hint"><span class="key">← → / A D anda</span><span class="key">ESPAÇO pula / solta</span><span class="key">P pausa</span></div>
+    </div>
+    <div class="jungle-controls" aria-label="Controles do jogo">
+      <button data-action="left" aria-label="Andar para a esquerda">◀</button>
+      <button data-action="right" aria-label="Andar para a direita">▶</button>
+      <button data-action="jump">PULAR / SOLTAR</button>
+    </div>
+  </div>
+  <footer>// <a href="../index.html">← arcade</a> · ← → anda · espaço pula / solta o cipó · P pausa<br>inspirado nos clássicos de aventura do Atari 2600</footer>
+</div>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 800, H = 480;
+
+  // ── expedição: física compartilhada com o teste ──
+  const FLOOR = 370, SPEED = 220, GRAVITY = 1200, JUMP = 470;
+  const ROOMS = [
+    { name: 'TRILHA DOS TRONCOS', hint: 'Pule os troncos. O primeiro tesouro está à direita.', pits: [], logs: [320], snakes: [545] },
+    { name: 'O PRIMEIRO CIPÓ', hint: 'Salte para agarrar o cipó. Pule de novo para soltar.', pits: [[270, 530]], vine: true, logs: [], snakes: [] },
+    { name: 'PASSOS NO VAZIO', hint: 'Dois saltos curtos. Respire na ilha do meio.', pits: [[260, 365], [470, 575]], logs: [], snakes: [130] },
+    { name: 'LAGOA DOS JACARÉS', hint: 'Fique acima da água. O cipó é sua passagem.', pits: [[270, 530]], vine: true, water: true, logs: [], snakes: [] },
+    { name: 'RAÍZES ANTIGAS', hint: 'Troncos rolam. As margens são seu abrigo.', pits: [[330, 440]], logs: [200, 590], snakes: [] },
+    { name: 'TEMPLO DO SOL', hint: 'O último balanço. Leve os seis tesouros ao templo.', pits: [[270, 530]], vine: true, logs: [], snakes: [] },
+  ];
+  function expedition() {
+    return { room: 0, x: 60, y: FLOOR, vy: 0, grounded: true, hanging: false,
+      release: 0, drift: 0, facing: 1, t: 0, time: 180, lives: 3, score: 0,
+      collected: ROOMS.map(() => false), safeX: 60, invincible: 0, status: 'playing', events: [] };
+  }
+  function vineAt(t) {
+    const angle = -0.82 * Math.cos(t * 1.6), speed = 0.82 * 1.6 * Math.sin(t * 1.6);
+    return { x: 400 + Math.sin(angle) * 270, y: 70 + Math.cos(angle) * 270,
+      vx: Math.cos(angle) * 270 * speed };
+  }
+  function logAt(base, t) { return base + Math.sin(t * 1.4 + base) * 48; }
+  function hurt(s) {
+    if (s.invincible > 0 || s.status !== 'playing') return;
+    s.lives--; s.events.push('hurt');
+    if (!s.lives) { s.status = 'lost'; return; }
+    s.x = s.safeX; s.y = FLOOR; s.vy = 0; s.drift = 0;
+    s.hanging = false; s.grounded = true; s.release = 0.4; s.invincible = 1.4;
+  }
+  function step(s, dt, input) {
+    if (s.status !== 'playing') return;
+    s.t += dt; s.time = Math.max(0, s.time - dt);
+    if (!s.time) { s.status = 'lost'; return; }
+    s.invincible = Math.max(0, s.invincible - dt); s.release = Math.max(0, s.release - dt);
+    const room = ROOMS[s.room], v = vineAt(s.t);
+    const dir = Number(!!input.right) - Number(!!input.left);
+    if (dir) s.facing = dir;
+    if (input.jump) {
+      if (s.hanging) {
+        s.hanging = false; s.release = 0.45; s.vy = -260;
+        s.drift = Math.max(-SPEED, Math.min(SPEED, v.vx)); s.events.push('jump');
+      } else if (s.grounded) {
+        s.vy = -JUMP; s.grounded = false; s.events.push('jump');
+      }
+    }
+    if (s.hanging) { s.x = v.x; s.y = v.y + 28; }
+    else {
+      const oldY = s.y;
+      s.x += (dir ? dir * SPEED : s.drift) * dt;
+      s.vy += GRAVITY * dt; s.y += s.vy * dt;
+      const pit = room.pits.some(([a, b]) => s.x > a && s.x < b);
+      s.grounded = false;
+      if (!pit && oldY <= FLOOR && s.y >= FLOOR && s.vy >= 0) {
+        s.y = FLOOR; s.vy = 0; s.drift = 0; s.grounded = true;
+      }
+      if (room.vine && !s.grounded && !s.release && Math.hypot(s.x - v.x, s.y - 28 - v.y) < 30) {
+        s.hanging = true; s.x = v.x; s.y = v.y + 28; s.vy = 0; s.events.push('grab');
+      }
+      if (!s.hanging && s.y > FLOOR + 24) {
+        // Invulnerabilidade protege o retorno, mas nunca permite andar sob o chão.
+        s.invincible = 0; hurt(s); return;
+      }
+    }
+    if (!s.hanging && s.y > FLOOR - 24 && (
+      room.logs.some(base => Math.abs(s.x - logAt(base, s.t)) < 23) ||
+      room.snakes.some(x => Math.abs(s.x - x) < 25))) { hurt(s); return; }
+    if (!s.collected[s.room] && Math.abs(s.x - 722) < 25 && Math.abs(s.y - FLOOR) < 50) {
+      s.collected[s.room] = true; s.score += 1000; s.events.push('treasure');
+    }
+    if (s.x > W) {
+      if (s.room < ROOMS.length - 1) {
+        s.room++; s.x = 24; s.safeX = 60; s.events.push('room');
+      } else {
+        s.x = W - 16;
+        if (s.collected.every(Boolean)) {
+          s.score += Math.ceil(s.time) * 10 + s.lives * 500; s.status = 'won';
+        } else s.events.push('missing');
+      }
+    } else if (s.x < 0) {
+      if (s.room > 0) { s.room--; s.x = W - 24; s.safeX = W - 50; s.events.push('room'); }
+      else s.x = 0;
+    }
+  }
+  // ── fim da física ──
+
+  let run = expedition(), state = 'menu', lastFrame = performance.now();
+  let pb = Neon.best.get('jungle');
+  const held = new Set(), pointers = new Map();
+  let jumpQueued = false;
+  const sprites = {
+    explorer: ['..hhhh..', '.hhhhhh.', '..ssks..', '..sss...', '.ggggg..', 'sgggggs.', 's.ggg.s.', '..bbb...', '..b.b...', '.bb.bb..', '.kk.kk..'],
+    snake: ['.......rr.', '......ggg.', '..gg..gk..', '.ggggggg..', 'gg..gg....'],
+    treasure: ['...yy...', '..yyyy..', '.ywwwyy.', 'yyyyyyyy', '.yyyyyy.', '..yyyy..'],
+  };
+  const colors = { h: '#ddab63', s: '#f6d5a1', k: '#122e29', g: '#a8dba0', b: '#879fca', r: '#ed887f', y: '#efce95', w: '#fff4cf' };
+  function sprite(rows, x, y, scale, flip) {
+    ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(flip ? -scale : scale, scale);
+    for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) {
+      const color = colors[rows[j][i]];
+      if (color) { ctx.fillStyle = color; ctx.fillRect(i - rows[j].length / 2, j, 1, 1); }
+    }
+    ctx.restore();
+  }
+  function rect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(Math.round(x), Math.round(y), w, h); }
+  function label(text, x, y, size, color, align = 'left') {
+    ctx.fillStyle = color; ctx.font = `bold ${size}px monospace`; ctx.textAlign = align; ctx.fillText(text, x, y);
+  }
+  function draw() {
+    const r = ROOMS[run.room], t = run.t;
+    rect(0, 0, W, H, '#102c29');
+    rect(0, 120, W, 200, '#214c3c');
+    rect(0, 260, W, 110, '#36704d');
+    // Camadas recortadas e paleta curta, como um cartucho de aventura.
+    rect(603, 102, 62, 62, '#d8c184'); rect(594, 116, 80, 34, '#d8c184');
+    for (let i = 0; i < 13; i++) {
+      const x = i * 71 + (run.room * 23) % 40;
+      rect(x, 150 + i % 3 * 19, 13, 198, '#28563e');
+      rect(x - 22, 164 + i % 3 * 19, 64, 13, '#28563e');
+      rect(x + 8, 197 + i % 3 * 19, 42, 10, '#28563e');
+    }
+    for (const x of [60, 171, 596, 751]) {
+      rect(x, 34, 20, 329, '#163a30'); rect(x + 20, 38, 9, 321, '#224737');
+      rect(x - 20, 94, 30, 13, '#163a30'); rect(x + 20, 146, 44, 12, '#163a30');
+      for (let k = 0; k < 5; k++) rect(x + 3, 125 + k * 43, 8, 14, '#2a523b');
+    }
+    for (let i = 0; i < 15; i++) {
+      const x = i * 58;
+      rect(x, 0, 62, 43 + i % 3 * 9, '#153d2e');
+      rect(x + 8, 42, 41, 26 + i % 2 * 14, '#245436');
+      rect(x + 17, 68, 17, 12 + i % 3 * 6, '#347044');
+    }
+    rect(0, FLOOR, W, H - FLOOR, '#342e28'); rect(0, FLOOR, W, 9, '#b3bd71');
+    rect(0, FLOOR + 9, W, 15, '#6d633f');
+    for (let i = 0; i < 50; i++) rect(i * 19, 399 + i % 4 * 14, 7, 3, '#4c4230');
+    for (const [a, b] of r.pits) {
+      rect(a, FLOOR, b - a, 110, '#0b211f');
+      rect(a + 5, FLOOR + 14, b - a - 10, 80, r.water ? '#245652' : '#131c1b');
+      if (r.water) {
+        for (let i = 0; i < 8; i++) rect(a + 12 + (i * 39 + t * 13) % (b - a - 35), FLOOR + 22 + i % 3 * 17, 19, 3, '#4c8670');
+        for (const x of [310, 391, 472]) {
+          rect(x, 378, 46, 12, '#8aaf68'); rect(x + 30, 373, 17, 7, '#a8c87e');
+          rect(x + 37, 371, 4, 4, '#eef4c4'); rect(x + 39, 372, 2, 3, '#102c29');
+          const open = Math.sin(t * 2 + x) > 0;
+          rect(x + 33, open ? 389 : 384, 20, 5, '#a8c87e');
+          for (let k = 0; k < 4; k++) rect(x + 34 + k * 5, 385, 2, open ? 5 : 2, '#f2e8b8');
+        }
+      }
+    }
+    if (r.vine) {
+      const v = vineAt(t);
+      ctx.strokeStyle = '#b9c981'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(400, 70); ctx.lineTo(v.x, v.y); ctx.stroke();
+      rect(v.x - 5, v.y - 3, 10, 7, '#e4d493');
+      if (run.hanging) label('ESPAÇO / PULAR PARA SOLTAR', 400, 125, 12, '#f1e0ac', 'center');
+    }
+    for (const base of r.logs) {
+      const x = logAt(base, t);
+      rect(x - 17, FLOOR - 23, 34, 23, '#6c4530'); rect(x - 13, FLOOR - 26, 26, 29, '#c58c57');
+      rect(x - 9, FLOOR - 21, 18, 19, '#69482d'); rect(x - 5, FLOOR - 17, 10, 11, '#d9a467');
+      rect(x - 2 + Math.sin(t * 6) * 4, FLOOR - 16, 3, 8, '#69482d');
+    }
+    for (const x of r.snakes) sprite(sprites.snake, x, FLOOR - 20, 4, false);
+    if (!run.collected[run.room]) {
+      const bob = Neon.motion.reduced ? 0 : Math.sin(t * 3) * 4;
+      sprite(sprites.treasure, 722, FLOOR - 32 + bob, 4, false);
+      label('1.000', 722, FLOOR - 49, 11, '#efce95', 'center');
+    }
+    if (run.room === ROOMS.length - 1) {
+      rect(763, 289, 37, 81, '#7b916c'); rect(754, 278, 46, 12, '#bbbe87');
+      rect(775, 318, 25, 52, '#152e29'); rect(763, 264, 37, 14, '#abb77f');
+    }
+    if (!run.invincible || Math.floor(t * 12) % 2 === 0 || Neon.motion.reduced) {
+      const bob = run.grounded && (held.size || pointers.size) ? Math.sin(t * 22) * 2 : 0;
+      sprite(sprites.explorer, run.x, run.y - 44 + bob, 4, run.facing < 0);
+      if (run.hanging) { rect(run.x - 12, run.y - 32, 4, 15, '#f6d5a1'); rect(run.x + 8, run.y - 32, 4, 15, '#f6d5a1'); }
+    }
+    label(`${String(run.room + 1).padStart(2, '0')} / ${String(ROOMS.length).padStart(2, '0')}  ${r.name}`, 400, 28, 15, '#d5dfb1', 'center');
+    for (let i = 0; i < ROOMS.length; i++) rect(346 + i * 19, 44, 11, 4, run.collected[i] ? '#efce95' : '#55745c');
+    label('←', 26, 347, 20, '#c6d6a0'); label('→', 774, 347, 20, '#c6d6a0', 'right');
+  }
+  function hud() {
+    Neon.$('score').textContent = run.score;
+    Neon.$('treasures').textContent = `${run.collected.filter(Boolean).length}/${ROOMS.length}`;
+    Neon.$('lives').textContent = '♥'.repeat(run.lives) || '—';
+    const seconds = Math.ceil(run.time);
+    Neon.$('time').textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  }
+  function clearInput() { held.clear(); pointers.clear(); jumpQueued = false; }
+  function startGame() {
+    Neon.audio.ensure(); clearInput(); run = expedition(); state = 'playing';
+    lastFrame = performance.now(); Neon.overlay.hide(); Neon.audio.music.start();
+    Neon.toast(ROOMS[0].hint); hud();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused'; clearInput(); Neon.audio.music.stop();
+    Neon.overlay.show('EXPEDIÇÃO EM PAUSA', 'Seu tempo está guardado. Continue quando quiser.', 'CONTINUAR');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    state = 'playing'; clearInput(); lastFrame = performance.now(); Neon.overlay.hide(); Neon.audio.music.start();
+  }
+  function finish() {
+    state = 'gameover'; clearInput(); Neon.audio.music.down();
+    pb = Neon.best.update('jungle', run.score); Neon.$('best').textContent = pb;
+    const won = run.status === 'won';
+    if (won) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    Neon.overlay.show(won ? 'EXPEDIÇÃO COMPLETA!' : 'A SELVA FICOU COM ESSA',
+      `${run.collected.filter(Boolean).length}/${ROOMS.length} tesouros · ${run.score} pontos. ${won ? 'O templo do sol voltou a brilhar.' : run.time <= 0 ? 'O tempo acabou.' : 'Suas vidas acabaram.'}`,
+      'EXPLORAR DE NOVO', won ? 'record' : 'go');
+  }
+  const keys = { arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', arrowup: 'jump', w: 'jump', ' ': 'jump' };
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'p') { if (!e.repeat) state === 'playing' ? pauseGame() : resumeGame(); return; }
+    if (e.target.closest('button, a') && (k === ' ' || k === 'enter')) return;
+    if (keys[k] || k === 'enter') e.preventDefault();
+    if (e.repeat) return;
+    if ((k === 'enter' || k === ' ') && state !== 'playing') { state === 'paused' ? resumeGame() : startGame(); return; }
+    if (state !== 'playing') return;
+    if (keys[k] === 'jump') jumpQueued = true;
+    else if (keys[k]) held.add(k);
+  });
+  document.addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
+  document.querySelectorAll('[data-action]').forEach(button => {
+    button.addEventListener('pointerdown', e => {
+      e.preventDefault(); if (state !== 'playing') return;
+      if (button.dataset.action === 'jump') jumpQueued = true;
+      else pointers.set(e.pointerId, button.dataset.action);
+    });
+    button.addEventListener('click', e => { if (e.detail === 0 && state === 'playing' && button.dataset.action === 'jump') jumpQueued = true; });
+  });
+  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, e => pointers.delete(e.pointerId));
+  Neon.$('startBtn').addEventListener('click', () => {
+    state === 'paused' ? resumeGame() : startGame(); Neon.$('startBtn').blur();
+  });
+  Neon.onHide(pauseGame);
+  window.addEventListener('blur', pauseGame);
+  function loop(now) {
+    const dt = Math.min(0.033, Math.max(0, (now - lastFrame) / 1000)); lastFrame = now;
+    if (state === 'playing') {
+      const actions = [...held].map(k => keys[k]).concat([...pointers.values()]);
+      step(run, dt, { left: actions.includes('left'), right: actions.includes('right'), jump: jumpQueued }); jumpQueued = false;
+      for (const event of run.events) {
+        if (event === 'jump') Neon.audio.sfx.flap();
+        if (event === 'grab') { Neon.audio.sfx.tick(); Neon.toast('Cipó! Pule de novo para soltar.'); }
+        if (event === 'treasure') { Neon.audio.sfx.golden(); Neon.toast('+1.000 · TESOURO RECUPERADO'); }
+        if (event === 'hurt') { clearInput(); Neon.audio.sfx.hit(); Neon.toast('Cuidado! Você voltou à entrada desta tela.'); }
+        if (event === 'room') Neon.toast(ROOMS[run.room].hint);
+        if (event === 'missing') Neon.toast('Ainda faltam tesouros. Volte pela esquerda para buscá-los.');
+      }
+      run.events.length = 0; hud();
+      Neon.audio.music.intensity(run.hanging ? 0.7 : 0.2);
+      if (run.status !== 'playing') finish();
+    }
+    draw(); requestAnimationFrame(loop);
+  }
+  hud(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

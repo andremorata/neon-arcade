@@ -1377,6 +1377,90 @@ for (const [cols, rows] of [[23, 11], [13, 11], [23, 7]]) {
 for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = Neon\\.best\\.update\\('${key}', score\\)`),
   `${key}: o recorde deve usar a mesma chave do menu`);
 
+// Jungle: percorre a expedição real com saltos e cipós em três taxas de quadros.
+const jungle = games.jungle;
+const J = new Function('W', jungle.slice(jungle.indexOf('  const FLOOR'), jungle.indexOf('  // ── fim da física')) +
+  '; return { expedition, step, ROOMS, vineAt, logAt, FLOOR, hurt };')(800);
+assert.match(jungle, /pb = Neon\.best\.update\('jungle', run.score\)/, 'Jungle: recorde usa a chave do menu');
+for (const fps of [30, 60, 120]) {
+  const s = J.expedition();
+  let grabs = 0;
+  for (let i = 0; i < fps * 180 && s.status === 'playing'; i++) {
+    const r = J.ROOMS[s.room], v = J.vineAt(s.t), input = { right: true };
+    if (s.hanging) { input.right = false; input.jump = v.x > 555 && v.vx > 0; }
+    else if (r.vine && s.x < 270) {
+      if (s.grounded && s.x >= 218) { input.right = false; input.jump = v.x < 222 && v.vx > 0; }
+      else if (!s.grounded) input.right = false;
+    }
+    if (s.grounded && !r.vine) input.jump = r.pits.some(([a]) => a - s.x > 0 && a - s.x < 25);
+    if (s.grounded && [...r.logs.map(x => J.logAt(x, s.t)), ...r.snakes]
+      .some(x => x - s.x > 0 && x - s.x < 70)) input.jump = true;
+    J.step(s, 1 / fps, input);
+    if (s.events.includes('grab')) grabs++;
+    s.events.length = 0;
+  }
+  assert.strictEqual(s.status, 'won', `Jungle: todas as telas atravessáveis a ${fps} fps`);
+  assert.strictEqual(s.lives, 3, 'Jungle: saltos permitem evitar todo dano');
+  assert.strictEqual(grabs, J.ROOMS.filter(r => r.vine).length, 'Jungle: percurso usa cada cipó');
+  assert.ok(s.collected.every(Boolean) && s.score > 6000, 'Jungle: tesouros e bônus entram no placar');
+  const final = JSON.stringify(s);
+  J.step(s, 1, { right: true, jump: true });
+  assert.strictEqual(JSON.stringify(s), final, 'Jungle: vitória congela a partida e o bônus');
+}
+{
+  const s = J.expedition();
+  s.room = 1; s.x = 400;
+  for (let i = 0; i < 60 && s.lives === 3; i++) J.step(s, 1 / 60, {});
+  assert.strictEqual(s.lives, 2, 'Jungle: cair no poço custa uma vida');
+  assert.strictEqual(s.x, s.safeX, 'Jungle: queda volta a uma margem segura');
+  J.hurt(s);
+  assert.strictEqual(s.lives, 2, 'Jungle: retorno protege contra dano repetido');
+  s.invincible = 0; s.x = 722;
+  J.step(s, 1 / 60, {}); J.step(s, 1 / 60, {});
+  assert.strictEqual(s.score, 1000, 'Jungle: um tesouro só pontua uma vez');
+  s.x = -1; J.step(s, 1 / 60, {});
+  assert.strictEqual(s.room, 0, 'Jungle: pode voltar para buscar tesouros');
+  assert.ok(s.collected[1], 'Jungle: voltar preserva a coleta');
+  s.room = J.ROOMS.length - 1; s.x = 801; J.step(s, 1 / 60, {});
+  assert.strictEqual(s.status, 'playing', 'Jungle: templo exige todos os tesouros');
+  s.time = 0.001; J.step(s, 1 / 60, {});
+  assert.strictEqual(s.status, 'lost', 'Jungle: relógio zerado termina a partida');
+  assert.strictEqual(s.time, 0, 'Jungle: tempo não fica negativo');
+  const fresh = J.expedition();
+  for (let i = 0; i < 3; i++) { fresh.invincible = 0; J.hurt(fresh); }
+  assert.strictEqual(fresh.status, 'lost', 'Jungle: terceira queda encerra a expedição');
+  assert.ok(J.expedition().collected.every(v => !v), 'Jungle: reinício devolve os tesouros');
+}
+
+// Recentes: usa as funções reais de registro e ordenação, inclusive sem storage.
+{
+  const values = new Map(), tileOrder = ['jungle', 'tetris', 'pong'].map(key => ({ dataset: { key } }));
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, String(value)) };
+  let current = null, now = 100, ordered = [];
+  const visit = new Function('$', 'localStorage', 'Date', `${block(core, '  function rememberVisit()')}; return rememberVisit;`)(
+    () => current, storage, { now: () => now++ });
+  const sort = new Function('tileOrder', 'tiles', 'localStorage', `${block(menu, '  function sortTiles()')}; return sortTiles;`)(
+    tileOrder, { appendChild: tile => ordered.push(tile.dataset.key) }, storage);
+  const order = () => { ordered = []; sort(); return ordered; };
+  assert.deepStrictEqual(order(), ['jungle', 'tetris', 'pong'], 'Recentes: sem histórico mantém a ordem do catálogo');
+  visit();
+  assert.strictEqual(values.size, 0, 'Recentes: visitar o menu não registra um jogo');
+  current = tileOrder[2]; visit();
+  assert.deepStrictEqual(order(), ['pong', 'jungle', 'tetris'], 'Recentes: jogo aberto sobe ao topo');
+  current = tileOrder[1]; visit();
+  assert.deepStrictEqual(order(), ['tetris', 'pong', 'jungle'], 'Recentes: ordena pela última abertura, não pelo recorde');
+  current = tileOrder[2]; visit();
+  assert.deepStrictEqual(order(), ['pong', 'tetris', 'jungle'], 'Recentes: reabrir atualiza a posição');
+  values.set('neon-last-played-jungle', 'inválido');
+  assert.deepStrictEqual(order(), ['pong', 'tetris', 'jungle'], 'Recentes: histórico inválido não quebra o menu');
+  storage.getItem = storage.setItem = () => { throw new Error('Storage indisponível'); };
+  assert.doesNotThrow(visit, 'Recentes: armazenamento bloqueado não impede abrir o jogo');
+  assert.deepStrictEqual(order(), ['jungle', 'tetris', 'pong'], 'Recentes: armazenamento bloqueado mantém o catálogo');
+  assert.match(core, /addEventListener\('pageshow', rememberVisit\)/, 'Recentes: reabrir pelo histórico registra a visita');
+  assert.match(menu, /addEventListener\('pageshow', sortTiles\)/, 'Recentes: voltar pelo histórico reordena o menu');
+  assert.match(menu, /addEventListener\('storage', sortTiles\)/, 'Recentes: outra aba atualiza o menu');
+}
+
 // PWA: caminho errado no manifest ou no SHELL do sw.js so aparece offline, tarde demais.
 // E o menu precisa pre-carregar os jogos no MESMO cache que o sw.js le.
 const sw = read('sw.js');

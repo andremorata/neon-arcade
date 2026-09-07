@@ -36,6 +36,7 @@
   const Neon = window.Neon;
 
   const GAMES = [
+    { key: 'jungle', emoji: '🌴', name: 'NEON JUNGLE', desc: 'Aventura do 2600: cipós, jacarés e seis tesouros perdidos na selva.', href: 'games/neon-jungle.html', color: '#a8dba0' },
     { key: 'orbit',  emoji: '🪐', name: 'NEON ORBIT',   desc: 'Sem motor. Salte entre órbitas, escape de singularidades e reacenda 12 mundos.', href: 'games/neon-orbit.html', color: '#9be7ce' },
     { key: 'echo',   emoji: '📡', name: 'NEON ECHO',    desc: 'O sonar revela o labirinto — e você. Recupere memórias e despiste quem escuta.', href: 'games/neon-echo.html', color: '#9be7ce' },
     { key: 'snake',  emoji: '🐍', name: 'NEON SERPENT', desc: 'Maçãs, combos, boosts e velocidade crescente.', href: 'games/neon-snake.html',   color: '#a8dba0' },
@@ -76,6 +77,7 @@
     const bestVal = Neon.best.get(g.key);
     const t = document.createElement('a');
     t.className = 'tile';
+    t.dataset.key = g.key;
     t.href = g.href;
     t.style.setProperty('--ticon', g.color);
     t.innerHTML = `
@@ -88,6 +90,21 @@
       </div>`;
     tiles.appendChild(t);
   }
+
+  const tileOrder = [...tiles.children];
+  function sortTiles() {
+    const recent = tileOrder.map(tile => {
+      let used = 0;
+      try { used = Number(localStorage.getItem('neon-last-played-' + tile.dataset.key)); }
+      catch (_) { /* Sem histórico, mantém a ordem original. */ }
+      return { tile, used: Number.isFinite(used) ? used : 0 };
+    });
+    recent.sort((a, b) => b.used - a.used);
+    for (const { tile } of recent) tiles.appendChild(tile);
+  }
+  sortTiles();
+  window.addEventListener('pageshow', sortTiles);
+  window.addEventListener('storage', sortTiles);
 
   // offline: SW cuida do esqueleto; aqui o menu pre-carrega os jogos que ele lista,
   // entao um jogo novo no GAMES ja entra no cache sem editar mais nada.
