@@ -24,6 +24,17 @@
     font-family: 'Orbitron', sans-serif;
   }
   .hub.hidden { display: none; }
+  .garagem, #hubConjuntos, .hub-topo { width: 100%; max-width: 1100px; margin-inline: auto; }
+  .garagem { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex-shrink: 0; }
+  .carro-opcao { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 5px 8px 9px; border: 1px solid #ffffff22; border-radius: 12px; background: #ffffff05; color: var(--text); font: inherit; cursor: pointer; }
+  .carro-opcao canvas { width: 100%; height: clamp(65px, 12vh, 130px); object-fit: contain; }
+  .carro-opcao b { color: var(--carro); font-size: 12px; letter-spacing: .08em; }
+  .carro-opcao span { font: 10px/1.4 'Space Mono', monospace; color: var(--text-dim); }
+  .carro-opcao .situacao { color: var(--carro); font-size: 9px; }
+  .carro-opcao[aria-pressed="true"] { border-color: var(--carro); background: #ffffff0b; box-shadow: inset 0 -2px var(--carro); }
+  .carro-opcao:disabled { cursor: not-allowed; }
+  .carro-opcao:disabled canvas { opacity: .28; filter: grayscale(1); }
+  .carro-opcao:focus-visible, .fase:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
   /* o botão de voltar mora no canto superior esquerdo do quadro: 58px de recuo
      tira o título de baixo dele sem mexer no CSS compartilhado */
   .hub-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-left: 58px; }
@@ -33,7 +44,7 @@
   }
   .hub-topo .placar { font-size: clamp(10px, 2.2vw, 13px); color: var(--text-dim); letter-spacing: 0.08em; }
   .hub-topo .placar b { color: var(--neon-yellow); }
-  #hubConjuntos { display: flex; flex-direction: column; gap: 12px; flex: 1; max-height: 420px; }
+  #hubConjuntos { display: flex; flex-direction: column; gap: 10px; flex: 1; max-height: 420px; }
   .hub-conj { display: flex; flex-direction: column; gap: 6px; flex: 1; }
   .hub-conj > span {
     font-size: clamp(9px, 1.9vw, 11px); letter-spacing: 0.22em; color: var(--neon-cyan); opacity: 0.75;
@@ -41,7 +52,7 @@
   .hub-grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; flex: 1; }
   .fase {
     position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 4px; padding: 10px 4px; min-height: 74px; border-radius: 12px; cursor: pointer;
+    gap: 4px; padding: 7px 4px; min-height: 54px; border-radius: 12px; cursor: pointer;
     border: 1px solid rgba(175,163,245, 0.45); background: rgba(175,163,245, 0.10);
     color: var(--text); font-family: inherit; touch-action: manipulation;
   }
@@ -59,6 +70,7 @@
     .hub { padding: 8px 10px 10px; gap: 6px; }
     .hub-grade { gap: 5px; }
     .fase { min-height: 52px; padding: 5px 3px; }
+    .carro-opcao canvas { height: 52px; }
   }
   /* em pé o quadro tem uns 240px de altura e o botão de voltar come o topo.
      O jogo pede pra girar, mas as 12 fases têm que caber e clicar assim mesmo. */
@@ -66,8 +78,13 @@
     .hub { padding: 60px 8px 8px; gap: 5px; }
     #hubConjuntos { gap: 6px; max-height: none; }
     .hub-grade { gap: 4px; }
-    .hub-topo { position: absolute; top: 16px; left: 56px; right: 10px; padding-left: 0; }
+    .hub-topo { position: absolute; top: 16px; left: 56px; right: 10px; width: auto; padding-left: 0; }
     .fase { min-height: 34px; padding: 3px 2px; gap: 1px; }
+    .garagem { gap: 4px; }
+    .carro-opcao { padding: 4px; }
+    .carro-opcao canvas { height: 48px; }
+    .carro-opcao b { font-size: 8px; }
+    .carro-opcao span { font-size: 8px; }
   }
 </style>
 </head>
@@ -98,12 +115,13 @@
         <h2>ESCOLHA A FASE</h2>
         <span class="placar">★ <b id="hubEstrelas">0</b>/36 · MOEDAS <b id="hubMoedas">0</b></span>
       </div>
+      <div class="garagem" id="garagem" role="group" aria-label="Escolha seu carro"></div>
       <div id="hubConjuntos"></div>
     </div>
 
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON WHEELS</h2>
-      <p id="overlayText">Gás na direita, freio na esquerda. No ar os mesmos pedais giram o carro. Pousar de teto explode. Doze fases, três estrelas em cada uma.</p>
+      <p id="overlayText">Três etapas, três máquinas. Comece com o Vértice GT; complete a Rua para liberar o Duna Rally e o Deserto para ganhar o Ion RX. Gás na direita, freio na esquerda. No ar, os pedais giram o carro. Cuidado com o teto!</p>
       <div class="sub" id="overlaySub"></div>
       <div class="final-stats" id="finalStats" style="display:none;">
         <div class="fstat"><span>Tempo</span><b id="fsTempo">0</b></div>
@@ -159,6 +177,14 @@
     lata: 34,         // quanto uma lata devolve
     pega: 34,         // raio de coleta de moeda e lata
   };
+  const CARROS = [
+    { nome: 'VÉRTICE GT', cor: '#9be7ce', claro: '#defff1', escuro: '#247a73',
+      descricao: 'Equilibrado no chão e no ar.', fisica: {} },
+    { nome: 'DUNA RALLY', cor: '#efb76f', claro: '#ffe5ad', escuro: '#a44e26',
+      descricao: 'Giro mais suave e menor consumo.', fisica: { tilt: 9, tiltResp: 3.6, drenoGas: 4.5 } },
+    { nome: 'ION RX', cor: '#b4a2ff', claro: '#ece5ff', escuro: '#6551b2',
+      descricao: 'Giro rápido e resposta ágil no ar.', fisica: { tilt: 13, tiltResp: 5, drenoGas: 7 } },
+  ];
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const LOOP_N = 36, CURVA = 80;
   // Só os segmentos perto do progresso do carro colidem. Sem isso o chão de
@@ -379,8 +405,9 @@
     return { segs, trechos, itens, mesas, moedas, fim, y0: 0, fundo: fundo + 420 };
   }
 
-  function novoCarro(pista) {
+  function novoCarro(pista, modelo = 0) {
     return {
+      modelo, ajustes: { ...K, ...CARROS[modelo].fisica },
       x: 80, y: pista.y0 - K.altura - K.raio + 3, vx: 0, vy: 0, a: 0, w: 0,
       gas: false, freio: false, seg: 0, chao: 2, ar: 0, giro: 0, flipsAr: 0, estavel: 0,
       gasolina: K.tanque, moedas: 0, flips: 0, ev: [], morto: '',
@@ -401,6 +428,7 @@
   // roda que penetra a pista recebe mola + amortecedor; passou do curso, bate
   // no batente rígido. Tração e freio agem na tangente, saturados pelo grip.
   function passo(car, pista, dt) {
+    const K = car.ajustes;
     const segs = pista.segs;
     const i0 = Math.max(0, car.seg - JANELA), i1 = Math.min(segs.length - 1, car.seg + JANELA);
     const fx = Math.cos(car.a), fy = Math.sin(car.a);   // frente do carro
@@ -541,6 +569,7 @@
   // vai virar o rival. Mirar o ângulo direto oscilava.
   const anguloCurto = a => Math.atan2(Math.sin(a), Math.cos(a));
   function piloto(car) {
+    const K = car.ajustes;
     if (car.chao > 0) { car.gas = true; car.freio = false; return; }
     const alvo = clamp(-anguloCurto(car.a) * 5, -K.tilt, K.tilt);
     car.gas = alvo < car.w - 0.4;
@@ -549,8 +578,8 @@
 
   // Roda a pista inteira sem desenhar nada. O tempo-alvo da terceira estrela
   // sai daqui, então nunca fica desatualizado quando a pista muda.
-  function correrSozinho(pista, segundos) {
-    const car = novoCarro(pista);
+  function correrSozinho(pista, segundos, modelo = 0) {
+    const car = novoCarro(pista, modelo);
     const n = Math.round((segundos || 120) / STEP);
     let t = 0;
     for (let i = 0; i < n && !car.morto && car.x < pista.fim; i++) {
@@ -568,6 +597,13 @@
   // v pra migrar sem apagar o progresso. Nunca renomear a chave.
   const SAVE_KEY = 'neon-wheels-save';
   const saveVazio = () => ({ v: 1, aberta: 0, moedas: 0, pistas: {} });
+  function liberados(s) {
+    return 1 + CONJUNTOS.slice(1).filter((_, i) => s.aberta >= PISTAS.find(p => p.conj === i + 1).n).length;
+  }
+  function modeloSalvo(s) {
+    const limite = liberados(s);
+    return Number.isInteger(s.carro) && s.carro >= 0 && s.carro < limite ? s.carro : limite - 1;
+  }
   function carregarSave() {
     try {
       const s = JSON.parse(localStorage.getItem(SAVE_KEY));
@@ -576,6 +612,7 @@
     } catch (e) { return saveVazio(); }   // JSON corrompido não pode travar o jogo
   }
   let save = carregarSave();
+  save.carro = modeloSalvo(save);
   const gravar = () => localStorage.setItem(SAVE_KEY, JSON.stringify(save));
   const estrelasDe = n => (save.pistas[n] && save.pistas[n].estrelas) || 0;
   const totalEstrelas = () => PISTAS.reduce((s, p) => s + estrelasDe(p.n), 0);
@@ -588,7 +625,7 @@
     fsTempo: Neon.$('fsTempo'), fsMoedas: Neon.$('fsMoedas'), fsFlips: Neon.$('fsFlips'),
     finalStats: Neon.$('finalStats'),
   };
-  let pistaN = 0, pista = null, alvo = 0;
+  let pistaN = 0, pista = null, alvo = 0, modeloCorrida = save.carro, novoModelo = null;
   let car = null, state = 'menu', tempo = 0, acc = 0, fimT = 0, shake = 0, sfxT = 0, combo = 0, comboT = 0;
   let pb = Neon.best.get('wheels');
   let lastFrame = performance.now();
@@ -607,7 +644,29 @@
   }
 
   // ── hub ───────────────────────────────────────────
+  function montarGaragem() {
+    const garagem = Neon.$('garagem');
+    garagem.innerHTML = '';
+    CARROS.forEach((modelo, i) => {
+      const b = document.createElement('button'), bloqueado = i >= liberados(save);
+      b.className = 'carro-opcao'; b.style.setProperty('--carro', modelo.cor); b.disabled = bloqueado;
+      b.setAttribute('aria-pressed', String(i === save.carro));
+      const situacao = bloqueado ? `🔒 Complete ${CONJUNTOS[i - 1].nome}` : i === save.carro ? '✓ SELECIONADO' : 'SELECIONAR';
+      b.setAttribute('aria-label', `${modelo.nome}. ${modelo.descricao} ${situacao}`);
+      const preview = document.createElement('canvas'); preview.width = 260; preview.height = 135;
+      preview.setAttribute('aria-hidden', 'true');
+      b.appendChild(preview);
+      for (const [tag, texto, classe] of [['b', modelo.nome, ''], ['span', modelo.descricao, ''], ['span', situacao, 'situacao']]) {
+        const el = document.createElement(tag); el.textContent = texto; el.className = classe; b.appendChild(el);
+      }
+      b.addEventListener('click', () => { save.carro = i; gravar(); montarGaragem(); garagem.children[i].focus(); Neon.audio.sfx.click(); });
+      garagem.appendChild(b);
+      const c = preview.getContext('2d'); c.translate(130, 80); c.scale(2.65, 2.65);
+      desenharCarro({ ...novoCarro({ y0: 0 }, i), x: 0, y: 0 }, c, true);
+    });
+  }
   function montarHub() {
+    montarGaragem();
     els.conjuntos.innerHTML = '';
     for (const [ci, conj] of CONJUNTOS.entries()) {
       const bloco = document.createElement('div');
@@ -634,6 +693,7 @@
     els.hubMoedas.textContent = save.moedas;
   }
   function abrirHub() {
+    preso.clear(); toques.clear();
     state = 'hub';
     Neon.audio.music.stop();
     Neon.overlay.hide();
@@ -647,17 +707,19 @@
   // ── corrida ───────────────────────────────────────
   function jogar(n) {
     pistaN = n;
+    modeloCorrida = modeloSalvo(save);
     fecharHub();
     Neon.overlay.hide();
     pista = compilar(PISTAS[n].pecas);
     // Tempo-alvo calculado na hora pelo piloto automático, com 40% de folga.
     // Número fixo na tabela envelhece toda vez que a pista muda.
-    alvo = correrSozinho(pista).t * 1.4;
+    alvo = correrSozinho(pista, 120, modeloCorrida).t * 1.4;
     imersivo(true);
     reiniciar();
   }
   function reiniciar() {
-    car = novoCarro(pista);
+    Neon.overlay.hide(); preso.clear(); toques.clear(); novoModelo = null;
+    car = novoCarro(pista, modeloCorrida);
     for (const it of pista.itens) it.pego = false;
     tempo = 0; acc = 0; fimT = 0; combo = 0; comboT = 0;
     cam.x = car.x + 200; cam.y = car.y - 80; cam.z = 1.45;
@@ -671,6 +733,7 @@
   function pauseGame() {
     if (state !== 'playing') return;
     state = 'paused';
+    preso.clear(); toques.clear();
     Neon.audio.sfx.pause(); Neon.audio.music.stop();
     Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar. ESC volta às fases.', 'CONTINUAR');
   }
@@ -696,6 +759,7 @@
   // As três podem vir em corridas diferentes: o save guarda o melhor de cada.
   function chegou() {
     state = 'chegou'; fimT = 0;
+    const antesCarros = liberados(save);
     const ganhas = 1 + (car.gasolina >= K.tanque * 0.25 ? 1 : 0) + (tempo <= alvo ? 1 : 0);
     const antes = save.pistas[pistaN] || { estrelas: 0, tempo: 0, moedas: 0 };
     save.pistas[pistaN] = {
@@ -706,6 +770,7 @@
     save.moedas += car.moedas;
     // Liberar nunca volta atrás: a fase aberta é sempre a mais longe que a criança chegou.
     if (pistaN === save.aberta && pistaN + 1 < PISTAS.length) save.aberta = pistaN + 1;
+    if (liberados(save) > antesCarros) { novoModelo = liberados(save) - 1; save.carro = novoModelo; }
     gravar();
     const total = totalEstrelas();
     pb = Neon.best.update('wheels', total);
@@ -725,8 +790,8 @@
     const linha = (ok, txt) => `<span class="key" style="opacity:${ok ? 1 : 0.4}">${ok ? '★' : '☆'} ${txt}</span>`;
     const ultima = pistaN + 1 >= PISTAS.length;
     Neon.overlay.show(
-      g === 3 ? 'TRÊS ESTRELAS!' : 'PISTA FECHADA',
-      `${PISTAS[pistaN].nome} · ${'★'.repeat(g)}${'☆'.repeat(3 - g)}`,
+      novoModelo !== null ? 'NOVO CARRO NA GARAGEM!' : g === 3 ? 'TRÊS ESTRELAS!' : 'PISTA FECHADA',
+      novoModelo !== null ? `${CARROS[novoModelo].nome} liberado! ${CARROS[novoModelo].descricao} Já equipado para a próxima etapa.` : `${PISTAS[pistaN].nome} · ${'★'.repeat(g)}${'☆'.repeat(3 - g)}`,
       ultima ? 'DE NOVO' : 'PRÓXIMA',
       g === 3 ? 'record' : '',
       linha(true, 'chegar')
@@ -768,6 +833,7 @@
   const correndo = () => state === 'playing' || state === 'morto' || state === 'chegou';
   document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
+    if (e.target.closest('button, a') && (k === 'enter' || k === ' ')) return;
     if (k === 'escape') { if (state !== 'menu') abrirHub(); return; }
     if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
     if (k === 'r') { if (correndo() || state === 'resultado') reiniciar(); return; }
@@ -830,133 +896,122 @@
   }
 
   // ── carro ─────────────────────────────────────────
-  // Hot rod de perfil, em coordenadas do chassi: x pra frente, y pra baixo.
-  // Os para-lamas são recortes de verdade no contorno, com o mesmo centro dos
-  // eixos da física, então a roda aparece inteira e some pra dentro quando a
-  // suspensão comprime.
-  const ARCO_R = 13, ARCO_Y = 2, L = 37;
-  const PERFIL = [                          // de trás pra frente, por cima
-    [-37, -4], [-35, -10], [-29, -13],       // traseira e tampa curta
-    [-10, -24], [8, -25],                    // vidro traseiro deitado e teto
-    [18, -14], [30, -12], [36, -8], [38, -1], // capô comprido e bico
+  // As três carrocerias usam os eixos e o teto da colisão. A suspensão move
+  // as rodas de verdade; a pintura não muda o tamanho físico do carro.
+  const PERFIS = [
+    [[-42, -3], [-40, -13], [-27, -15], [-10, -25], [8, -25], [20, -15], [36, -12], [43, -5]],
+    [[-41, -3], [-40, -16], [-23, -16], [-10, -25], [8, -25], [17, -15], [35, -15], [41, -7]],
+    [[-44, -2], [-42, -12], [-23, -12], [-10, -25], [8, -25], [22, -12], [40, -8], [46, -2]],
   ];
-  const VIDRO = [[-9, -22], [6, -23], [16, -15], [-19, -15]];
-  const CAPO = [[11, -21], [17, -15], [27, -13], [20, -19]];   // tomada de ar no capô
-
-  const traco = (pts, fechar) => {
-    ctx.beginPath();
-    ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
-    if (fechar) ctx.closePath();
+  const traco = (pts, fechar, contexto = ctx) => {
+    contexto.beginPath(); contexto.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) contexto.lineTo(pts[i][0], pts[i][1]);
+    if (fechar) contexto.closePath();
   };
-
-  // Contorno fechado: sobe pela traseira, passa pelo teto, desce o bico e volta
-  // pela saia contornando as duas caixas de roda.
-  function caminhoCorpo() {
-    ctx.beginPath();
-    ctx.moveTo(-L, ARCO_Y);
-    for (const [px, py] of PERFIL) ctx.lineTo(px, py);
-    ctx.lineTo(L, ARCO_Y);
-    ctx.arc(K.eixo / 2, ARCO_Y, ARCO_R, 0, Math.PI, true);
-    ctx.lineTo(-K.eixo / 2 + ARCO_R, ARCO_Y);
-    ctx.arc(-K.eixo / 2, ARCO_Y, ARCO_R, 0, Math.PI, true);
-    ctx.closePath();
-  }
-
-  function desenharRoda(r) {
-    const R = K.raio, wy = r.ly - r.comp;
-    ctx.save();
-    ctx.translate(r.lx, wy);
-    ctx.fillStyle = '#080d1c'; Neon.circle(ctx, 0, 0, R + 1.5);            // pneu
-    ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2.5; Neon.glow(ctx, '#9be7ce', 12);
-    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.rotate(r.spin);
-    ctx.strokeStyle = 'rgba(155,231,206, 0.4)'; ctx.lineWidth = 1.6;        // banda de rodagem
-    ctx.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const a = i * Math.PI / 5;
-      ctx.moveTo(Math.cos(a) * (R - 3), Math.sin(a) * (R - 3));
-      ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+  function desenharRoda(r, carro, ctx) {
+    const R = carro.ajustes.raio, modelo = CARROS[carro.modelo];
+    ctx.save(); ctx.translate(r.lx, r.ly - r.comp);
+    Neon.circle(ctx, 0, 0, R + 1, '#070c16');
+    ctx.lineWidth = 1; ctx.strokeStyle = '#526070'; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
+    const metal = ctx.createLinearGradient(-R, -R, R, R);
+    metal.addColorStop(0, '#eef5ff'); metal.addColorStop(.4, '#657487'); metal.addColorStop(.6, '#1d2a3a'); metal.addColorStop(1, '#c5d1da');
+    Neon.circle(ctx, 0, 0, R - 3, metal); Neon.circle(ctx, 0, 0, R - 4.5, '#121c2d');
+    // A pinça de freio fica fixa; os raios acompanham a roda.
+    ctx.fillStyle = modelo.cor; ctx.fillRect(3, -5, 3, 8);
+    ctx.rotate(r.spin); ctx.strokeStyle = '#c7d6e1'; ctx.lineWidth = carro.modelo === 1 ? 2.3 : 1.5;
+    const raios = carro.modelo === 2 ? 3 : 5;
+    for (let i = 0; i < raios; i++) {
+      const a = i * Math.PI * 2 / raios;
+      traco([[0, 0], [Math.cos(a + .18) * 4, Math.sin(a + .18) * 4], [Math.cos(a) * (R - 4), Math.sin(a) * (R - 4)]], false, ctx); ctx.stroke();
     }
-    ctx.stroke();
-    ctx.strokeStyle = '#e8e6f5'; ctx.lineWidth = 1.8; Neon.glow(ctx, '#e8e6f5', 6);
-    ctx.beginPath();
-    for (let i = 0; i < 5; i++) {                                          // 5 raios
-      const a = i * Math.PI * 2 / 5;
-      ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * (R - 4), Math.sin(a) * (R - 4));
+    // Borracha escura e sulcos discretos, em vez de um aro inteiro luminoso.
+    ctx.strokeStyle = carro.modelo === 1 ? '#6d665c' : '#394555'; ctx.lineWidth = carro.modelo === 1 ? 2 : 1;
+    for (let i = 0; i < 12; i++) {
+      const a = i * Math.PI / 6;
+      traco([[Math.cos(a) * (R - 1.5), Math.sin(a) * (R - 1.5)], [Math.cos(a + .07) * R, Math.sin(a + .07) * R]], false, ctx); ctx.stroke();
     }
-    ctx.stroke(); ctx.shadowBlur = 0;
-    ctx.fillStyle = '#efce95'; Neon.circle(ctx, 0, 0, 2.2);                // cubo
+    Neon.circle(ctx, 0, 0, 2.4, '#e2eaf2'); Neon.circle(ctx, 0, 0, 1.1, modelo.escuro);
     ctx.restore();
   }
-
-  function desenharCarro() {
-    const andando = state === 'playing';
-    ctx.save();
-    ctx.translate(car.x, car.y);
-    ctx.rotate(car.a);
-
-    if (andando) {                                                          // farol
-      const cone = ctx.createLinearGradient(38, 0, 98, 0);
-      cone.addColorStop(0, 'rgba(255,246,200, 0.22)');
-      cone.addColorStop(1, 'rgba(255,246,200, 0)');
-      ctx.fillStyle = cone;
-      traco([[38, -6], [98, -22], [98, 12], [38, 0]], true);
-      ctx.fill();
+  function desenharCarro(veiculo = car, contexto = ctx, preview = false) {
+    const car = veiculo, ctx = contexto, K = car.ajustes, m = CARROS[car.modelo];
+    const andando = !preview && state === 'playing';
+    const forma = (pts, cor, borda) => {
+      traco(pts, true, ctx); ctx.fillStyle = cor; ctx.fill();
+      if (borda) { ctx.strokeStyle = borda; ctx.lineWidth = .8; ctx.stroke(); }
+    };
+    ctx.save(); ctx.translate(car.x, car.y); ctx.rotate(car.a); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    if (andando) {
+      const cone = ctx.createLinearGradient(40, 0, 110, 0);
+      cone.addColorStop(0, '#fff3c52b'); cone.addColorStop(1, '#fff3c500');
+      forma([[40, -9], [110, -24], [110, 12], [40, -3]], cone);
     }
-
-    for (const r of car.rodas) desenharRoda(r);
-
-    caminhoCorpo();                                                         // carroceria
-    const pintura = ctx.createLinearGradient(0, -25, 0, ARCO_Y);
-    pintura.addColorStop(0, '#42506c');
-    pintura.addColorStop(0.5, '#19243b');
-    pintura.addColorStop(1, '#080d1c');
-    ctx.fillStyle = pintura; ctx.fill();
-    ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2.2; Neon.glow(ctx, '#9be7ce', 10);
-    ctx.stroke(); ctx.shadowBlur = 0;
-
-    ctx.strokeStyle = 'rgba(155,231,206, 0.35)'; ctx.lineWidth = 1.4;       // vinco e porta
-    ctx.beginPath();
-    ctx.moveTo(-33, -7); ctx.lineTo(34, -8);
-    ctx.moveTo(-19, -15); ctx.lineTo(-17, -2);
-    ctx.moveTo(14, -16); ctx.lineTo(12, -2);
-    ctx.stroke();
-
-    traco(VIDRO, true);                                                     // vidro
-    const v = ctx.createLinearGradient(-9, -23, 16, -14);
-    v.addColorStop(0, 'rgba(155,231,206, 0.5)');
-    v.addColorStop(1, 'rgba(155,231,206, 0.14)');
-    ctx.fillStyle = v; ctx.fill();
-    ctx.strokeStyle = 'rgba(155,231,206, 0.75)'; ctx.lineWidth = 1.2; ctx.stroke();
-
-    traco(CAPO, true);                                                      // tomada de ar
-    ctx.fillStyle = 'rgba(221,160,119, 0.4)'; ctx.fill();
-    ctx.strokeStyle = '#dda077'; ctx.lineWidth = 1.4; ctx.stroke();
-
-    ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2.2; Neon.glow(ctx, '#9be7ce', 8);
-    ctx.beginPath();                                                        // aerofólio
-    ctx.moveTo(-34, -9); ctx.lineTo(-33, -16);
-    ctx.moveTo(-27, -13); ctx.lineTo(-26, -16);
-    ctx.moveTo(-38, -16); ctx.lineTo(-24, -17);
-    ctx.stroke(); ctx.shadowBlur = 0;
-
-    const freando = car.freio && andando;                                   // lanterna e farol
-    ctx.fillStyle = freando ? '#ed887f' : 'rgba(237,136,127, 0.55)';
-    Neon.glow(ctx, '#ed887f', freando ? 22 : 8);
-    ctx.fillRect(-37, -9, 3.5, 5);
-    ctx.fillStyle = '#fff6c8'; Neon.glow(ctx, '#efce95', 16);
-    ctx.fillRect(34.5, -8, 3.5, 4.5);
-    ctx.shadowBlur = 0;
-
-    if (car.gas && car.gasolina > 0 && andando) {                           // escapamento
-      const c = 12 + Math.random() * 14;
-      ctx.fillStyle = '#dda077'; Neon.glow(ctx, '#dda077', 18);
-      traco([[-36, -3], [-36 - c, 0], [-36, 2]], true); ctx.fill();
-      ctx.fillStyle = '#efce95';
-      traco([[-36, -2], [-36 - c * 0.55, 0], [-36, 1]], true); ctx.fill();
-      ctx.shadowBlur = 0;
+    // Braços de suspensão, chassi inferior e rodas atrás dos para-lamas.
+    ctx.strokeStyle = '#697b8e'; ctx.lineWidth = 2;
+    for (const r of car.rodas) {
+      traco([[r.lx * .6, -3], [r.lx, r.ly - r.comp]], false, ctx); ctx.stroke();
+      ctx.strokeStyle = m.cor; ctx.lineWidth = 1;
+      traco([[r.lx, -7], [r.lx - 2, -4], [r.lx + 2, -1], [r.lx - 2, 2], [r.lx, r.ly - r.comp]], false, ctx); ctx.stroke();
+    }
+    forma([[-34, -3], [36, -3], [33, 4], [-33, 4]], '#182233', '#68758a');
+    for (const r of car.rodas) desenharRoda(r, car, ctx);
+    const perfil = PERFIS[car.modelo];
+    ctx.beginPath(); ctx.moveTo(perfil[0][0], 2);
+    for (const [x, y] of perfil) ctx.lineTo(x, y);
+    ctx.lineTo(perfil.at(-1)[0], 2);
+    ctx.arc(K.eixo / 2, 2, 13, 0, Math.PI, true);
+    ctx.lineTo(-K.eixo / 2 + 13, 2); ctx.arc(-K.eixo / 2, 2, 13, 0, Math.PI, true); ctx.closePath();
+    const tinta = ctx.createLinearGradient(0, -25, 0, 4);
+    tinta.addColorStop(0, m.claro); tinta.addColorStop(.36, m.cor); tinta.addColorStop(.48, m.escuro); tinta.addColorStop(.75, m.cor); tinta.addColorStop(1, m.escuro);
+    ctx.fillStyle = tinta; ctx.fill(); ctx.strokeStyle = m.claro; ctx.lineWidth = .9; ctx.stroke();
+    // Vidro fumê com reflexo diagonal e motorista sob o teto da física.
+    const vidro = ctx.createLinearGradient(-10, -25, 15, -12);
+    vidro.addColorStop(0, '#a6d8ed'); vidro.addColorStop(.45, '#254c65'); vidro.addColorStop(1, '#101c30');
+    forma([[-10, -23], [7, -23], [16, -15], [-21, -15]], vidro, '#e7faff99');
+    forma([[-9, -22], [-5, -22], [-15, -16], [-19, -16]], '#e7faff77');
+    forma([[0, -24], [2, -24], [5, -14], [3, -14]], m.escuro);
+    ctx.fillStyle = '#0c1728'; ctx.fillRect(-4, -20, 5, 5);
+    ctx.fillStyle = '#e6eff9'; ctx.fillRect(-3, -21, 4, 3);
+    if (car.modelo === 0) {
+      // Cupê: capô longo, faixa dupla, porta recortada e ducktail traseiro.
+      forma([[18, -14], [35, -11], [38, -8], [19, -11]], '#e6fff0');
+      forma([[22, -13], [26, -12], [28, -9], [24, -10]], m.escuro);
+      forma([[-43, -14], [-27, -16], [-26, -13], [-42, -11]], '#193549', m.claro);
+      forma([[-14, -13], [12, -13], [10, -1], [-12, -1]], '#286d6980', m.escuro);
+      ctx.fillStyle = m.claro; ctx.fillRect(-9, -11, 5, 1.3);
+      ctx.fillStyle = '#112c37'; ctx.fillRect(27, -5, 12, 2);
+    } else if (car.modelo === 1) {
+      // Buggy: gaiola externa, caçamba, faróis auxiliares e protetor frontal.
+      forma([[-38, -17], [-23, -17], [-25, -12], [-38, -12]], '#293341', '#baa78c');
+      ctx.strokeStyle = '#3a302c'; ctx.lineWidth = 2.5;
+      traco([[-21, -13], [-10, -25], [8, -25], [18, -13]], false, ctx); ctx.stroke();
+      traco([[-8, -24], [5, -14]], false, ctx); ctx.stroke();
+      ctx.fillStyle = '#3e332e'; ctx.fillRect(18, -17, 15, 3);
+      for (const x of [21, 29]) { Neon.circle(ctx, x, -16, 3.3, '#303c47'); Neon.circle(ctx, x, -16, 2, '#fff0b8'); }
+      forma([[-12, -12], [11, -12], [9, -1], [-10, -1]], '#4c3930');
+      ctx.strokeStyle = '#c5b39b'; ctx.lineWidth = 2.5; traco([[39, -10], [43, -8], [43, 1], [36, 2]], false, ctx); ctx.stroke();
+      ctx.fillStyle = '#303d4a'; ctx.fillRect(-42, -5, 9, 4);
+    } else {
+      // Protótipo: asa de carbono, entradas de ar e splitter alongado.
+      ctx.strokeStyle = '#b9b2dd'; ctx.lineWidth = 1.8;
+      traco([[-36, -11], [-36, -21], [-29, -21], [-29, -12]], false, ctx); ctx.stroke();
+      forma([[-46, -24], [-25, -24], [-24, -21], [-46, -20]], '#182235', m.claro);
+      forma([[17, -11], [36, -7], [31, -2], [16, -3]], '#1d2540', m.claro);
+      for (let i = 0; i < 3; i++) { ctx.fillStyle = '#927fcf'; ctx.fillRect(18 + i * 4, -8, 2, 5); }
+      forma([[-13, -12], [13, -12], [10, 0], [-11, 0]], '#302855');
+      forma([[34, 1], [48, -1], [47, 3], [32, 4]], '#131f33', m.cor);
+      forma([[12, -22], [24, -12], [20, -11]], m.claro);
+    }
+    // Numeração de corrida e detalhes pequenos com contraste, sem excesso de glow.
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'italic 700 8px monospace'; ctx.fillStyle = '#f3f6ff';
+    ctx.fillText(['01', '04', '09'][car.modelo], 0, -6);
+    ctx.fillStyle = car.freio && andando ? '#ff796c' : '#b94c58'; Neon.glow(ctx, '#ff796c', car.freio && andando ? 14 : 0);
+    ctx.fillRect(-41, -10, 3, 4); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff4cd'; Neon.glow(ctx, '#fff4cd', 7); ctx.fillRect(car.modelo === 2 ? 40 : 37, -8, 4, 2.5); ctx.shadowBlur = 0;
+    if (car.gas && car.gasolina > 0 && andando) {
+      const chama = Neon.motion.reduced ? 12 : 12 + Math.sin(performance.now() / 37) * 7;
+      forma([[-40, -2], [-43 - chama, 0], [-40, 2]], car.modelo === 2 ? '#aaa1ff' : '#efa574');
+      forma([[-40, -1], [-43 - chama * .5, 0], [-40, 1]], '#fff0bf');
     }
     ctx.restore();
   }
@@ -1099,6 +1154,11 @@
       ctx.fillText(String(val), hx, 15); hx += ctx.measureText(String(val)).width + 20;
     }
     ctx.textBaseline = 'alphabetic';
+
+    const modelo = CARROS[car.modelo];
+    ctx.fillStyle = 'rgba(8,13,28,.8)'; ctx.fillRect(12, H - 39, 154, 25);
+    ctx.fillStyle = modelo.cor; ctx.font = '700 11px Orbitron, sans-serif';
+    ctx.fillText(modelo.nome, 24, H - 22);
 
     // trilho do progresso da pista
     ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(0, H - 5, W, 5);

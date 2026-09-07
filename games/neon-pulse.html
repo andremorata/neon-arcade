@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON PULSE — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  .stage { --arw: 16; --arh: 9; --maxw: 1120px; }
+  .pulse-controls { position: absolute; inset: auto 14px 12px; display: flex; gap: 8px; z-index: 5; }
+  .pulse-controls button { min-width: 52px; min-height: 48px; border: 1px solid #9be7ce66; border-radius: 12px; padding: 8px 16px; background: #080d1cdc; color: #d6eee2; font: 700 12px monospace; touch-action: none; cursor: pointer; }
+  .pulse-controls [data-action="pulse"] { margin-left: auto; color: #efce95; border-color: #efce9577; }
+  .pulse-controls button:active { background: #34565b; }
+  .pulse-controls button:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
+  .overlay:not(.hidden) ~ .pulse-controls { visibility: hidden; }
+  .overlay p { max-width: 510px; }
+  @media (max-width: 560px) { .pulse-controls { inset-inline: 6px; bottom: 6px; gap: 5px; } .pulse-controls button { padding: 8px 10px; min-width: 46px; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header><div class="brand"><a href="../index.html"><h1>NEON PULSE</h1></a><div class="tag">// um pequeno salto. uma cidade inteira para acender.</div></div></header>
+  <div class="dashboard" style="--dash-cols:5">
+    <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="pulse">0</span></div>
+    <div class="stat"><span class="lbl">Setor</span><span class="val" id="sector">1/3</span></div>
+    <div class="stat"><span class="lbl">Prismas</span><span class="val" id="prisms">0/3</span></div>
+    <div class="stat"><span class="lbl">Vidas</span><span class="val" id="lives">♥♥♥</span></div>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="game" width="960" height="540" aria-label="Plataforma neon: setas ou A e D movem, espaço pula até duas vezes, X ativa o pulso e P pausa.">Use um navegador com suporte a canvas para jogar.</canvas>
+    <button class="sound-toggle" id="soundToggle" title="Som" aria-label="Alternar som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)" aria-label="Pausar ou continuar">⏸</button>
+    <div class="toast" id="toast" role="status"></div>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">ACENDA A CIDADE</h2>
+      <p id="overlayText">Leve Lumi aos três portais. Salte sobre os robôs, bata nos blocos dourados e use o salto duplo. Seu pulso revela plataformas por 4 segundos e atordoa inimigos próximos. Encontre um prisma secreto em cada setor!</p>
+      <div class="sub" id="overlaySub"></div>
+      <button class="btn" id="startBtn">VAMOS NESSA</button>
+      <div class="controls-hint"><span class="key">← → / A D anda</span><span class="key">ESPAÇO salto duplo</span><span class="key">X pulso</span><span class="key">P pausa</span></div>
+    </div>
+    <div class="pulse-controls" aria-label="Controles do jogo">
+      <button data-action="left" aria-label="Andar para a esquerda">◀</button>
+      <button data-action="right" aria-label="Andar para a direita">▶</button>
+      <button data-action="pulse" aria-label="Ativar pulso">◎ PULSO</button>
+      <button data-action="jump" aria-label="Pular">↑ PULAR</button>
+    </div>
+  </div>
+  <footer>// <a href="../index.html">← arcade</a> · segure o salto para ir mais alto · pule de novo no ar · X revela o invisível · P pausa</footer>
+</div>
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon, canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  // A câmera fica mais próxima no celular; a física e a fase não mudam ao girar.
+  const W = window.innerWidth <= 560 && window.innerHeight > window.innerWidth ? 540 : 960;
+  const H = 540;
+  // ── física ──
+  const FLOOR = 438, SPEED = 280, GRAVITY = 1650, JUMP = 640;
+  const SECTORS = [
+    { name: 'JARDINS DO SINAL', color: '#9be7ce', sky: '#0d2131', moon: '#b7eedc', pits: [[870, 1000], [1800, 1940], [2780, 2920]] },
+    { name: 'VIADUTO VIOLETA', color: '#afa3f5', sky: '#1c1834', moon: '#c9befa', pits: [[820, 1000], [1750, 1930], [2710, 2900]] },
+    { name: 'AURORA CENTRAL', color: '#efce95', sky: '#282034', moon: '#f4d7a5', pits: [[820, 1010], [1740, 1940], [2690, 2900]] },
+  ];
+  function level(index) {
+    const config = SECTORS[index], platforms = [];
+    let start = 0;
+    for (const [a, b] of [...config.pits, [3420, 3420]]) {
+      platforms.push({ x: start, y: FLOOR, w: a - start, h: 110, kind: 'ground' }); start = b;
+    }
+    for (const [x, y, w] of [[380, 330, 126], [610, 260, 112], [1110, 344, 130], [1360, 276, 100], [2050, 340, 130], [2320, 300, 125], [3030, 350, 110]])
+      platforms.push({ x, y, w, h: 20, kind: 'ledge' });
+    for (const x of [240, 282, 560, 1260, 2200, 2242, 2980])
+      platforms.push({ x, y: FLOOR - 112, w: 38, h: 38, kind: 'box', used: false });
+    for (const [x, y] of [[1460, 218], [1570, 160], [1680, 110]])
+      platforms.push({ x, y, w: 84, h: 16, kind: 'ghost' });
+    const coins = [];
+    for (const x of [150, 190, 405, 448, 652, 760, 1060, 1150, 1190, 1385, 1990, 2090, 2360, 2500, 2550, 3000, 3075, 3180]) {
+      const ledge = platforms.find(p => p.kind === 'ledge' && x >= p.x && x <= p.x + p.w);
+      coins.push({ x, y: (ledge ? ledge.y : FLOOR) - 35, taken: false });
+    }
+    const enemies = [
+      { x: 690, a: 620, b: 790 }, { x: 1170, a: 1050, b: 1300 },
+      { x: 2110, a: 1990, b: 2290 }, { x: 2530, a: 2460, b: 2640 }, { x: 3130, a: 2990, b: 3270 },
+    ].map((e, i) => ({ ...e, y: FLOOR, dir: i % 2 ? -1 : 1, alive: true, stun: 0, speed: 48 + index * 17 }));
+    return { ...config, platforms, coins, enemies, prism: { x: 1722, y: 74, taken: false } };
+  }
+  function expedition(index = 0, previous) {
+    return { index, map: level(index), x: 72, y: FLOOR, vx: 0, vy: 0, facing: 1,
+      grounded: true, jumps: 0, coyote: .1, buffer: 0, t: 0, pulse: 0, cooldown: 0,
+      invincible: 0, checkpoint: 72, score: previous ? previous.score : 0,
+      lives: previous ? Math.min(3, previous.lives + 1) : 3,
+      prisms: previous ? previous.prisms : 0, status: 'playing', events: [] };
+  }
+  function damage(s, fall = false) {
+    if (s.status !== 'playing' || (!fall && s.invincible > 0)) return;
+    s.lives--; s.events.push('hurt');
+    if (!s.lives) { s.status = 'lost'; return; }
+    s.x = s.checkpoint; s.y = FLOOR; s.vx = 0; s.vy = 0; s.jumps = 0;
+    s.grounded = true; s.coyote = .1; s.buffer = 0; s.invincible = 1.8;
+  }
+  function step(s, dt, input) {
+    if (s.status !== 'playing') return;
+    s.t += dt;
+    for (const key of ['pulse', 'cooldown', 'invincible', 'buffer']) s[key] = Math.max(0, s[key] - dt);
+    s.coyote = s.grounded ? .1 : Math.max(0, s.coyote - dt);
+    if (input.pulse && !s.cooldown) {
+      s.pulse = 4; s.cooldown = 5; s.events.push('pulse');
+      for (const e of s.map.enemies) if (Math.hypot(e.x - s.x, e.y - s.y) < 240) e.stun = 4;
+    }
+    if (input.jump) s.buffer = .12;
+    if (s.buffer && (s.coyote > 0 || s.jumps < 2)) {
+      s.jumps = s.coyote > 0 ? 1 : Math.max(1, s.jumps) + 1;
+      s.vy = -JUMP * (s.jumps === 2 ? .9 : 1); s.grounded = false;
+      s.coyote = 0; s.buffer = 0; s.events.push('jump');
+    }
+    if (!input.jumpHeld && s.vy < -260) s.vy = -260;
+    const dir = Number(!!input.right) - Number(!!input.left);
+    if (dir) s.facing = dir;
+    s.vx += (dir * SPEED - s.vx) * Math.min(1, dt * (s.grounded ? 18 : 10));
+    const solids = s.map.platforms.filter(p => p.kind !== 'ghost' || s.pulse > 0);
+    const oldX = s.x;
+    s.x = Math.max(14, Math.min(3390, s.x + s.vx * dt));
+    for (const p of solids) {
+      if (p.kind === 'ledge' || p.kind === 'ghost' || s.y <= p.y + 1 || s.y - 34 >= p.y + p.h) continue;
+      if (s.x + 13 > p.x && s.x - 13 < p.x + p.w) {
+        if (oldX + 13 <= p.x) s.x = p.x - 13;
+        else if (oldX - 13 >= p.x + p.w) s.x = p.x + p.w + 13;
+        s.vx = 0;
+      }
+    }
+    const oldY = s.y;
+    s.vy += GRAVITY * dt; s.y += s.vy * dt; s.grounded = false;
+    for (const p of solids) {
+      if (s.x + 12 <= p.x || s.x - 12 >= p.x + p.w) continue;
+      if (s.vy >= 0 && oldY <= p.y + .5 && s.y >= p.y) {
+        s.y = p.y; s.vy = 0; s.grounded = true; s.jumps = 0;
+      } else if (s.vy < 0 && p.kind === 'box' && oldY - 34 >= p.y + p.h && s.y - 34 <= p.y + p.h) {
+        s.y = p.y + p.h + 34; s.vy = 0;
+        if (!p.used) { p.used = true; s.score += 150; s.events.push('box'); }
+      }
+    }
+    if (s.y > H + 60) { damage(s, true); return; }
+    for (const e of s.map.enemies) {
+      if (!e.alive) continue;
+      e.stun = Math.max(0, e.stun - dt);
+      if (!e.stun) { e.x += e.dir * e.speed * dt; if (e.x < e.a || e.x > e.b) { e.x = Math.max(e.a, Math.min(e.b, e.x)); e.dir *= -1; } }
+      if (Math.abs(s.x - e.x) < 27 && s.y > e.y - 26 && s.y - 34 < e.y) {
+        if (s.vy > 0 && oldY <= e.y - 18) {
+          e.alive = false; s.y = e.y - 26; s.vy = -460; s.jumps = 1; s.score += 200; s.events.push('stomp');
+        } else if (!e.stun && !s.invincible) { damage(s); return; }
+      }
+    }
+    for (const c of s.map.coins) if (!c.taken && Math.hypot(s.x - c.x, s.y - 18 - c.y) < 28) {
+      c.taken = true; s.score += 100; s.events.push('coin');
+    }
+    const p = s.map.prism;
+    if (!p.taken && Math.hypot(s.x - p.x, s.y - 18 - p.y) < 32) {
+      p.taken = true; s.prisms++; s.score += 1000; s.events.push('prism');
+    }
+    if (s.x > 1600 && s.x < 1720 && s.grounded && s.y === FLOOR && s.checkpoint < 1600) {
+      s.checkpoint = 1650; s.events.push('checkpoint');
+    }
+    if (s.x > 3310 && s.grounded) {
+      s.score += 1000 + s.lives * 200; s.status = s.index === SECTORS.length - 1 ? 'won' : 'cleared';
+    }
+  }
+  // ── fim da física ──
+
+  let run = expedition(), state = 'menu', lastFrame = performance.now(), camera = 0, pb = Neon.best.get('pulse');
+  const held = new Set(), pointers = new Map();
+  let jumpQueued = false, pulseQueued = false;
+  const particles = new Neon.Particles();
+  function rect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
+  function text(value, x, y, size, color, align = 'left') {
+    ctx.fillStyle = color; ctx.font = `bold ${size}px monospace`; ctx.textAlign = align; ctx.fillText(value, x, y);
+  }
+  function line(points, color, width = 2) {
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
+    points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  }
+  function diamond(x, y, r, color) {
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r * .65, y);
+    ctx.lineTo(x, y + r); ctx.lineTo(x - r * .65, y); ctx.closePath(); ctx.fill();
+    line([[x, y - r + 3], [x - r * .35, y], [x, y + r - 3]], '#fff5d6', 1.5);
+  }
+  function draw() {
+    const m = run.map, t = Neon.motion.reduced ? 0 : run.t;
+    const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#080e20'); sky.addColorStop(1, m.sky);
+    rect(0, 0, W, H, sky);
+    for (let i = 0; i < 65; i++) {
+      const x = ((i * 137.3 - camera * .08) % (W + 40) + W + 40) % (W + 40);
+      rect(x, 55 + i * 47 % 265, i % 4 ? 1 : 2, i % 4 ? 1 : 2, i % 3 ? '#53647b' : '#b1c8d9');
+    }
+    const moonX = W * .76 - camera * .025;
+    ctx.save(); ctx.globalAlpha = .13; Neon.circle(ctx, moonX, 154, 88, m.moon); ctx.restore();
+    Neon.circle(ctx, moonX, 154, 55, m.moon);
+    for (let i = 0; i < 7; i++) rect(moonX - 60, 159 + i * 8, 120, 3 + i * .6, m.sky);
+    for (let layer = 0; layer < 2; layer++) for (let i = 0; i < 26; i++) {
+      const x = i * 91 - (camera * (.12 + layer * .14)) % 91, height = 60 + (i * 67 + layer * 43) % 155;
+      rect(x, FLOOR - height, 70, height, layer ? '#14283b' : '#101d30');
+      if (layer) {
+        rect(x + 7, FLOOR - height, 2, height, '#253a4d');
+        for (let j = 0; j < 5; j++) for (let k = 0; k < 3; k++)
+          if ((i + j + k) % 3) rect(x + 16 + k * 17, FLOOR - height + 16 + j * 23, 5, 8, '#355360');
+      }
+    }
+    ctx.save(); ctx.translate(-camera, 0);
+    for (const [a, b] of m.pits) {
+      for (let i = 0; i < 5; i++) line([[a, 473 + i * 12], [b, 473 + i * 12]], '#ed887f' + ['70','50','40','30','20'][i], 2);
+      text('! VAZIO', (a + b) / 2, 518, 10, '#ed887f', 'center');
+    }
+    for (const p of m.platforms) {
+      if (p.x + p.w < camera || p.x > camera + W) continue;
+      if (p.kind === 'ghost') {
+        ctx.save(); ctx.globalAlpha = run.pulse ? (run.pulse < 1 ? .55 + .3 * Math.sin(t * 12) : 1) : .24;
+        rect(p.x, p.y, p.w, p.h, '#afa3f530');
+        ctx.setLineDash(run.pulse ? [] : [5, 5]); ctx.strokeStyle = '#c5b5ff'; ctx.lineWidth = 2; ctx.strokeRect(p.x, p.y, p.w, p.h);
+        ctx.restore(); continue;
+      }
+      if (p.kind === 'box') {
+        rect(p.x, p.y, p.w, p.h, p.used ? '#354151' : '#a37a39');
+        rect(p.x + 3, p.y + 3, p.w - 6, p.h - 6, p.used ? '#253242' : '#efce95');
+        text(p.used ? '·' : '?', p.x + 19, p.y + 27, 24, '#53432b', 'center'); continue;
+      }
+      rect(p.x, p.y, p.w, p.h, '#142c39');
+      rect(p.x, p.y, p.w, 4, m.color); rect(p.x, p.y + 4, p.w, 7, '#30545a');
+      if (p.kind === 'ground') {
+        for (let x = p.x + 18; x < p.x + p.w; x += 44) {
+          line([[x, p.y + 16], [x, p.y + 29], [x + 14, p.y + 43], [x + 14, H]], '#28404c', 1);
+          rect(x - 2, p.y + 17, 4, 4, '#4a6c6e');
+        }
+        for (let x = p.x + 45; x < p.x + p.w; x += 137) {
+          line([[x, p.y], [x, p.y - 16], [x - 9, p.y - 25]], '#5c9e94');
+          line([[x, p.y - 5], [x + 8, p.y - 15]], m.color);
+        }
+      } else for (let x = p.x + 10; x < p.x + p.w; x += 22) rect(x, p.y + 12, 9, 3, '#52777c');
+    }
+    for (const c of m.coins) if (!c.taken) {
+      ctx.save(); Neon.glow(ctx, '#efce95', 12); diamond(c.x, c.y + Math.sin(t * 4 + c.x) * 3, 10, '#efce95'); ctx.restore();
+    }
+    const prism = m.prism;
+    if (!prism.taken) {
+      ctx.save(); Neon.glow(ctx, '#c4b1ff', 25); diamond(prism.x, prism.y + Math.sin(t * 3) * 5, 20, '#b5a0fa'); ctx.restore();
+      text('PRISMA SECRETO', prism.x, prism.y - 33, 11, '#d2c6ff', 'center');
+    }
+    for (const e of m.enemies) if (e.alive) {
+      const bob = e.stun ? 0 : Math.sin(t * 12) * 2;
+      rect(e.x - 17, e.y - 23 + bob, 34, 19, e.stun ? '#645e8b' : '#ca766e');
+      rect(e.x - 12, e.y - 28 + bob, 24, 7, e.stun ? '#afa3f5' : '#ed887f');
+      rect(e.x - 11, e.y - 18 + bob, 22, 7, '#102131');
+      rect(e.x - 8 + e.dir * 2, e.y - 17 + bob, 5, 4, '#f9dca9'); rect(e.x + 3 + e.dir * 2, e.y - 17 + bob, 5, 4, '#f9dca9');
+      for (const x of [-11, 7]) rect(e.x + x, e.y - 5, 5, 5, '#aa8b97');
+      if (e.stun) text('✦', e.x, e.y - 39, 18, '#d7c9ff', 'center');
+    }
+    rect(1650, FLOOR - 70, 3, 70, '#678b96');
+    rect(1653, FLOOR - 70, 31, 21, run.checkpoint > 72 ? '#9be7ce' : '#3c5266');
+    text('CHECKPOINT', 1650, FLOOR + 33, 10, '#a3bfc5', 'center');
+    ctx.save(); Neon.glow(ctx, m.color, 25);
+    rect(3300, FLOOR - 116, 9, 116, m.color); rect(3370, FLOOR - 116, 9, 116, m.color); rect(3300, FLOOR - 116, 79, 9, m.color);
+    ctx.globalAlpha = .22; rect(3309, FLOOR - 107, 61, 107, m.color); ctx.restore();
+    text('PRÓXIMO SINAL →', 3339, FLOOR - 136, 12, m.color, 'center');
+    for (const [x, y, title, sub] of [[110, 255, 'O PRIMEIRO SALTO', 'ESPAÇO · duas vezes no ar'], [1435, 90, 'O INVISÍVEL É CAMINHO', 'X · materialize as plataformas']]) {
+      text(title, x, y, 13, '#d0e4df'); text(sub, x, y + 20, 11, '#8da8b5');
+    }
+    if (!run.invincible || Math.floor(t * 12) % 2 === 0 || Neon.motion.reduced) {
+      const x = run.x, y = run.y, stride = run.grounded ? Math.sin(t * 20) * Math.min(4, Math.abs(run.vx) / 70) : 3;
+      ctx.save(); Neon.glow(ctx, '#9be7ce', 15);
+      // Lumi: capacete luminoso, visor largo e um cachecol que acompanha o salto.
+      line([[x - run.facing * 9, y - 23], [x - run.facing * 23, y - 24 + Math.sin(t * 10) * 3], [x - run.facing * 32, y - 31]], '#efce95', 5);
+      rect(x - 12, y - 35, 24, 20, '#d6f7e9'); rect(x - 14, y - 29, 28, 9, '#9be7ce');
+      rect(x - 9 + run.facing * 3, y - 30, 15, 9, '#163744'); rect(x + run.facing * 6, y - 28, 3, 3, '#efffff');
+      rect(x - 9, y - 15, 18, 10, '#70bfb6'); rect(x - 11, y - 5, 8, 5 + stride, '#d6f7e9'); rect(x + 3, y - 5, 8, 5 - stride, '#d6f7e9');
+      ctx.restore();
+    }
+    if (run.pulse > 3.4 && !Neon.motion.reduced) {
+      ctx.save(); ctx.globalAlpha = (run.pulse - 3.4) / .6; ctx.strokeStyle = '#c6b3ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(run.x, run.y - 20, (4 - run.pulse) * 650, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
+    particles.draw(ctx); ctx.restore();
+    rect(W / 2 - 152, 14, 304, 43, '#080d1cc9');
+    text(`${String(run.index + 1).padStart(2, '0')} / ${String(SECTORS.length).padStart(2, '0')}   ${m.name}`, W / 2, 33, 12, m.color, 'center');
+    rect(W / 2 - 135, 44, 270, 3, '#33404f'); rect(W / 2 - 135, 44, 270 * run.x / 3390, 3, m.color);
+    const pulseText = run.pulse ? `PULSO · ${run.pulse.toFixed(1)}s` : run.cooldown ? `RECARGA · ${run.cooldown.toFixed(1)}s` : '◎ PULSO PRONTO · X';
+    text(pulseText, W / 2, H - 82, 12, run.cooldown ? '#b8adcf' : '#efce95', 'center');
+  }
+  function hud() {
+    Neon.$('score').textContent = run.score; Neon.$('sector').textContent = `${run.index + 1}/${SECTORS.length}`;
+    Neon.$('prisms').textContent = `${run.prisms}/${SECTORS.length}`; Neon.$('lives').textContent = '♥'.repeat(run.lives) || '—';
+  }
+  function clearInput() { held.clear(); pointers.clear(); jumpQueued = false; pulseQueued = false; }
+  function startGame() {
+    Neon.audio.ensure(); clearInput(); particles.clear();
+    run = state === 'cleared' ? expedition(run.index + 1, run) : expedition();
+    state = 'playing'; camera = 0; lastFrame = performance.now(); Neon.overlay.hide(); Neon.audio.music.start(); hud();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused'; clearInput(); Neon.audio.music.stop();
+    Neon.overlay.show('UMA PAUSA NO PULSO', 'Lumi espera por você. O mundo e seus poderes estão pausados.', 'CONTINUAR');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    state = 'playing'; clearInput(); lastFrame = performance.now(); Neon.overlay.hide(); Neon.audio.music.start();
+  }
+  function finish() {
+    state = run.status; clearInput(); Neon.audio.music.down();
+    pb = Neon.best.update('pulse', run.score); Neon.$('best').textContent = pb;
+    const won = state === 'won', cleared = state === 'cleared';
+    if (won || cleared) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
+    Neon.overlay.show(won ? 'A CIDADE VOLTOU A BRILHAR!' : cleared ? 'SINAL RESTAURADO!' : 'ATÉ A LUZ TROPEÇA',
+      `${run.score} pontos · ${run.prisms}/${SECTORS.length} prismas. ${cleared ? 'Um coração recuperado. O próximo setor espera.' : won ? run.prisms === SECTORS.length ? 'Todos os prismas! Você encontrou a alma da cidade.' : 'Os caminhos secretos ainda guardam seus prismas.' : 'Respire e tente outra vez.'}`,
+      cleared ? 'PRÓXIMO SETOR →' : 'JOGAR DE NOVO', won || cleared ? 'record' : 'go');
+  }
+  const keys = { arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', arrowup: 'jump', w: 'jump', ' ': 'jump', x: 'pulse', shift: 'pulse' };
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'p') { if (!e.repeat) state === 'playing' ? pauseGame() : resumeGame(); return; }
+    if (e.target.closest('button, a') && (k === ' ' || k === 'enter')) return;
+    if (keys[k] || k === 'enter') e.preventDefault();
+    if (e.repeat) return;
+    if ((k === 'enter' || k === ' ') && state !== 'playing') { state === 'paused' ? resumeGame() : startGame(); return; }
+    if (state !== 'playing' || !keys[k]) return;
+    held.add(k);
+    if (keys[k] === 'jump') jumpQueued = true;
+    if (keys[k] === 'pulse') pulseQueued = true;
+  });
+  document.addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
+  document.querySelectorAll('[data-action]').forEach(button => {
+    button.addEventListener('pointerdown', e => {
+      e.preventDefault(); if (state !== 'playing') return;
+      pointers.set(e.pointerId, button.dataset.action);
+      if (button.dataset.action === 'jump') jumpQueued = true;
+      if (button.dataset.action === 'pulse') pulseQueued = true;
+    });
+    button.addEventListener('click', e => {
+      if (e.detail !== 0 || state !== 'playing') return;
+      if (button.dataset.action === 'jump') jumpQueued = true;
+      if (button.dataset.action === 'pulse') pulseQueued = true;
+    });
+  });
+  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, e => pointers.delete(e.pointerId));
+  Neon.$('startBtn').addEventListener('click', () => { state === 'paused' ? resumeGame() : startGame(); Neon.$('startBtn').blur(); });
+  Neon.onHide(pauseGame);
+  function loop(now) {
+    const dt = Math.min(.033, Math.max(0, (now - lastFrame) / 1000)); lastFrame = now;
+    if (state === 'playing') {
+      const actions = [...held].map(k => keys[k]).concat([...pointers.values()]);
+      step(run, dt, { left: actions.includes('left'), right: actions.includes('right'), jump: jumpQueued, jumpHeld: actions.includes('jump') || jumpQueued, pulse: pulseQueued });
+      jumpQueued = false; pulseQueued = false;
+      for (const event of run.events) {
+        if (event === 'jump') Neon.audio.sfx.flap();
+        if (event === 'coin' || event === 'box') Neon.audio.sfx.point();
+        if (event === 'stomp') Neon.audio.sfx.whack();
+        if (event === 'pulse') Neon.audio.sfx.boost();
+        if (event === 'prism') { Neon.audio.sfx.golden(); Neon.toast('+1.000 · PRISMA SECRETO!'); }
+        if (event === 'checkpoint') { Neon.audio.sfx.goal(); Neon.toast('CHECKPOINT · se cair, você volta para cá.'); }
+        if (event === 'hurt') { clearInput(); Neon.audio.sfx.hit(); Neon.toast('Opa! Um coração a menos. Vamos de novo.'); }
+        if (event === 'coin' || event === 'box' || event === 'stomp' || event === 'prism') particles.burst(run.x, run.y - 25, event === 'prism' ? '#afa3f5' : '#efce95', 10);
+      }
+      run.events.length = 0; particles.update(dt); hud();
+      camera += (Math.max(0, Math.min(3420 - W, run.x - W * .34)) - camera) * Math.min(1, dt * 9);
+      Neon.audio.music.intensity(run.pulse ? .8 : .25);
+      if (run.status !== 'playing') finish();
+    }
+    draw(); requestAnimationFrame(loop);
+  }
+  // O tamanho lógico é escolhido antes do core configurar o backing store.
+  canvas.width = W; Neon.$('stage').style.setProperty('--arw', W); Neon.$('stage').style.setProperty('--arh', H);
+  hud(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

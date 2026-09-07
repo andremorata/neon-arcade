@@ -72,7 +72,7 @@ const wIni = wheels.indexOf('  // \u2500\u2500 f\u00edsica \u2500\u2500');
 const wFim = wheels.indexOf('  // \u2500\u2500 fim da f\u00edsica \u2500\u2500');
 assert.ok(wIni > 0 && wFim > wIni, 'wheels: marcadores do bloco de fisica nao encontrados');
 const W = new Function(wheels.slice(wIni, wFim)
-  + '; return { K, STEP, PISTAS, CONJUNTOS, compilar, novoCarro, passo, piloto, correrSozinho };')();
+  + '; return { K, STEP, PISTAS, CONJUNTOS, CARROS, compilar, novoCarro, passo, piloto, correrSozinho };')();
 
 assert.strictEqual(W.PISTAS.length, 12, 'O Wheels tem 12 fases');
 assert.strictEqual(W.CONJUNTOS.length, 3, 'As 12 fases vem em 3 conjuntos');
@@ -200,6 +200,57 @@ bebe.gasolina = 10;
 for (let i = 0; i < 6 * 240 && bebe.x < 700; i++) { bebe.gas = true; W.passo(bebe, wLata, W.STEP); bebe.ev.length = 0; }
 assert.ok(bebe.gasolina > 10, 'A lata tem que reabastecer');
 assert.ok(bebe.gasolina <= W.K.tanque, 'A lata nao pode passar do tanque cheio');
+
+// Garagem: cada carro precisa fechar todas as pistas, inclusive ao repetir etapas antigas.
+assert.strictEqual(W.CARROS.length, 3, 'Wheels: três carros');
+for (let modelo = 0; modelo < W.CARROS.length; modelo++) {
+  for (const pd of W.PISTAS) {
+    const p = W.compilar(pd.pecas), resultado = W.correrSozinho(p, 120, modelo);
+    assert.ok(!resultado.morto && resultado.x >= p.fim,
+      `Wheels: ${W.CARROS[modelo].nome} precisa fechar ${pd.nome}`);
+    assert.ok(resultado.gasolina >= 25, `Wheels: ${W.CARROS[modelo].nome} precisa poder ganhar a estrela de gasolina em ${pd.nome}`);
+    assert.ok(p.itens.every(i => !i.pego), 'Wheels: simular qualquer carro devolve os itens');
+  }
+}
+const passeio = W.compilar([['reta', 5000], ['chegada']]);
+const comparacao = W.CARROS.map((_, modelo) => {
+  const c = W.novoCarro(passeio, modelo); c.y -= 1500;
+  for (let i = 0; i < 120; i++) { c.gas = true; W.passo(c, passeio, W.STEP); }
+  return c;
+});
+assert.ok(Math.abs(comparacao[1].w) < Math.abs(comparacao[0].w) && Math.abs(comparacao[0].w) < Math.abs(comparacao[2].w),
+  'Wheels: buggy gira mais suave, protótipo gira mais rápido');
+assert.ok(comparacao[1].gasolina > comparacao[0].gasolina && comparacao[0].gasolina > comparacao[2].gasolina,
+  'Wheels: economia do buggy e consumo do protótipo aparecem na física');
+assert.strictEqual(W.K.tilt, 11, 'Wheels: escolher carro não altera a física base');
+const garagem = new Function('CONJUNTOS', 'PISTAS',
+  block(wheels, '  function liberados(s)') + block(wheels, '  function modeloSalvo(s)') + '; return { liberados, modeloSalvo };')(W.CONJUNTOS, W.PISTAS);
+for (const [aberta, quantidade] of [[0, 1], [3, 1], [4, 2], [7, 2], [8, 3], [11, 3]]) {
+  assert.strictEqual(garagem.liberados({ aberta }), quantidade, 'Wheels: libera carro na entrada da etapa seguinte');
+  assert.strictEqual(garagem.modeloSalvo({ aberta }), quantidade - 1, 'Wheels: save antigo recebe carro compatível com seu progresso');
+}
+assert.strictEqual(garagem.modeloSalvo({ aberta: 0, carro: 2 }), 0, 'Wheels: seleção salva não libera carro bloqueado');
+assert.strictEqual(garagem.modeloSalvo({ aberta: 8, carro: 0 }), 0, 'Wheels: pode manter o primeiro carro após liberar os demais');
+for (const carro of [-1, 9, '2', null]) assert.strictEqual(garagem.modeloSalvo({ aberta: 4, carro }), 1, 'Wheels: seleção inválida tem retorno seguro');
+// Executa a chegada real: desbloqueio, equipagem e persistência na mesma gravação.
+const finalizarWheels = new Function('save', 'pistaN', 'liberados', 'PISTAS', 'K', `
+  let state, fimT, novoModelo = null, pb, persisted;
+  const car = { gasolina: 80, moedas: 3, x: 0, y: 0 }, tempo = 10, alvo = 20;
+  const gravar = () => { persisted = JSON.parse(JSON.stringify(save)); };
+  const totalEstrelas = () => Object.values(save.pistas).reduce((n, p) => n + p.estrelas, 0);
+  const pintarPainel = () => {}, particles = { burst() {} };
+  const Neon = { best: { update: (_, n) => n }, audio: { sfx: { record() {}, level() {} } } };
+  ${block(wheels, '  function chegou()')}
+  chegou(); return { persisted, novoModelo };
+`);
+for (const [aberta, n, esperado] of [[3, 3, 1], [7, 7, 2], [8, 0, null]]) {
+  const save = { v: 1, aberta, carro: 0, moedas: 27, pistas: { 1: { estrelas: 2, tempo: 30, moedas: 4 } } };
+  const result = finalizarWheels(save, n, garagem.liberados, W.PISTAS, W.K);
+  assert.strictEqual(result.novoModelo, esperado, 'Wheels: só anuncia carro ao cruzar uma etapa inédita');
+  assert.strictEqual(result.persisted.carro, esperado ?? 0, 'Wheels: novo carro equipado é persistido');
+  assert.deepStrictEqual(result.persisted.pistas[1], { estrelas: 2, tempo: 30, moedas: 4 }, 'Wheels: desbloqueio preserva recordes antigos');
+  assert.strictEqual(result.persisted.moedas, 30, 'Wheels: desbloqueio preserva o saldo de moedas');
+}
 
 // geometria do alvo do Darts: setor/anel precisam bater com o desenho, senao o dardo
 // crava num lugar e pontua outro. Usa as constantes do proprio arquivo pra nao dessincronizar.
@@ -1430,6 +1481,77 @@ for (const fps of [30, 60, 120]) {
   for (let i = 0; i < 3; i++) { fresh.invincible = 0; J.hurt(fresh); }
   assert.strictEqual(fresh.status, 'lost', 'Jungle: terceira queda encerra a expedição');
   assert.ok(J.expedition().collected.every(v => !v), 'Jungle: reinício devolve os tesouros');
+}
+
+// Pulse: atravessa as três fases com os comandos reais, em três taxas de quadros.
+const pulse = games.pulse;
+const P = new Function('H', pulse.slice(pulse.indexOf('  const FLOOR'), pulse.indexOf('  // ── fim da física')) +
+  '; return { expedition, step, damage, FLOOR, SECTORS };')(540);
+assert.match(pulse, /pb = Neon\.best\.update\('pulse', run.score\)/, 'Pulse: recorde usa a chave do menu');
+for (const fps of [30, 60, 120]) {
+  for (let sector = 0; sector < P.SECTORS.length; sector++) {
+    const s = P.expedition(sector);
+    for (let i = 0; i < fps * 60 && s.status === 'playing'; i++) {
+      const pit = s.map.pits.some(([a, b]) => a - s.x < 75 && b > s.x && s.x < a);
+      const enemy = s.map.enemies.some(e => e.alive && !e.stun && e.x > s.x && e.x - s.x < 110);
+      const jump = s.grounded && (pit || enemy) || !s.grounded && s.jumps === 1 && s.vy > 0 &&
+        s.map.pits.some(([a, b]) => s.x > a - 10 && s.x < b + 10);
+      P.step(s, 1 / fps, { right: true, jumpHeld: true, jump, pulse: !s.cooldown });
+      s.events.length = 0;
+    }
+    assert.strictEqual(s.status, sector === 2 ? 'won' : 'cleared', `Pulse: setor ${sector + 1} atravessável a ${fps} fps`);
+    const final = JSON.stringify(s);
+    P.step(s, 1, { right: true, jump: true });
+    assert.strictEqual(JSON.stringify(s), final, 'Pulse: conclusão congela a fase e seu bônus');
+  }
+  // Caminho secreto: partir da plataforma anterior e saltar entre as três plataformas do pulso.
+  const s = P.expedition(); s.x = 1400; s.y = 276;
+  const targets = [1498, 1608, 1722]; let target = 0, landed = false;
+  for (let i = 0; i < fps * 4 && !s.prisms; i++) {
+    const goal = targets[target];
+    P.step(s, 1 / fps, { right: s.x < goal - 7, left: s.x > goal + 7, jumpHeld: true, jump: s.grounded, pulse: i === 0 });
+    if (s.grounded && Math.abs(s.x - goal) < 20) { target = Math.min(2, target + 1); landed = true; }
+  }
+  assert.ok(landed && s.prisms === 1 && s.pulse > 0, `Pulse: prisma alcançável antes do pulso expirar a ${fps} fps`);
+}
+{
+  const s = P.expedition(); s.x = 258;
+  for (let i = 0; i < 40; i++) P.step(s, 1 / 60, { jump: i === 0, jumpHeld: true });
+  assert.ok(s.map.platforms.find(p => p.x === 240).used, 'Pulse: bater por baixo abre o bloco');
+  assert.strictEqual(s.score, 150, 'Pulse: bloco pontua uma vez');
+  for (let i = 0; i < 60; i++) P.step(s, 1 / 60, { jump: i === 0, jumpHeld: true });
+  assert.strictEqual(s.score, 150, 'Pulse: bloco usado não duplica moeda');
+  const e = s.map.enemies[0]; s.x = e.x; s.y = e.y - 28; s.vy = 160; s.grounded = false;
+  P.step(s, 1 / 60, {});
+  assert.ok(!e.alive && s.vy < 0 && s.lives === 3, 'Pulse: pisão derrota o inimigo e rebate');
+  const near = s.map.enemies[1], far = s.map.enemies[4]; s.x = near.x; s.y = P.FLOOR;
+  P.step(s, 1 / 60, { pulse: true });
+  assert.ok(near.stun > 0 && !far.stun && s.lives === 3, 'Pulse: só atordoa inimigos no alcance e protege do contato');
+  const cooldown = s.cooldown;
+  P.step(s, 1 / 60, { pulse: true });
+  assert.ok(s.cooldown < cooldown, 'Pulse: não reativa durante a recarga');
+  s.x = 1650; s.y = P.FLOOR; s.vy = 0;
+  P.step(s, 1 / 60, {});
+  assert.strictEqual(s.checkpoint, 1650, 'Pulse: bandeira salva o retorno');
+  s.y = 650; P.step(s, 1 / 60, {});
+  assert.ok(s.x === 1650 && s.lives === 2 && s.y === P.FLOOR, 'Pulse: queda volta ao checkpoint e custa uma vida');
+  P.damage(s); assert.strictEqual(s.lives, 2, 'Pulse: retorno tem invulnerabilidade');
+  s.invincible = 0; P.damage(s); s.invincible = 0; P.damage(s);
+  assert.strictEqual(s.status, 'lost', 'Pulse: terceira morte encerra a partida');
+  assert.strictEqual(P.expedition().score, 0, 'Pulse: reinício zera a partida');
+  const next = P.expedition(1, { score: 900, prisms: 1, lives: 1 });
+  assert.ok(next.score === 900 && next.prisms === 1 && next.lives === 2, 'Pulse: próximo setor preserva coleta e recupera um coração');
+  for (const active of [false, true]) {
+    const ghost = P.expedition(); ghost.x = 1490; ghost.y = 216; ghost.vy = 180; ghost.grounded = false; ghost.pulse = active ? 2 : 0;
+    P.step(ghost, 1 / 60, {});
+    assert.strictEqual(ghost.grounded, active, 'Pulse: plataforma secreta só sustenta com o poder ativo');
+  }
+  const jumps = P.expedition();
+  P.step(jumps, 1 / 60, { jump: true, jumpHeld: true });
+  P.step(jumps, 1 / 60, { jump: true, jumpHeld: true });
+  const vy = jumps.vy;
+  P.step(jumps, 1 / 60, { jump: true, jumpHeld: true });
+  assert.ok(jumps.jumps === 2 && jumps.vy > vy, 'Pulse: não existe terceiro salto no ar');
 }
 
 // Recentes: usa as funções reais de registro e ordenação, inclusive sem storage.
