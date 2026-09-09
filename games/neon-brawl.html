@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON BRAWL — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  .stage { --arw: 16; --arh: 9; --maxw: 960px; }
+  /* Manche na esquerda, golpe e pulo na direita: o polegar que anda nunca bate. */
+  .acoes { display: none; position: absolute; right: 14px; bottom: 14px; z-index: 15; gap: 12px; align-items: flex-end; }
+  @media (pointer: coarse), (max-width: 700px) { .acoes { display: flex; } }
+  .overlay:not(.hidden) ~ .acoes { display: none; }
+  .acoes button {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 1px solid rgba(168,219,160, 0.6); background: rgba(8,13,28, 0.55);
+    color: var(--neon-green); font-family: 'Orbitron', sans-serif; font-weight: 700;
+    font-size: 11px; letter-spacing: 0.1em; backdrop-filter: blur(4px);
+    touch-action: none; cursor: pointer; padding: 0;
+  }
+  .acoes button:active { background: rgba(168,219,160, 0.28); }
+  .acoes .golpe { border-color: rgba(237,136,127, 0.6); color: var(--neon-red); width: 78px; height: 78px; font-size: 12px; }
+  .acoes .golpe:active { background: rgba(237,136,127, 0.28); }
+  /* Beat 'em up nao cabe em pe: pede pra girar, como o Breach. */
+  #gire {
+    display: none; position: absolute; inset: 0; z-index: 30;
+    background: rgba(8,13,28, 0.97);
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 20px; gap: 14px;
+  }
+  #gire .icone { font-size: 46px; animation: gira 2s ease-in-out infinite; }
+  @keyframes gira { 0%, 40% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+  @media (prefers-reduced-motion: reduce) { #gire .icone { animation: none; } }
+  #gire p {
+    font-family: 'Orbitron', sans-serif; font-size: 13px; letter-spacing: 0.2em;
+    color: var(--neon-cyan); text-transform: uppercase; margin: 0;
+  }
+  @media (pointer: coarse) and (orientation: portrait) { #gire { display: flex; } }
+  /* escolha do protagonista, dentro do overlay */
+  .herois { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: min(100%, 560px); margin: 0 auto 12px; }
+  .herois button {
+    background: rgba(8,13,28, 0.6); border: 1px solid var(--line); border-radius: 10px;
+    color: var(--text); padding: 8px 6px; cursor: pointer; font-family: 'Space Mono', monospace;
+    display: flex; flex-direction: column; gap: 3px; align-items: center;
+  }
+  .herois button .ico { font-size: 26px; }
+  .herois button b { font-family: 'Orbitron', sans-serif; font-size: 12px; letter-spacing: 0.1em; color: var(--h); }
+  .herois button small { font-size: 9px; color: var(--text-dim); line-height: 1.5; }
+  .herois button i { font-style: normal; font-size: 9px; letter-spacing: 0.15em; color: var(--h); }
+  .herois button.sel { border-color: var(--h); box-shadow: 0 0 14px var(--h); background: rgba(255,255,255, 0.05); }
+  .overlay.pausa .herois, .overlay.pausa .controls-hint { display: none; }
+  @media (orientation: landscape) and (max-height: 520px) {
+    .herois { margin-bottom: 8px; gap: 6px; }
+    .herois button { padding: 5px 4px; }
+    .herois button .ico { font-size: 18px; }
+    .herois button small, .overlay p { display: none; }
+  }
+  .toast { top: 52px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON BRAWL</h1></a>
+      <div class="tag">// | Limpe o andar, suba, veja até onde aguenta | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:5;">
+    <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="brawl">0</span></div>
+    <div class="stat"><span class="lbl">Andar</span><span class="val" id="andar">1</span></div>
+    <div class="stat"><span class="lbl">Vida</span><span class="val" id="vida">100</span></div>
+    <div class="stat"><span class="lbl">Especial</span><span class="val" id="esp">0%</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">ANDAR LIMPO!</div>
+    <canvas id="game" width="960" height="540"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON BRAWL</h2>
+      <p id="overlayText">Briga de rua sem fim: cada andar é montado na hora, com mais inimigos e mais casca. Golpes em sequência enchem o medidor; com ele cheio, pule e golpeie para soltar o especial do seu lutador. Quebre latas e barris: tem coisa escondida.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
+        <div class="fstat"><span>Andar</span><b id="fsAndar">1</b></div>
+        <div class="fstat"><span>Abates</span><b id="fsKills">0</b></div>
+      </div>
+      <div class="herois" id="herois"></div>
+      <button class="btn" id="startBtn">JOGAR</button>
+      <div class="controls-hint">
+        <span class="key">Setas/WASD anda</span><span class="key">Z/J golpe</span><span class="key">X/K/Espaço pula</span><span class="key">Pulo + golpe = especial</span><span class="key">P pausa</span>
+      </div>
+    </div>
+    <div class="acoes">
+      <button class="pulo" data-acao="pular">PULO</button>
+      <button class="golpe" data-acao="golpe">GOLPE</button>
+    </div>
+    <div id="gire"><span class="icone">📱</span><p>Gire o telefone</p><p style="color:var(--text-dim);letter-spacing:0.1em">a briga só rola deitado</p></div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · 3 golpes em sequência · 🔪 🏏 🔫 armas quebram · ❤️ vida · ⚡ enche o especial</footer>
+</div>
+
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 960, H = 540;
+  const CHAO = 300, ZMAX = 215;   // o chao e a faixa de y=CHAO ate y=CHAO+ZMAX; z e a profundidade
+  const G = 1900, PULO = 600;
+
+  // ── geração ──
+  // Tudo que o teste roda em Node fica entre estes marcadores: so depende de Neon.rand/choice.
+  const HEROIS = {
+    bruto:   { nome: 'BRUTO',   emoji: '🥊', cor: '#ed887f', vida: 150, vel: 165, dano: 1.55, alcance: 48, cadencia: 1.2,  especial: 'TERREMOTO', dica: 'soco no chão que derruba todos em volta', pips: 'vida ●●●● · força ●●●● · veloc ●●' },
+    agil:    { nome: 'ÁGIL',    emoji: '⚡', cor: '#9be7ce', vida: 90,  vel: 265, dano: 0.8,  alcance: 40, cadencia: 0.7,  especial: 'CICLONE',   dica: 'giro que atravessa a fila de inimigos', pips: 'vida ●● · força ●● · veloc ●●●●' },
+    tecnico: { nome: 'TÉCNICO', emoji: '🎯', cor: '#efce95', vida: 115, vel: 210, dano: 1.0,  alcance: 44, cadencia: 0.95, especial: 'ONDA NEON', dica: 'onda de energia que varre a frente', pips: 'vida ●●● · força ●●● · veloc ●●●' },
+  };
+  const TIPOS = {
+    capanga:     { vida: 40,  vel: 95,  dano: 8,  w: 30, hd: 44, cor: '#dda077', pontos: 100,  prep: 0.45, recarga: 1.1, alcance: 34 },
+    ligeiro:     { vida: 26,  vel: 180, dano: 6,  w: 26, hd: 40, cor: '#afa3f5', pontos: 130,  prep: 0.28, recarga: 0.8, alcance: 30 },
+    brutamontes: { vida: 130, vel: 62,  dano: 16, w: 44, hd: 56, cor: '#ed887f', pontos: 260,  prep: 0.7,  recarga: 1.6, alcance: 44, pesado: true },
+    chefe:       { vida: 420, vel: 85,  dano: 22, w: 58, hd: 72, cor: '#ff2b7a', pontos: 1200, prep: 0.55, recarga: 1.0, alcance: 56, pesado: true, chefe: true },
+  };
+  const ARMAS = {
+    faca:    { nome: 'FACA',    emoji: '🔪', dano: 1.6, usos: 14, cadencia: 0.8,  alcance: 8 },
+    porrete: { nome: 'PORRETE', emoji: '🏏', dano: 2.3, usos: 9,  cadencia: 1.35, alcance: 22, derruba: true },
+    pistola: { nome: 'PISTOLA', emoji: '🔫', dano: 1,   usos: 5,  cadencia: 1,    alcance: 0, tiro: true },
+  };
+  const NOMES = ['BECO', 'DOCA', 'METRÔ', 'GALPÃO', 'TERRAÇO', 'ESGOTO', 'GARAGEM', 'PONTE', 'MERCADO', 'ARENA'];
+
+  // Um andar novo a cada subida. Ondas e quantidade sobem com n; a partir do 10
+  // so a casca e o dano continuam crescendo. Chefe a cada 5, sempre com escolta.
+  function montarAndar(n) {
+    const largura = 2200 + Math.min(n, 12) * 110;
+    const nOndas = Math.min(4, 2 + Math.floor((n - 1) / 3));
+    const porOnda = Math.min(7, 2 + Math.floor(n / 2));
+    const pool = ['capanga'];
+    if (n >= 2) pool.push('ligeiro');
+    if (n >= 4) pool.push('brutamontes');
+    const ondas = [];
+    for (let i = 0; i < nOndas; i++) {
+      const x = largura * (0.15 + 0.7 * i / (nOndas - 1));
+      const inimigos = [];
+      for (let k = 0; k < porOnda; k++) inimigos.push(Neon.choice(pool));
+      if (n % 5 === 0 && i === nOndas - 1) inimigos.unshift('chefe');
+      ondas.push({ x, inimigos });
+    }
+    const quebraveis = [];
+    for (let i = 0, q = 3 + Math.min(4, Math.floor(n / 2)); i < q; i++) {
+      quebraveis.push({ x: Neon.rand(180, largura - 180), z: Neon.rand(20, ZMAX - 20), tipo: Neon.choice(['lata', 'barril', 'caixa']), vida: 2 });
+    }
+    const itens = n % 3 === 0 ? [{ x: Neon.rand(300, largura - 300), z: Neon.rand(20, ZMAX - 20), tipo: 'vida' }] : [];
+    return {
+      n, nome: `${NOMES[(n - 1) % NOMES.length]} ${n}`, matiz: (n * 47) % 360, largura, ondas, quebraveis, itens,
+      vidaMult: 1 + 0.15 * (n - 1), danoMult: 1 + 0.07 * (n - 1), velMult: 1 + Math.min(0.35, 0.025 * (n - 1)),
+    };
+  }
+  // ── fim da geração ──
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), andar: Neon.$('andar'), vida: Neon.$('vida'), esp: Neon.$('esp'),
+    fsScore: Neon.$('fsScore'), fsAndar: Neon.$('fsAndar'), fsKills: Neon.$('fsKills'),
+    stage: Neon.$('stage'), herois: Neon.$('herois'), overlay: Neon.$('overlay'),
+  };
+
+  let heroi = localStorage.getItem('neon-brawl-heroi');
+  if (!HEROIS[heroi]) heroi = 'tecnico';
+  let andar = null, nAndar = 0, cam = 0, ondaIdx = 0, ondaAtiva = -1, fila = [], spawnLado = 1;
+  let inimigos = [], quebraveis = [], itens = [], tiros = [];
+  let score = 0, kills = 0, esp = 0, espAvisado = false, combo = 0, comboT = 0;
+  let pb = Neon.best.get('brawl'), startHi = 0;
+  let state = 'menu', lastFrame = performance.now(), tempo = 0;
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, cor: '' };
+  const particles = new Neon.Particles();
+  els.best.textContent = pb;
+
+  const jog = { x: 80, z: ZMAX / 2, h: 0, vy: 0, kx: 0, w: 30, hd: 46, olha: 1, vida: 100, vidaMax: 100,
+                invuln: 0, stun: 0, caido: 0, ataque: null, buffer: false, comboIdx: -1, ultimoGolpe: 0,
+                arma: null, dash: null, voadora: null, slam: false, anim: 0, andando: false };
+
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(cor, ms) { if (!Neon.motion.reduced) flash = { t: ms, cor }; }
+  const pontuar = (v) => { score += v; els.score.textContent = score; };
+
+  // ── escolha do lutador ────────────────────────────
+  for (const [k, h] of Object.entries(HEROIS)) {
+    const b = document.createElement('button');
+    b.dataset.heroi = k;
+    b.style.setProperty('--h', h.cor);
+    b.innerHTML = `<span class="ico">${h.emoji}</span><b>${h.nome}</b><small>${h.pips}<br>${h.dica}</small><i>${h.especial}</i>`;
+    b.addEventListener('click', () => { heroi = k; localStorage.setItem('neon-brawl-heroi', k); marcarHeroi(); Neon.audio.sfx.click(); });
+    els.herois.appendChild(b);
+  }
+  function marcarHeroi() {
+    for (const b of els.herois.children) b.classList.toggle('sel', b.dataset.heroi === heroi);
+  }
+  marcarHeroi();
+
+  // ── andar ─────────────────────────────────────────
+  function carregarAndar(n) {
+    nAndar = n;
+    andar = montarAndar(n);
+    inimigos = []; tiros = []; fila = [];
+    quebraveis = andar.quebraveis.map(q => ({ ...q, pisca: 0 }));
+    itens = andar.itens.map(it => ({ ...it, t: 0 }));
+    ondaIdx = 0; ondaAtiva = -1; cam = 0;
+    Object.assign(jog, { x: 80, z: ZMAX / 2, h: 0, vy: 0, kx: 0, olha: 1, invuln: 1, stun: 0, caido: 0,
+                         ataque: null, buffer: false, dash: null, voadora: null, slam: false });
+    els.andar.textContent = n;
+    Neon.popEl(els.andar);
+    Neon.toast(`ANDAR ${n} · ${andar.nome}`);
+    Neon.audio.music.intensity(Math.min(1, n / 12));
+  }
+
+  function criarInimigo(tipo, lado) {
+    const b = TIPOS[tipo];
+    const vida = Math.round(b.vida * andar.vidaMult);
+    return { ...b, tipo, vida, vidaMax: vida, dano: b.dano * andar.danoMult, vel: b.vel * andar.velMult,
+             x: lado < 0 ? cam - 50 : cam + W + 50, z: Neon.rand(20, ZMAX - 20), h: 0, vy: 0, kx: 0,
+             lado, olha: -lado, estado: 'anda', t: 0, cd: Neon.rand(0.4, 1.2), pisca: 0, anim: Neon.rand(0, 6) };
+  }
+  // ponytail: no maximo 5 na tela; o resto espera na fila e entra quando um cai.
+  function spawnDaFila() {
+    while (fila.length && inimigos.length < 5) {
+      const tipo = fila.shift();
+      inimigos.push(criarInimigo(tipo, tipo === 'chefe' ? 1 : spawnLado));
+      spawnLado *= -1;
+      if (tipo === 'chefe') { Neon.toast('👹 CHEFE DO ANDAR'); Neon.audio.sfx.sizzle(); shakeAt(8, 300); }
+    }
+  }
+
+  // ── golpes do jogador ─────────────────────────────
+  const podeAgir = () => state === 'playing' && jog.stun <= 0 && jog.caido <= 0 && !jog.dash;
+
+  function golpe() {
+    if (!podeAgir()) return;
+    if (jog.h > 0) {                       // no ar: especial se estiver cheio, senao voadora
+      if (esp >= 100) return especial();
+      if (!jog.voadora && !jog.slam) { jog.voadora = { acertados: new Set() }; Neon.audio.sfx.rotate(); }
+      return;
+    }
+    if (jog.arma && ARMAS[jog.arma.tipo].tiro) return atirar();
+    if (jog.ataque) { jog.buffer = true; return; }
+    iniciarGolpe();
+  }
+  // Sequencia de 3: dois diretos e um final que derruba. Cada aperto encadeia
+  // no anterior se vier dentro de 650 ms; parou, volta pro primeiro.
+  function iniciarGolpe() {
+    const agora = performance.now();
+    const idx = (agora - jog.ultimoGolpe < 650 && jog.comboIdx >= 0 && jog.comboIdx < 2) ? jog.comboIdx + 1 : 0;
+    jog.comboIdx = idx; jog.ultimoGolpe = agora;
+    const arma = jog.arma ? ARMAS[jog.arma.tipo] : null;
+    const cad = HEROIS[heroi].cadencia * (arma ? arma.cadencia : 1);
+    const [dur, ativoEm] = [[0.22, 0.08], [0.24, 0.09], [0.4, 0.15]][idx];
+    jog.ataque = { idx, t: 0, dur: dur * cad, ativoEm: ativoEm * cad, feito: false };
+    jog.buffer = false;
+  }
+  function aplicarGolpe(a) {
+    const h = HEROIS[heroi], arma = jog.arma ? ARMAS[jog.arma.tipo] : null;
+    const alc = h.alcance + (arma ? arma.alcance : 0), fin = a.idx === 2;
+    const dano = 10 * h.dano * (arma ? arma.dano : 1) * (fin ? 1.6 : 1);
+    const n = acertar({ x0: jog.x, x1: jog.x + jog.olha * (alc + 14), z: jog.z, dz: 30, dano,
+                        derruba: fin ? (arma && arma.derruba ? 2 : 1) : 0, dir: jog.olha, esp: fin ? 14 : 9 });
+    if (n && arma && --jog.arma.usos <= 0) { jog.arma = null; Neon.toast('💥 A ARMA QUEBROU'); }
+    if (n) { Neon.audio.sfx.whack(); if (fin) shakeAt(5, 120); } else Neon.audio.sfx.move();
+  }
+  function atirar() {
+    if (jog.ataque) return;
+    jog.ataque = { idx: 0, t: 0, dur: 0.3, ativoEm: 0.05, feito: true, tiro: true };
+    tiros.push({ x: jog.x + jog.olha * 20, z: jog.z, vx: jog.olha * 900, dano: 32, onda: false, viajou: 0, alcance: W });
+    Neon.audio.sfx.shoot();
+    if (--jog.arma.usos <= 0) { jog.arma = null; Neon.toast('🔫 SEM BALAS'); }
+  }
+  function pular() {
+    if (!podeAgir() || jog.h > 0 || jog.ataque) return;
+    jog.vy = PULO;
+    Neon.audio.sfx.flap();
+  }
+  // Especial unico por lutador. Custa o medidor inteiro.
+  function especial() {
+    esp = 0; espAvisado = false;
+    Neon.audio.sfx.boost();
+    flashAt('rgba(155,231,206,', 200);
+    particles.float(jog.x, CHAO + jog.z - jog.hd - 30, HEROIS[heroi].especial, HEROIS[heroi].cor, 16);
+    jog.voadora = null;
+    if (heroi === 'bruto') { jog.slam = true; jog.vy = -900; }
+    else if (heroi === 'agil') jog.dash = { t: 0.5, vx: jog.olha * 640, acertados: new Set() };
+    else tiros.push({ x: jog.x, z: jog.z, vx: jog.olha * 560, dano: 45, onda: true, viajou: 0, alcance: 700, acertados: new Set() });
+  }
+  function aterrissar() {
+    jog.voadora = null;
+    if (!jog.slam) return;
+    jog.slam = false;
+    acertar({ x0: jog.x - 170, x1: jog.x + 170, z: jog.z, dz: 80, dano: 60, derruba: 2, dir: 0, esp: 0 });
+    particles.wave(jog.x, CHAO + jog.z, HEROIS.bruto.cor, 340);
+    Neon.audio.sfx.boom();
+    shakeAt(14, 320);
+  }
+
+  // Caixa de golpe contra inimigos e quebraveis. acertados evita bater duas
+  // vezes no mesmo alvo com um golpe que dura varios quadros.
+  function acertar(hit) {
+    const x0 = Math.min(hit.x0, hit.x1), x1 = Math.max(hit.x0, hit.x1);
+    let n = 0;
+    for (const e of [...inimigos]) {
+      if (e.estado === 'caido') continue;
+      if (hit.acertados && hit.acertados.has(e)) continue;
+      if (e.x + e.w / 2 < x0 || e.x - e.w / 2 > x1 || Math.abs(e.z - hit.z) > hit.dz) continue;
+      if (hit.acertados) hit.acertados.add(e);
+      ferir(e, hit); n++;
+    }
+    for (const q of [...quebraveis]) {
+      if (q.x + 18 < x0 || q.x - 18 > x1 || Math.abs(q.z - hit.z) > hit.dz) continue;
+      if (hit.acertados) { if (hit.acertados.has(q)) continue; hit.acertados.add(q); }
+      quebrar(q); n++;
+    }
+    return n;
+  }
+  function ferir(e, hit) {
+    e.vida -= hit.dano;
+    e.pisca = 0.1;
+    combo++; comboT = 1.2;
+    esp = Math.min(100, esp + (hit.esp || 0));
+    if (esp >= 100 && !espAvisado) { espAvisado = true; Neon.toast('⚡ ESPECIAL PRONTO: pule + golpe'); }
+    particles.burst(e.x, CHAO + e.z - e.h - e.hd * 0.6, '#ffffff', 5, 130, 2.2);
+    if (combo > 1) particles.float(e.x, CHAO + e.z - e.h - e.hd - 12, `x${combo}`, '#efce95', 13);
+    const dir = hit.dir || (e.x < jog.x ? -1 : 1);
+    if (e.vida <= 0) return matar(e, dir);
+    const derruba = hit.derruba >= 2 || (hit.derruba === 1 && !e.pesado);
+    if (derruba) { e.estado = 'caido'; e.t = 1.1; e.vy = 240; e.h = Math.max(e.h, 1); e.kx = dir * 240; Neon.audio.sfx.drop(); }
+    else { e.estado = 'stun'; e.t = e.pesado ? 0.14 : 0.3; e.kx = dir * (e.pesado ? 40 : 110); }
+  }
+  function matar(e, dir) {
+    inimigos = inimigos.filter(o => o !== e);
+    kills++;
+    pontuar(Math.round(e.pontos * (1 + 0.1 * (nAndar - 1))));
+    Neon.popEl(els.score);
+    particles.burst(e.x, CHAO + e.z - e.hd / 2, e.cor, e.chefe ? 40 : 14, 220, 3.5);
+    for (let i = 0; i < 4; i++) particles.emit(e.x, CHAO + e.z - e.hd / 2, dir * Neon.rand(80, 260), Neon.rand(-200, -40), e.cor, 4);
+    Neon.audio.sfx[e.chefe ? 'boom' : 'golden']();
+    if (e.chefe) { shakeAt(18, 600); flashAt('rgba(239,206,149,', 500); itens.push({ x: e.x, z: e.z, tipo: 'vida', t: 0 }); }
+    spawnDaFila();
+  }
+  // Quebrar solta o que estava escondido: vida, energia, arma, pontos ou nada.
+  function quebrar(q) {
+    q.pisca = 0.1;
+    if (--q.vida > 0) { Neon.audio.sfx.hit(); return; }
+    quebraveis = quebraveis.filter(o => o !== q);
+    pontuar(30);
+    particles.burst(q.x, CHAO + q.z - 16, q.tipo === 'barril' ? '#dda077' : '#a8b9c8', 14, 180, 3);
+    Neon.audio.sfx[q.tipo === 'barril' ? 'boom' : 'whack']();
+    const r = Math.random();
+    const tipo = r < 0.25 ? 'vida' : r < 0.45 ? 'esp' : r < 0.75 ? Neon.choice(Object.keys(ARMAS)) : r < 0.9 ? 'pontos' : null;
+    if (tipo) itens.push({ x: q.x, z: q.z, tipo, t: 0 });
+  }
+
+  function danoNoJogador(q, forte) {
+    if (jog.invuln > 0 || jog.caido > 0 || jog.dash || state !== 'playing') return;
+    jog.vida = Math.max(0, jog.vida - Math.round(q));
+    jog.ataque = null; jog.buffer = false; jog.voadora = null; jog.comboIdx = -1;
+    combo = 0;
+    if (forte || jog.h > 0) { jog.caido = 1.0; jog.invuln = 1.7; jog.vy = 260; jog.h = Math.max(jog.h, 1); jog.kx = -jog.olha * 200; Neon.audio.sfx.drop(); }
+    else { jog.stun = 0.28; jog.invuln = 0.9; jog.kx = -jog.olha * 80; }
+    els.vida.textContent = jog.vida;
+    Neon.audio.sfx.hit();
+    shakeAt(8, 200);
+    flashAt('rgba(237,136,127,', 220);
+    if (jog.vida <= 0) fim();
+  }
+
+  // ── inimigos ──────────────────────────────────────
+  function atualizarInimigo(e, dt) {
+    e.t -= dt; e.cd -= dt;
+    if (e.pisca > 0) e.pisca -= dt;
+    if (e.h > 0 || e.vy > 0) { e.vy -= G * dt; e.h += e.vy * dt; if (e.h <= 0) { e.h = 0; e.vy = 0; } }
+    e.x += e.kx * dt; e.kx *= Math.pow(0.01, dt);
+    e.x = Neon.clamp(e.x, cam - 40, cam + W + 40);
+    e.z = Neon.clamp(e.z, 0, ZMAX);
+    e.andando = false;
+    switch (e.estado) {
+      case 'caido': if (e.t <= 0 && e.h <= 0) { e.estado = 'anda'; e.cd = 0.5; } return;
+      case 'stun': if (e.t <= 0) e.estado = 'anda'; return;
+      case 'prep': if (e.t <= 0) { golpeInimigo(e); e.estado = 'recupera'; e.t = e.recarga; } return;
+      case 'recupera': if (e.t <= 0) e.estado = 'anda'; return;
+    }
+    // anda: quer ficar do seu lado do jogador, a um golpe de distancia
+    let alvoX = jog.x + e.lado * (e.alcance + jog.w / 2 - 6);
+    if (alvoX < cam + 24 || alvoX > cam + W - 24) { e.lado *= -1; alvoX = jog.x + e.lado * (e.alcance + jog.w / 2 - 6); }
+    const dx = alvoX - e.x, dz = jog.z - e.z;
+    if (Math.abs(dx) > 4) { e.x += Math.sign(dx) * Math.min(Math.abs(dx), e.vel * dt); e.andando = true; }
+    if (Math.abs(dz) > 3) { e.z += Math.sign(dz) * Math.min(Math.abs(dz), e.vel * 0.7 * dt); e.andando = true; }
+    if (e.andando) e.anim += dt;
+    e.olha = jog.x < e.x ? -1 : 1;
+    const perto = Math.abs(jog.x - e.x) < e.alcance + jog.w / 2 + 6 && Math.abs(dz) < 22;
+    if (perto && e.cd <= 0 && jog.caido <= 0) { e.estado = 'prep'; e.t = e.prep; }
+  }
+  function golpeInimigo(e) {
+    e.cd = e.recarga + Neon.rand(0, 0.5);
+    if (Math.abs(jog.x - e.x) > e.alcance + jog.w / 2 + 10 || Math.abs(jog.z - e.z) > 28 || jog.h > 36) return;
+    danoNoJogador(e.dano, e.chefe || (e.pesado && Math.random() < 0.5));
+  }
+  // ponytail: O(n²) com no maximo 5 inimigos; nem vale um grid.
+  function separarInimigos(dt) {
+    for (let i = 0; i < inimigos.length; i++) for (let j = i + 1; j < inimigos.length; j++) {
+      const a = inimigos[i], b = inimigos[j];
+      if (Math.abs(a.z - b.z) > 14 || Math.abs(a.x - b.x) > 26) continue;
+      const s = a.x < b.x ? -1 : 1;
+      a.x += s * 40 * dt; b.x -= s * 40 * dt;
+      a.z += (a.z < b.z ? -1 : 1) * 30 * dt;
+    }
+  }
+
+  // ── fluxo ─────────────────────────────────────────
+  function fim() {
+    state = 'gameover';
+    imersivo(false);
+    Neon.audio.music.down();
+    pb = Neon.best.update('brawl', score);
+    els.best.textContent = pb;
+    const isRecord = startHi === 0 ? score > 0 : score > startHi;
+    Neon.audio.sfx[isRecord ? 'record' : 'death']();
+    els.fsScore.textContent = score;
+    els.fsAndar.textContent = nAndar;
+    els.fsKills.textContent = kills;
+    Neon.$('finalStats').style.display = 'grid';
+    els.overlay.classList.remove('pausa');
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'VOCÊ CAIU',
+      `${HEROIS[heroi].nome} parou no andar ${nAndar} com ${kills} ${kills === 1 ? 'abate' : 'abates'}.`,
+      'JOGAR DE NOVO', isRecord ? 'record' : 'go');
+  }
+
+  const imersivo = (on) => document.body.classList.toggle('imersivo', on);
+
+  function startGame() {
+    Neon.audio.ensure();
+    imersivo(true);
+    startHi = pb;
+    score = 0; kills = 0; esp = 0; espAvisado = false; combo = 0; comboT = 0; spawnLado = 1;
+    const h = HEROIS[heroi];
+    jog.vidaMax = h.vida; jog.vida = h.vida; jog.arma = null; jog.comboIdx = -1;
+    els.score.textContent = '0';
+    els.vida.textContent = jog.vida;
+    els.esp.textContent = '0%';
+    particles.clear();
+    carregarAndar(1);
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    els.overlay.classList.add('pausa');
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar.', 'CONTINUAR');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    state = 'playing';
+    lastFrame = performance.now();
+    els.overlay.classList.remove('pausa');
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  // ── input ─────────────────────────────────────────
+  const preso = new Set();
+  const TECLAS = { arrowleft: 'esq', a: 'esq', arrowright: 'dir', d: 'dir',
+                   arrowup: 'cima', w: 'cima', arrowdown: 'baixo', s: 'baixo' };
+  const GOLPE = ['z', 'j'], PULOK = ['x', 'k', ' '];
+
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
+    const acao = k in TECLAS ? 'anda' : GOLPE.includes(k) ? 'golpe' : PULOK.includes(k) ? 'pular' : k === 'enter' ? 'start' : null;
+    if (!acao) return;
+    e.preventDefault();
+    if (state === 'menu' || state === 'gameover') { startGame(); return; }
+    if (state === 'paused') { resumeGame(); return; }
+    if (acao === 'anda') preso.add(TECLAS[k]);
+    else if (acao === 'golpe') { if (!e.repeat) golpe(); }
+    else if (acao === 'pular') { if (!e.repeat) pular(); }
+  });
+  document.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in TECLAS) preso.delete(TECLAS[k]);
+  });
+
+  document.querySelectorAll('.acoes button').forEach(btn => {
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (btn.dataset.acao === 'golpe') golpe(); else pular();
+    });
+  });
+
+  // Manche na metade esquerda, nos dois eixos: profundidade importa aqui.
+  // Toque na metade direita e clique de mouse dao golpe; botao direito pula.
+  const toques = new Map();
+  let manche = null, dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+
+  function paraQuadro(e) {
+    const r = els.stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  }
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay, .acoes, #gire')) return;
+    e.preventDefault();
+    if (e.pointerType === 'touch') dedo = true;
+    if (e.button === 2) { pular(); return; }
+    const p = paraQuadro(e);
+    if (dedo && p.x < W * 0.5) { manche = { ox: p.x, oy: p.y, dx: 0, dz: 0 }; toques.set(e.pointerId, 'manche'); }
+    else golpe();
+  });
+  els.stage.addEventListener('pointermove', (e) => {
+    if (toques.get(e.pointerId) !== 'manche' || !manche) return;
+    const p = paraQuadro(e);
+    manche.dx = Neon.clamp((p.x - manche.ox) / 50, -1, 1);
+    manche.dz = Neon.clamp((p.y - manche.oy) / 50, -1, 1);
+  });
+  els.stage.addEventListener('contextmenu', (e) => e.preventDefault());
+  const soltar = (e) => { if (toques.get(e.pointerId) === 'manche') manche = null; toques.delete(e.pointerId); };
+  window.addEventListener('pointerup', soltar);
+  window.addEventListener('pointercancel', soltar);
+
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    if (state !== 'playing') return;
+    tempo += dt;
+    for (const k of ['invuln', 'stun', 'caido']) if (jog[k] > 0) jog[k] -= dt;
+    if (comboT > 0 && (comboT -= dt) <= 0) combo = 0;
+    const h = HEROIS[heroi];
+
+    // andar: no chao e sem golpe em andamento; no ar so a inercia
+    let mx = 0, mz = 0;
+    if (podeAgir() && !(jog.ataque && jog.h <= 0)) {
+      if (preso.has('esq')) mx -= 1;
+      if (preso.has('dir')) mx += 1;
+      if (preso.has('cima')) mz -= 1;
+      if (preso.has('baixo')) mz += 1;
+      if (manche) { mx = Math.abs(manche.dx) > 0.2 ? manche.dx : 0; mz = Math.abs(manche.dz) > 0.2 ? manche.dz : 0; }
+    }
+    jog.andando = !!(mx || mz) && jog.h <= 0;
+    if (jog.andando) jog.anim += dt;
+    if (mx && !jog.ataque) jog.olha = Math.sign(mx);
+    jog.x += mx * h.vel * dt;
+    jog.z += mz * h.vel * 0.7 * dt;
+    jog.x += jog.kx * dt; jog.kx *= Math.pow(0.01, dt);
+
+    if (jog.dash) {
+      jog.dash.t -= dt;
+      jog.x += jog.dash.vx * dt;
+      jog.h = 22;
+      acertar({ x0: jog.x - 34, x1: jog.x + 34, z: jog.z, dz: 44, dano: 30, derruba: 2, dir: Math.sign(jog.dash.vx), esp: 0, acertados: jog.dash.acertados });
+      particles.emit(jog.x, CHAO + jog.z - 30, -jog.dash.vx * 0.2, Neon.rand(-60, 60), HEROIS.agil.cor, 3.5);
+      if (jog.dash.t <= 0) { jog.dash = null; jog.vy = 0; }
+    } else if (jog.h > 0 || jog.vy > 0) {
+      jog.vy -= G * dt;
+      jog.h += jog.vy * dt;
+      if (jog.h <= 0) { jog.h = 0; jog.vy = 0; aterrissar(); }
+    }
+    if (jog.voadora && jog.vy < 150) {
+      acertar({ x0: jog.x, x1: jog.x + jog.olha * (h.alcance + 22), z: jog.z, dz: 32, dano: 14 * h.dano, derruba: 1, dir: jog.olha, esp: 10, acertados: jog.voadora.acertados });
+    }
+
+    const a = jog.ataque;
+    if (a) {
+      a.t += dt;
+      if (!a.feito && a.t >= a.ativoEm) { a.feito = true; aplicarGolpe(a); }
+      if (a.feito && jog.buffer && a.t >= a.ativoEm + 0.08 && !a.tiro) iniciarGolpe();
+      else if (a.t >= a.dur) jog.ataque = null;
+    }
+
+    // camera so avanca; com onda ativa ela trava e o jogador fica no quadro
+    if (ondaAtiva < 0) cam = Neon.clamp(Math.max(cam, jog.x - W * 0.42), 0, andar.largura - W);
+    const xMax = ondaAtiva >= 0 ? cam + W - 16 : andar.largura - 16;
+    jog.x = Neon.clamp(jog.x, cam + 16, xMax);
+    jog.z = Neon.clamp(jog.z, 0, ZMAX);
+
+    if (ondaAtiva < 0 && ondaIdx < andar.ondas.length && jog.x > andar.ondas[ondaIdx].x) {
+      ondaAtiva = ondaIdx++;
+      fila = [...andar.ondas[ondaAtiva].inimigos];
+      spawnDaFila();
+      Neon.audio.sfx.beep();
+    }
+    if (ondaAtiva >= 0 && !inimigos.length && !fila.length) {
+      ondaAtiva = -1;
+      pontuar(100 * nAndar);
+      Neon.audio.sfx.level();
+      Neon.toast(ondaIdx >= andar.ondas.length ? '✅ ANDAR LIMPO · SIGA ➜' : 'SIGA ➜');
+    }
+    if (ondaAtiva < 0 && ondaIdx >= andar.ondas.length && jog.x > andar.largura - 40) {
+      pontuar(300 * nAndar);
+      carregarAndar(nAndar + 1);
+      return;
+    }
+
+    for (const e of inimigos) atualizarInimigo(e, dt);
+    separarInimigos(dt);
+    for (const q of quebraveis) if (q.pisca > 0) q.pisca -= dt;
+
+    for (const t of [...tiros]) {
+      const dx = t.vx * dt;
+      t.x += dx; t.viajou += Math.abs(dx);
+      const n = acertar({ x0: t.x - (t.onda ? 30 : 6), x1: t.x + (t.onda ? 30 : 6), z: t.z, dz: t.onda ? 40 : 24,
+                          dano: t.dano, derruba: t.onda ? 2 : 0, dir: Math.sign(t.vx), esp: t.onda ? 0 : 6, acertados: t.acertados || null });
+      if (n && !t.onda) Neon.audio.sfx.whack();
+      if ((n && !t.onda) || t.viajou > t.alcance || t.x < cam - 100 || t.x > cam + W + 100) tiros = tiros.filter(o => o !== t);
+    }
+
+    for (const it of [...itens]) {
+      it.t += dt;
+      if (Math.abs(it.x - jog.x) > 26 || Math.abs(it.z - jog.z) > 26 || jog.h > 30) continue;
+      itens = itens.filter(o => o !== it);
+      Neon.audio.sfx.golden();
+      const y = CHAO + jog.z - jog.hd - 16;
+      if (it.tipo === 'vida') { jog.vida = Math.min(jog.vidaMax, jog.vida + Math.round(jog.vidaMax * 0.35)); els.vida.textContent = jog.vida; particles.float(jog.x, y, '+VIDA', '#a8dba0', 14); }
+      else if (it.tipo === 'esp') { esp = Math.min(100, esp + 50); particles.float(jog.x, y, '+ENERGIA', '#9be7ce', 14); }
+      else if (it.tipo === 'pontos') { pontuar(250); particles.float(jog.x, y, '+250', '#efce95', 14); }
+      else { jog.arma = { tipo: it.tipo, usos: ARMAS[it.tipo].usos }; particles.float(jog.x, y, ARMAS[it.tipo].nome, '#efce95', 14); }
+    }
+
+    els.esp.textContent = `${esp | 0}%`;
+  }
+
+  // ── render ────────────────────────────────────────
+  const ITEM_EMOJI = { vida: '❤️', esp: '⚡', pontos: '💎', faca: '🔪', porrete: '🏏', pistola: '🔫' };
+  const QUEBRA_EMOJI = { lata: '🗑️', barril: '🛢️', caixa: '📦' };
+
+  function sombra(x, z, w) {
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath(); ctx.ellipse(x, CHAO + z, w * 0.6, 6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  function boneco(o, cor, op) {
+    const pe = CHAO + o.z, y = pe - o.h;
+    if (op.caido) {
+      Neon.glow(ctx, cor, 12);
+      ctx.fillStyle = op.pisca ? '#ffffff' : cor;
+      ctx.fillRect(o.x - o.hd / 2, y - o.w * 0.8, o.hd, o.w * 0.8);
+      ctx.shadowBlur = 0;
+      return;
+    }
+    Neon.glow(ctx, cor, op.chefe ? 26 : 14);
+    ctx.fillStyle = op.pisca ? '#ffffff' : cor;
+    const passo = op.andando ? Math.sin(o.anim * 14) * 5 : 0;
+    ctx.fillRect(o.x - o.w / 2 + 2 + passo, y - o.hd * 0.3, o.w * 0.32, o.hd * 0.3);
+    ctx.fillRect(o.x + o.w / 2 - 2 - o.w * 0.32 - passo, y - o.hd * 0.3, o.w * 0.32, o.hd * 0.3);
+    ctx.fillRect(o.x - o.w / 2, y - o.hd, o.w, o.hd * 0.72);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#080d1c';
+    ctx.fillRect(o.x + o.olha * 3 - 6, y - o.hd * 0.86, 5, 5);
+    ctx.fillRect(o.x + o.olha * 3 + 2, y - o.hd * 0.86, 5, 5);
+    if (op.braco) {
+      ctx.fillStyle = op.bracoCor || cor;
+      Neon.glow(ctx, ctx.fillStyle, 12);
+      ctx.fillRect(o.olha > 0 ? o.x + o.w / 2 - 2 : o.x - o.w / 2 + 2 - op.braco, y - o.hd * 0.6, op.braco, op.grosso || 7);
+      ctx.shadowBlur = 0;
+    }
+    if (op.emoji) {
+      ctx.font = `20px ${Neon.EMOJI}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(op.emoji, o.x + o.olha * (o.w / 2 + 10), y - o.hd * 0.5);
+    }
+  }
+  function barraVida(o) {
+    if (o.vida >= o.vidaMax) return;
+    const y = CHAO + o.z - o.h - o.hd - 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(o.x - o.w / 2, y, o.w, 5);
+    ctx.fillStyle = o.vida / o.vidaMax > 0.4 ? '#a8dba0' : '#ed887f';
+    ctx.fillRect(o.x - o.w / 2, y, o.w * Math.max(0, o.vida / o.vidaMax), 5);
+  }
+
+  function render(now) {
+    const m = andar ? andar.matiz : 200;
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+    // parede do fundo, tingida pelo andar
+    const ceu = ctx.createLinearGradient(0, 0, 0, CHAO);
+    ceu.addColorStop(0, `hsl(${m} 40% 7%)`);
+    ceu.addColorStop(1, `hsl(${m} 45% 16%)`);
+    ctx.fillStyle = ceu;
+    ctx.fillRect(0, 0, W, CHAO);
+    // predios ao fundo e janelas, paralaxe a meia velocidade
+    for (let i = 0; i < 14; i++) {
+      const bx = ((i * 190 - cam * 0.45) % (W + 380) + W + 380) % (W + 380) - 190;
+      const alt = 120 + (i % 4) * 45;
+      ctx.fillStyle = `hsl(${m} 35% 11%)`;
+      ctx.fillRect(bx, CHAO - alt, 120, alt);
+      ctx.fillStyle = `hsl(${(m + 40) % 360} 80% 60% / 0.35)`;
+      for (let j = 0; j < 4; j++) for (let k = 0; k < 3; k++) if ((i + j * 3 + k) % 3) ctx.fillRect(bx + 14 + k * 34, CHAO - alt + 16 + j * 30, 18, 12);
+    }
+    // letreiro neon
+    ctx.strokeStyle = `hsl(${(m + 180) % 360} 90% 65%)`;
+    Neon.glow(ctx, ctx.strokeStyle, 22);
+    ctx.lineWidth = 3;
+    const lx = ((300 - cam * 0.45) % (W + 380) + W + 380) % (W + 380) - 190;
+    ctx.strokeRect(lx, CHAO - 210, 150, 34);
+    ctx.font = '700 18px Orbitron, sans-serif';
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(andar ? andar.nome.split(' ')[0] : 'NEON', lx + 75, CHAO - 193);
+    ctx.shadowBlur = 0;
+    // chao com linhas em fuga
+    const piso = ctx.createLinearGradient(0, CHAO, 0, H);
+    piso.addColorStop(0, `hsl(${m} 30% 14%)`);
+    piso.addColorStop(1, `hsl(${m} 35% 6%)`);
+    ctx.fillStyle = piso;
+    ctx.fillRect(0, CHAO, W, H - CHAO);
+    ctx.strokeStyle = `hsl(${m} 60% 60% / 0.14)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let z = 0; z <= ZMAX + 30; z += 44) { ctx.moveTo(0, CHAO + z); ctx.lineTo(W, CHAO + z); }
+    for (let x = -((cam % 120) + 120); x < W + 120; x += 120) { ctx.moveTo(x, CHAO); ctx.lineTo(x + (x - W / 2) * 0.25, H); }
+    ctx.stroke();
+    ctx.fillStyle = `hsl(${(m + 180) % 360} 90% 65%)`;
+    Neon.glow(ctx, ctx.fillStyle, 14);
+    ctx.fillRect(0, CHAO - 2, W, 2);
+    ctx.shadowBlur = 0;
+
+    ctx.save();
+    ctx.translate(-cam, 0);
+    for (const e of inimigos) sombra(e.x, e.z, e.w);
+    for (const q of quebraveis) sombra(q.x, q.z, 30);
+    sombra(jog.x, jog.z, jog.w);
+
+    const cena = [
+      ...inimigos.map(e => ({ z: e.z, d: () => desenharInimigo(e, now) })),
+      ...quebraveis.map(q => ({ z: q.z, d: () => desenharQuebravel(q, now) })),
+      ...itens.map(it => ({ z: it.z, d: () => desenharItem(it, now) })),
+      ...tiros.map(t => ({ z: t.z, d: () => desenharTiro(t) })),
+      { z: jog.z, d: () => desenharJogador(now) },
+    ].sort((a, b) => a.z - b.z);
+    for (const c of cena) c.d();
+    particles.draw(ctx);
+    ctx.restore();
+
+    if (dedo && state === 'playing') {
+      const bx = manche ? manche.ox : W * 0.16, by = manche ? manche.oy : H - 90;
+      ctx.globalAlpha = 0.45;
+      ctx.strokeStyle = '#9be7ce';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(bx, by, 48, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(155,231,206, 0.3)';
+      Neon.circle(ctx, bx + (manche ? manche.dx * 38 : 0), by + (manche ? manche.dz * 38 : 0), 22);
+      ctx.globalAlpha = 1;
+    }
+    hud(now);
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.cor} ${Math.min(0.4, flash.t / 220)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function desenharInimigo(e, now) {
+    const op = { pisca: e.pisca > 0, caido: e.estado === 'caido', chefe: e.chefe, andando: e.andando };
+    if (e.estado === 'prep') { op.braco = 12; op.bracoCor = ((now / 70) | 0) % 2 ? '#ffffff' : '#ed887f'; }
+    else if (e.estado === 'recupera' && e.t > e.recarga - 0.16) { op.braco = e.alcance; op.grosso = 9; }
+    boneco(e, e.cor, op);
+    barraVida(e);
+  }
+  function desenharQuebravel(q, now) {
+    ctx.font = `34px ${Neon.EMOJI}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.globalAlpha = q.pisca > 0 && ((now / 40) | 0) % 2 ? 0.4 : 1;
+    ctx.fillText(QUEBRA_EMOJI[q.tipo], q.x, CHAO + q.z + 4);
+    ctx.globalAlpha = 1;
+  }
+  function desenharItem(it, now) {
+    ctx.font = `26px ${Neon.EMOJI}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 0.8 + Math.sin(now / 240) * 0.2;
+    ctx.fillText(ITEM_EMOJI[it.tipo], it.x, CHAO + it.z - 18 + Math.sin(it.t * 4) * 5);
+    ctx.globalAlpha = 1;
+  }
+  function desenharTiro(t) {
+    const y = CHAO + t.z - 26;
+    if (t.onda) {
+      ctx.fillStyle = HEROIS.tecnico.cor;
+      Neon.glow(ctx, ctx.fillStyle, 30);
+      ctx.beginPath(); ctx.ellipse(t.x, y, 34, 40, 0, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillStyle = '#efce95';
+      Neon.glow(ctx, ctx.fillStyle, 10);
+      ctx.fillRect(t.x - 6, y - 2, 12, 4);
+    }
+    ctx.shadowBlur = 0;
+  }
+  function desenharJogador(now) {
+    const h = HEROIS[heroi];
+    if (jog.invuln > 0 && jog.caido <= 0 && ((now / 80) | 0) % 2) return;
+    const op = { caido: jog.caido > 0, andando: jog.andando, emoji: jog.arma ? ARMAS[jog.arma.tipo].emoji : null };
+    const a = jog.ataque;
+    if (a && a.feito && !a.tiro) { op.braco = h.alcance + (jog.arma ? ARMAS[jog.arma.tipo].alcance : 0); op.grosso = a.idx === 2 ? 11 : 7; op.bracoCor = '#ffffff'; }
+    if (jog.voadora) { op.braco = h.alcance + 14; op.grosso = 9; op.bracoCor = '#ffffff'; }
+    if (jog.dash) {
+      ctx.save();
+      ctx.translate(jog.x, CHAO + jog.z - jog.h - jog.hd / 2);
+      ctx.rotate(now / 40);
+      ctx.translate(-jog.x, -(CHAO + jog.z - jog.h - jog.hd / 2));
+    }
+    boneco(jog, h.cor, op);
+    if (jog.dash) ctx.restore();
+  }
+
+  function hud(now) {
+    ctx.fillStyle = 'rgba(8,13,28, 0.92)';
+    ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = 'rgba(155,231,206, 0.25)';
+    ctx.fillRect(0, 30, W, 1);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    let hx = 72 * W / canvas.clientWidth;
+    const rotulo = (txt) => { ctx.fillStyle = '#a8b9c8'; ctx.font = '700 9px Orbitron, sans-serif'; ctx.fillText(txt, hx, 15); hx += ctx.measureText(txt).width + 8; };
+    const barra = (frac, cor, cheia) => {
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(hx, 9, 110, 12);
+      ctx.fillStyle = cor;
+      if (cheia) Neon.glow(ctx, cor, 18 + Math.sin(now / 120) * 8);
+      ctx.fillRect(hx, 9, 110 * Neon.clamp(frac, 0, 1), 12);
+      ctx.shadowBlur = 0;
+      hx += 110 + 22;
+    };
+    rotulo('VIDA');
+    barra(jog.vida / jog.vidaMax, jog.vida / jog.vidaMax > 0.5 ? '#a8dba0' : jog.vida / jog.vidaMax > 0.25 ? '#efce95' : '#ed887f');
+    rotulo('ESP');
+    barra(esp / 100, esp >= 100 ? '#ffffff' : '#9be7ce', esp >= 100);
+    for (const [rot, val, cor] of [
+      ['ANDAR', nAndar || 1, '#9be7ce'],
+      ['PONTOS', score, '#efce95'],
+      ['ARMA', jog.arma ? `${ARMAS[jog.arma.tipo].emoji} ${jog.arma.usos}` : '—', '#dda077'],
+    ]) {
+      rotulo(rot);
+      ctx.fillStyle = cor;
+      ctx.font = `700 14px Orbitron, ${Neon.EMOJI}`;
+      ctx.fillText(String(val), hx, 15);
+      hx += ctx.measureText(String(val)).width + 24;
+    }
+    if (combo > 1 && comboT > 0) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#efce95';
+      Neon.glow(ctx, '#efce95', 14);
+      ctx.font = '900 22px Orbitron, sans-serif';
+      ctx.fillText(`COMBO x${combo}`, W / 2, 56);
+      ctx.shadowBlur = 0;
+    }
+    if (state === 'playing' && ondaAtiva < 0 && ((now / 400) | 0) % 2) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#a8dba0';
+      Neon.glow(ctx, '#a8dba0', 16);
+      ctx.font = '900 22px Orbitron, sans-serif';
+      ctx.fillText('SIGA ➜', W - 24, 60);
+      ctx.shadowBlur = 0;
+    }
+    const chefe = inimigos.find(e => e.chefe);
+    if (chefe) {
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(W * 0.2, 40, W * 0.6, 14);
+      ctx.fillStyle = '#ff2b7a';
+      Neon.glow(ctx, '#ff2b7a', 12);
+      ctx.fillRect(W * 0.2, 40, W * 0.6 * Math.max(0, chefe.vida / chefe.vidaMax), 14);
+      ctx.shadowBlur = 0;
+      ctx.font = '700 11px Orbitron, sans-serif';
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.fillText('CHEFE', W / 2, 47);
+    }
+    if (andar) {
+      ctx.fillStyle = 'rgba(255,255,255,0.14)';
+      ctx.fillRect(0, H - 6, W, 6);
+      ctx.fillStyle = '#a8dba0';
+      ctx.fillRect(0, H - 6, W * Neon.clamp(jog.x / andar.largura, 0, 1), 6);
+    }
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    particles.update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  carregarAndar(1);
+  state = 'menu';
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

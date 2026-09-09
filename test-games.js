@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
@@ -597,6 +597,73 @@ assert.ok(css.includes('.pause-toggle { right: 58px; }'), 'O tema posiciona a pa
 // DDA do Breach: e o raycaster inteiro. Se ele erra a distancia, a parede desenha
 // na altura errada e o inimigo aparece atras do que deveria escondê-lo.
 const breach = games.breach;
+// Executa a partida real sem DOM: dano simultâneo, recuperação e radar vivo.
+{
+  const noop = () => {}, marks = [];
+  const ctx = new Proxy({}, { get: (obj, key) => key in obj ? obj[key] :
+    (...args) => marks.push([key, ...args]) });
+  const nodes = new Map();
+  const Neon = {
+    $: id => {
+      if (!nodes.has(id)) nodes.set(id, { textContent: '', style: {}, clientHeight: 500,
+        addEventListener: noop, getContext: () => ctx });
+      return nodes.get(id);
+    },
+    best: { get: () => 0, update: (_, score) => score },
+    Particles: class { clear() {} }, motion: { reduced: true },
+    audio: { ensure: noop, sfx: new Proxy({}, { get: () => noop }),
+      music: { start: noop, down: noop } },
+    overlay: { hide: noop, show: noop }, onHide: noop, popEl: noop, toast: noop,
+    rand: (a, b) => (a + b) / 2,
+  };
+  const source = [...breach.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)[1]
+    .replace('(() => {', 'return (() => {')
+    .replace('  render(performance.now());\n  requestAnimationFrame(loop);',
+      `  return { jog, comecar, levarDano, update, entrarNaSala, pegarItens, minimapa,
+        get inimigos() { return inimigos; }, get itens() { return itens; } };`);
+  const game = new Function('window', 'document', 'performance', source)(
+    { Neon, addEventListener: noop },
+    { addEventListener: noop, body: { classList: { toggle: noop } } }, { now: () => 0 });
+  for (const fps of [30, 60, 120]) {
+    game.comecar();
+    assert.strictEqual(game.jog.vida, 150, 'Breach: começa com 150 de vida');
+    game.inimigos.length = 0;
+    game.levarDano(22); game.levarDano(20);
+    assert.strictEqual(game.jog.vida, 128, 'Breach: ataques simultâneos não acumulam dano');
+    for (let i = 0; i < Math.floor(fps * 0.6); i++) game.update(1 / fps);
+    game.levarDano(12);
+    assert.strictEqual(game.jog.vida, 128, 'Breach: proteção dura pelo menos 600 ms');
+    for (let i = 0; i < Math.ceil(fps * 0.1); i++) game.update(1 / fps);
+    game.levarDano(12);
+    assert.strictEqual(game.jog.vida, 116, 'Breach: proteção expira e volta a receber dano');
+  }
+  game.entrarNaSala(1);
+  assert.strictEqual(game.jog.vida, 146, 'Breach: avançar recupera 30 de vida');
+  game.entrarNaSala(2);
+  assert.strictEqual(game.jog.vida, 150, 'Breach: cura da sala respeita o máximo');
+  game.jog.vida = 80;
+  game.itens.push({ x: game.jog.x, y: game.jog.y, tipo: 'vida' });
+  game.pegarItens();
+  assert.strictEqual(game.jog.vida, 120, 'Breach: kit recupera 40 de vida');
+  game.itens.push({ x: game.jog.x, y: game.jog.y, tipo: 'vida' });
+  game.pegarItens();
+  assert.strictEqual(game.jog.vida, 150, 'Breach: kit respeita o máximo');
+  game.jog.protecao = 0; game.levarDano(200); game.levarDano(10);
+  assert.strictEqual(game.jog.vida, 0, 'Breach: dano fatal não deixa vida negativa');
+  game.comecar();
+  assert.strictEqual(game.jog.protecao, 0, 'Breach: reinício limpa a proteção anterior');
+  for (let sala = 0; sala < 5; sala++) {
+    game.entrarNaSala(sala);
+    marks.length = 0; game.minimapa();
+    assert.strictEqual(marks.filter(m => m[0] === 'arc').length, game.inimigos.length,
+      'Breach: radar mostra todos os inimigos, mesmo atrás de paredes');
+    assert.ok(marks.some(m => m[0] === 'rotate' && m[1] === game.jog.ang),
+      'Breach: seta acompanha a direção do jogador');
+    game.inimigos.pop(); marks.length = 0; game.minimapa();
+    assert.strictEqual(marks.filter(m => m[0] === 'arc').length, game.inimigos.length,
+      'Breach: inimigo removido desaparece do radar');
+  }
+}
 const dda = new Function('MAPA', 'celula',
   block(breach, '  function castar(px, py, ang)') + '; return castar;');
 const planta = [
@@ -1623,5 +1690,31 @@ assert.match(sw, /await c\.put\(req, res\.clone\(\)\)/,
 
 assert.ok(+css.match(/toast-out[^;]*\s([\d.]+)s forwards/)[1] >= 3, 'O toast deve ficar visível por pelo menos 3s');
 assert.match(css, /toast-in[^,]*forwards/, 'O toast deve permanecer visível após a entrada');
+
+
+// Brawl: o gerador de andares roda em Node. Sem fase fixa, o que garante o
+// "ate onde voce chega" e que cada andar venha mais cheio e mais duro que o anterior.
+const brawl = games.brawl;
+const bIni = brawl.indexOf('  // \u2500\u2500 gera\u00e7\u00e3o \u2500\u2500');
+const bFim = brawl.indexOf('  // \u2500\u2500 fim da gera\u00e7\u00e3o \u2500\u2500');
+assert.ok(bIni > 0 && bFim > bIni, 'brawl: marcadores do gerador nao encontrados');
+const B = new Function('Neon', 'ZMAX', brawl.slice(bIni, bFim) + '; return { montarAndar, HEROIS, TIPOS, ARMAS };')(
+  { rand: (a, b) => a + Math.random() * (b - a), choice: arr => arr[(Math.random() * arr.length) | 0] }, 215);
+assert.strictEqual(Object.keys(B.HEROIS).length, 3, 'brawl: tres protagonistas');
+for (const h of Object.values(B.HEROIS)) assert.ok(h.vida > 0 && h.vel > 0 && h.dano > 0 && h.especial, `brawl: lutador ${h.nome} incompleto`);
+let capangasAntes = 0, vidaAntes = 0;
+for (let n = 1; n <= 30; n++) {
+  const a = B.montarAndar(n);
+  const tipos = a.ondas.flatMap(o => o.inimigos);
+  const capangas = tipos.filter(t => t !== 'chefe').length;
+  assert.ok(capangas >= capangasAntes, `brawl: andar ${n} tem menos inimigos (${capangas}) que o anterior (${capangasAntes})`);
+  assert.ok(a.vidaMult > vidaAntes, `brawl: resistencia nao cresce no andar ${n}`);
+  capangasAntes = capangas; vidaAntes = a.vidaMult;
+  for (const t of tipos) assert.ok(B.TIPOS[t], `brawl: tipo desconhecido ${t} no andar ${n}`);
+  assert.strictEqual(tipos.includes('chefe'), n % 5 === 0, `brawl: chefe so a cada 5 andares (andar ${n})`);
+  assert.ok(a.ondas.every(o => o.x > 100 && o.x < a.largura - 100), `brawl: gatilho de onda fora do andar ${n}`);
+  assert.ok(a.quebraveis.every(q => q.x > 100 && q.x < a.largura - 100 && q.z >= 0 && q.z <= 215), `brawl: quebravel fora do chao no andar ${n}`);
+}
+assert.ok(B.montarAndar(1).ondas.flatMap(o => o.inimigos).every(t => t === 'capanga'), 'brawl: o primeiro andar so tem capanga');
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);

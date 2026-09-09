@@ -45,7 +45,7 @@
     <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
     <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="breach">0</span></div>
     <div class="stat"><span class="lbl">Sala</span><span class="val" id="sala">1</span></div>
-    <div class="stat"><span class="lbl">Vida</span><span class="val" id="vida">100</span></div>
+    <div class="stat"><span class="lbl">Vida</span><span class="val" id="vida">150</span></div>
   </div>
 
   <div class="stage" id="stage">
@@ -57,7 +57,7 @@
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON BREACH</h2>
       <p id="overlayText">Cinco salas, uma horda em cada. Comece só com a pistola e ache o resto no chão. No computador: WASD anda, mouse gira, clique atira. No celular deitado: manche à esquerda, arraste à direita para girar, botão vermelho atira.</p>
-      <div class="sub" id="overlaySub"></div>
+      <div class="sub" id="overlaySub">Minimapa: seta verde = você · pontos vermelhos = inimigos · quadrados dourados = itens. Avançar de sala recupera 30 de vida.</div>
       <div class="final-stats" id="finalStats" style="display:none;">
         <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
         <div class="fstat"><span>Salas</span><b id="fsSalas">1</b></div>
@@ -83,6 +83,7 @@
   const COLUNAS = 200, LARG_COL = W / COLUNAS;   // 200 raios, cada um com 4px: 3x menos custo
   const FOV = Math.PI / 3;
   const RAIO_JOG = 0.24;
+  const VIDA_MAX = 150;
 
   // 1 ciano, 2 rosa, 3 roxo. Parede de cor chapada com aresta acesa dispensa textura,
   // e o repo nao pode ter imagem. A limitacao virou a estetica.
@@ -142,7 +143,7 @@
     fsScore: Neon.$('fsScore'), fsSalas: Neon.$('fsSalas'), fsMira: Neon.$('fsMira'), stage: Neon.$('stage'),
   };
 
-  const jog = { x: 7.5, y: 12.5, ang: -Math.PI / 2, vida: 100, arma: 0 };
+  const jog = { x: 7.5, y: 12.5, ang: -Math.PI / 2, vida: VIDA_MAX, protecao: 0, arma: 0 };
   let inimigos = [], itens = [], recarga = 0, municao = [Infinity, 0, 0], temArma = [true, false, false];
   let kills = 0, tiros = 0, acertos = 0, tempo = 0, score = 0, virando = 0;
   let pb = Neon.best.get('breach'), startHi = 0;
@@ -221,6 +222,8 @@
     MAPA = SALAS[i].planta;
     const [ex, ey, ea] = SALAS[i].entrada;
     jog.x = ex; jog.y = ey; jog.ang = ea;
+    if (i > 0) jog.vida = Math.min(VIDA_MAX, jog.vida + 30);
+    els.vida.textContent = jog.vida;
     inimigos = []; itens = []; virando = 0;
     const daPraChegar = alcancaveis(ex, ey);
     const vagas = [];
@@ -296,7 +299,7 @@
     if (e.tipo === 'chefe') { flashAt('rgba(175,163,245,', 400); shakeAt(16, 500); }
     // 40% de chance de largar algo. Vida so cai se estiver fazendo falta.
     if (Math.random() < 0.4) {
-      const tipo = jog.vida < 60 && Math.random() < 0.6 ? 'vida' : 'muni';
+      const tipo = jog.vida < VIDA_MAX * 0.6 && Math.random() < 0.6 ? 'vida' : 'muni';
       itens.push({ x: e.x, y: e.y, tipo });
     }
     if (!inimigos.length && !virando) {
@@ -317,7 +320,7 @@
       if (Math.hypot(it.x - jog.x, it.y - jog.y) > 0.55) continue;
       itens = itens.filter(o => o !== it);
       Neon.audio.sfx.golden();
-      if (it.tipo === 'vida') { jog.vida = Math.min(100, jog.vida + 30); els.vida.textContent = jog.vida; }
+      if (it.tipo === 'vida') { jog.vida = Math.min(VIDA_MAX, jog.vida + 40); els.vida.textContent = jog.vida; }
       else if (it.tipo === 'muni') {
         // municao vai pra arma equipada, ou pra que estiver mais vazia se for a pistola
         const alvo = jog.arma > 0 ? jog.arma : (temArma[2] ? 2 : temArma[1] ? 1 : 0);
@@ -334,6 +337,8 @@
   }
 
   function levarDano(q) {
+    if (state !== 'playing' || jog.protecao > 0) return;
+    jog.protecao = 0.65; // Evita que a horda acumule vários acertos no mesmo instante.
     jog.vida = Math.max(0, jog.vida - q);
     els.vida.textContent = jog.vida;
     flashAt('rgba(237,136,127,', 240);
@@ -348,11 +353,11 @@
     Neon.audio.ensure();
     imersivo(true);
     startHi = pb;
-    jog.vida = 100; jog.arma = 0;
+    jog.vida = VIDA_MAX; jog.protecao = 0; jog.arma = 0;
     municao = [Infinity, 0, 0]; temArma = [true, false, false];
     kills = 0; tiros = 0; acertos = 0; tempo = 0; recarga = 0; score = 0;
     particles.clear();
-    els.vida.textContent = '100';
+    els.vida.textContent = jog.vida;
     els.score.textContent = '0';
     entrarNaSala(0);
     state = 'playing';
@@ -504,6 +509,7 @@
   function update(dt) {
     if (state !== 'playing') return;
     tempo += dt;
+    jog.protecao = Math.max(0, jog.protecao - dt);
     if (recarga > 0) recarga -= dt * 1000;
     if (segurandoTiro) atirar();
 
@@ -546,6 +552,34 @@
   }
 
   // ── render ────────────────────────────────────────
+  function minimapa() {
+    const escala = 8, x0 = 14, y0 = Math.max(48, 58 * H / canvas.clientHeight);
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,13,28,0.9)';
+    ctx.fillRect(x0 - 4, y0 - 4, MAPA_L * escala + 8, MAPA_A * escala + 8);
+    ctx.fillStyle = '#526477';
+    for (let y = 0; y < MAPA_A; y++)
+      for (let x = 0; x < MAPA_L; x++)
+        if (celula(x, y)) ctx.fillRect(x0 + x * escala, y0 + y * escala, escala - 1, escala - 1);
+    ctx.fillStyle = '#efce95';
+    for (const it of itens) ctx.fillRect(x0 + it.x * escala - 2, y0 + it.y * escala - 2, 4, 4);
+    ctx.fillStyle = '#ff7777';
+    for (const e of inimigos) {
+      ctx.beginPath();
+      ctx.arc(x0 + e.x * escala, y0 + e.y * escala, e.tipo === 'chefe' ? 4 : 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.translate(x0 + jog.x * escala, y0 + jog.y * escala);
+    ctx.rotate(jog.ang);
+    ctx.fillStyle = '#9be7ce';
+    ctx.strokeStyle = '#080d1c';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(7, 0); ctx.lineTo(-4, -4); ctx.lineTo(-2, 0); ctx.lineTo(-4, 4);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
   function render(now) {
     ctx.save();
     if (shake.t > 0) {
@@ -706,7 +740,7 @@
     ctx.textBaseline = 'middle';
     ctx.font = `700 12px Orbitron, sans-serif`;
     const campos = [
-      ['VIDA', jog.vida, jog.vida > 50 ? '#a8dba0' : jog.vida > 25 ? '#efce95' : '#ed887f'],
+      ['VIDA', jog.vida, jog.vida > VIDA_MAX * 0.5 ? '#a8dba0' : jog.vida > VIDA_MAX * 0.25 ? '#efce95' : '#ed887f'],
       [ARMAS[jog.arma].nome, municao[jog.arma] === Infinity ? '∞' : municao[jog.arma], '#efce95'],
       ['SALA', `${sala + 1}/${SALAS.length}`, '#9be7ce'],
       ['RESTAM', inimigos.length, '#afa3f5'],
@@ -731,6 +765,7 @@
       ctx.fillRect(0, 0, W, H);
     }
     ctx.restore();
+    minimapa();
   }
 
   function loop(now) {
