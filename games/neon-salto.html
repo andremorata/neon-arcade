@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#080d1c">
 <link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
-  .stage { --arw: 3; --arh: 4; --maxw: 460px; }
+  .stage { --arw: 3; --arh: 4; --maxw: 960px; }   /* Neon.world troca: 960x600 deitado, 600x800 em pe */
   /* Garagem dentro do overlay: escolha de carro e rampa antes de cada salto.
      HTML em vez de canvas, como o hub do Wheels: botão grande e tema de graça. */
   .garagem { width: 100%; max-width: 440px; margin-bottom: 12px; text-align: left; }
@@ -28,9 +28,22 @@
   .opcao:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
   .overlay.pausa .garagem, .overlay.pausa .final-stats { display: none !important; }
   @media (orientation: landscape) and (max-height: 520px) {
-    .overlay { padding-top: 58px; }
-    .overlay h2 { font-size: 14px; }
-    .opcao canvas { height: 28px; }
+    /* celular deitado: o quadro e baixo, entao a garagem vira duas fileiras finas */
+    .overlay { padding: 8px 56px 8px; justify-content: safe center; }
+    .overlay h2 { font-size: 14px; margin-bottom: 4px; }
+    .overlay p { font-size: 9.5px; line-height: 1.3; margin-bottom: 6px; }
+    .garagem { margin-bottom: 6px; }
+    .gar-lbl { margin: 2px 0 2px; font-size: 8px; }
+    .gar-row { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+    .gar-row.rampas { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+    .opcao { padding: 3px 2px 4px; gap: 1px; }
+    .opcao canvas { height: 22px; }
+    .opcao b { font-size: 7px; letter-spacing: 0; max-width: 100%; overflow: hidden; }
+    .opcao span { font-size: 6.5px; }
+    .final-stats { margin-bottom: 6px; gap: 4px; }
+    .fstat { padding: 4px 6px; }
+    .btn { padding: 8px 22px; font-size: 11px; }
+    .controls-hint { display: none; }
   }
 </style>
 </head>
@@ -86,7 +99,8 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  const W = 600, H = 800;
+  // Deitado (desktop e celular na horizontal) o quadro e largo; em pe, alto.
+  const { W, H, retrato } = Neon.world(canvas, [960, 600], [600, 800]);
 
   // ── física ──
   // Unidades: metros e segundos. O bloco e puro (sem Neon, sem canvas, nada
@@ -108,12 +122,12 @@
       desc: 'Leve, plana no ar', longa: 'Leve: plana mais e responde no ar; teto de velocidade mais baixo.',
       acel: 11, topo: 28, nitro: 8, aquece: 0.55, resfria: 0.5, giro: 1.4, sust: 1.9 },
     // forma muda o desenho (lado e traseira); sem forma e o cupe generico.
-    { nome: 'ROSSA V12', cor: '#ff3b4a', claro: '#ffc2c2', escuro: '#7d0f1c', libera: 135, forma: 'enzo',
+    { nome: 'ROSSA V12', cor: '#ff3b4a', claro: '#ffc2c2', escuro: '#7d0f1c', libera: 155, forma: 'enzo',
       desc: 'V12 de Maranello', longa: 'Bico de Fórmula 1 e cabine de bolha: teto alto e plana bem, mas o nitro esquenta.',
-      acel: 12, topo: 31, nitro: 9, aquece: 0.7, resfria: 0.45, giro: 1.1, sust: 1.2 },
-    { nome: 'TOURO SV', cor: '#c8ff3a', claro: '#f0ffb0', escuro: '#4f6d0c', libera: 160, forma: 'lambo',
+      acel: 14, topo: 35, nitro: 12, aquece: 0.75, resfria: 0.5, giro: 1.1, sust: 1.2 },
+    { nome: 'TOURO SV', cor: '#c8ff3a', claro: '#f0ffb0', escuro: '#4f6d0c', libera: 175, forma: 'lambo',
       desc: 'Cunha com asa', longa: 'Cunha italiana com asa: nitro brutal e aderente no pouso, mas esquenta rápido e voa pesado.',
-      acel: 13, topo: 32, nitro: 15, aquece: 1.0, resfria: 0.55, giro: 0.9, sust: 0.8 },
+      acel: 15, topo: 36, nitro: 18, aquece: 1.0, resfria: 0.6, giro: 0.9, sust: 0.8 },
   ];
   // ang em graus, comp = comprimento da rampa (m), pista = reta antes dela.
   // chao diz o que vem depois da crista: plano, descida ou um vao fundo.
@@ -122,15 +136,31 @@
     { nome: 'GANCHO', ang: 42, comp: 16, pista: 135, chao: 'plano', libera: 0, desc: '42° · alta', longa: '42 graus, alta e curta: muito tempo no ar, pouso difícil.' },
     { nome: 'PRANCHA', ang: 18, comp: 20, pista: 135, chao: 'descida', libera: 0, desc: '18° · descida', longa: '18 graus e pista longa; a descida do outro lado estende o voo.' },
     { nome: 'ABISMO', ang: 28, comp: 16, pista: 145, chao: 'abismo', libera: 120, desc: '28° · vão', longa: 'A crista fica na beira de um vão de 30 m: o voo dura o dobro.' },
+    { nome: 'MESA', ang: 24, comp: 14, pista: 140, chao: 'mesa', libera: 0, desc: '24° · platô', longa: 'Depois de 45 m o chão sobe 6 m: passe do degrau ou pouse antes dele.' },
+    { nome: 'ONDAS', ang: 26, comp: 15, pista: 145, chao: 'ondas', libera: 0, desc: '26° · ondulado', longa: 'O chão depois da crista ondula: a faixa de pouso muda com o lugar onde você cai.' },
+    { nome: 'ESCADA', ang: 32, comp: 15, pista: 140, chao: 'escada', libera: 130, desc: '32° · degraus', longa: 'Degraus de 8 m descendo a cada 30 m: cada degrau vencido é um pouso mais longe.' },
+    { nome: 'CÂNION', ang: 32, comp: 18, pista: 145, chao: 'canion', libera: 190, desc: '32° · fundo', longa: 'Um cânion de 60 m de profundidade: o voo mais longo do jogo.' },
   ];
   const QUEDA = 30, DESCIDA = Math.tan(10 * Math.PI / 180);
   // Altura do chao depois da crista, pelo avanco horizontal desde ela.
   function chaoDepois(r, dx) {
-    if (r.chao === 'descida') return -Math.max(0, dx) * DESCIDA;
-    if (r.chao === 'abismo') return dx > 1 ? -QUEDA : 0;
-    return 0;
+    switch (r.chao) {
+      case 'descida': return -Math.max(0, dx) * DESCIDA;
+      case 'abismo': return dx > 1 ? -QUEDA : 0;
+      case 'canion': return dx > 1 ? -QUEDA * 2 : 0;
+      case 'mesa': return dx < 45 ? 0 : dx < 53 ? (dx - 45) * 0.75 : 6;
+      case 'ondas': return dx < 10 ? 0 : 1.0 * (Math.cos((dx - 10) / 45 * Math.PI * 2) - 1);
+      case 'escada': { const k = Math.floor(Math.max(0, dx) / 30), f = dx - k * 30; return -8 * k - (f > 25 ? (f - 25) / 5 * 8 : 0); }
+      default: return 0;
+    }
   }
-  const inclinacao = r => r.chao === 'descida' ? -Math.atan(DESCIDA) : 0;
+  // Referencia da faixa de pouso (rad, negativo descendo). So a descida
+  // continua inclina o carro; ondas, degraus e platos sao terreno que muda
+  // ONDE voce cai, nao COMO pousa. Uma faixa que andasse com o chao local
+  // mudava rapido demais pro carro mais lento no ar acompanhar.
+  function inclinacaoEm(r) {
+    return r.chao === 'descida' ? -Math.atan(DESCIDA) : 0;
+  }
 
   const KD = 0.0015;               // arrasto: a = KD * (1 + KP|pitch|) * |v| * v
   const KP = 1.2;                  // nariz fora do vento arrasta mais
@@ -226,7 +256,7 @@
       if (s.y <= solo) {
         s.y = solo;
         s.dist = s.x - s.crista.x;
-        const rel = s.pitch - inclinacao(r);
+        const rel = s.pitch - inclinacaoEm(r);
         s.pouso = rel < POUSO.min ? 'bico' : rel > POUSO.max ? 'traseira' : 'limpo';
         s.distancia = Math.round((s.pouso === 'limpo' ? s.dist : s.dist * CAPOTOU) * 10) / 10;
         s.fase = 'chao'; s.chaoT = 0;
@@ -239,7 +269,7 @@
       s.chaoT += dt;
       s.v = Math.max(0, s.v - (s.pouso === 'limpo' ? 5 : 16) * dt);
       s.x += s.v * dt; s.y = chaoDepois(r, s.x - s.crista.x);
-      if (s.pouso === 'limpo') s.pitch += (inclinacao(r) - s.pitch) * Math.min(1, 8 * dt);
+      if (s.pouso === 'limpo') s.pitch += (inclinacaoEm(r) - s.pitch) * Math.min(1, 8 * dt);
       else s.pitch += (s.pouso === 'bico' ? -9 : 9) * dt;
       if (s.chaoT >= 2.2 || (s.v <= 0 && s.chaoT > 0.6)) { s.fase = 'fim'; s.ev.push({ tipo: 'fim' }); }
     }
@@ -255,17 +285,17 @@
     } else if (s.fase === 'rampa') {
       inp.toque = !s.cristaOk && s.v > 0 && (r.comp - s.d) / s.v <= CRISTA_JANELA * 0.7;
     } else if (s.fase === 'ar') {
-      inp.segura = s.pitch < POUSO.max - 0.06 + inclinacao(r);   // nariz alto plana mais
+      inp.segura = s.pitch < POUSO.max - 0.06 + inclinacaoEm(r);   // nariz alto plana mais
     }
     return inp;
   }
   // ── fim da física ──
 
   // ── projecao da visao de tras ─────────────────────
-  const HY = 300, PASSO = 2, ZFAR = 8, ESC = 14;   // 1 unidade de z = 14 m
+  const HY = retrato ? 300 : 225, PASSO = 2, ZFAR = 8, ESC = 14;   // 1 unidade de z = 14 m
   const pDeZ = z => Math.pow(Math.max(0, 1 - z / ZFAR), 2.2);
   const yDeP = (p, hy) => hy + p * (H - hy);
-  const meiaDe = p => 26 + p * 250;               // metade da pista (10 m) em px
+  const meiaDe = p => 26 + p * (retrato ? 250 : 400);   // metade da pista (10 m) em px
 
   // ── save ──────────────────────────────────────────
   const SAVE_KEY = 'neon-salto-save';
@@ -342,21 +372,23 @@
     monta(RAMPAS, els.garRampas, save.rampa, 'rampa');
   }
   function previewRampa(c, r) {
-    const ang = r.ang * Math.PI / 180, esc = 2.2;
-    const x0 = 30, y0 = r.chao === 'abismo' ? 30 : 42;
+    // amostra o proprio chaoDepois: rampa nova ganha miniatura de graca
+    const ang = r.ang * Math.PI / 180;
+    const fundo = Math.min(0, ...[...Array(90)].map((_, i) => chaoDepois(r, i)));
+    const esc = Math.min(2.2, 30 / Math.max(14, -fundo + 8));
+    const x0 = 24, y0 = 40 + fundo * esc * 0.35;
     const lx = x0 + r.comp * Math.cos(ang) * esc, ly = y0 - r.comp * Math.sin(ang) * esc;
     c.strokeStyle = r.cor || '#efce95'; c.lineWidth = 3; c.lineJoin = 'round';
     c.shadowColor = c.strokeStyle; c.shadowBlur = 8;
     c.beginPath(); c.moveTo(0, y0); c.lineTo(x0, y0); c.lineTo(lx, ly); c.lineTo(lx, y0);
-    if (r.chao === 'abismo') { c.moveTo(lx + 4, y0); c.lineTo(lx + 4, y0 + 34); c.lineTo(200, y0 + 34); }
-    else if (r.chao === 'descida') { c.moveTo(lx, y0); c.lineTo(200, y0 + (200 - lx) * DESCIDA); }
-    else { c.moveTo(lx, y0); c.lineTo(200, y0); }
+    c.moveTo(lx, y0);
+    for (let dx = 0; lx + dx * esc <= 200; dx += 1) c.lineTo(lx + dx * esc, y0 - chaoDepois(r, dx) * esc);
     c.stroke();
     c.shadowBlur = 0;
     c.fillStyle = 'rgba(255,255,255,0.08)';
     c.beginPath(); c.moveTo(x0, y0); c.lineTo(lx, ly); c.lineTo(lx, y0); c.closePath(); c.fill();
   }
-  RAMPAS[0].cor = '#9be7ce'; RAMPAS[1].cor = '#ed887f'; RAMPAS[2].cor = '#a8dba0'; RAMPAS[3].cor = '#afa3f5';
+  ['#9be7ce', '#ed887f', '#a8dba0', '#afa3f5', '#efce95', '#8faef2', '#dda077', '#ff5f8a'].forEach((cor, i) => { RAMPAS[i].cor = cor; });
 
   // ── partida ───────────────────────────────────────
   function startGame() {
@@ -648,7 +680,8 @@
   // (positivo = nariz pra cima).
   // Perfis de lado em fracoes de L (x) e de h (y, negativo pra cima).
   const PERFIS = {
-    cupe: [[-0.5, -0.15], [-0.46, -0.55], [-0.2, -0.62], [-0.05, -1], [0.22, -1], [0.4, -0.55], [0.5, -0.4], [0.5, -0.1], [0.42, 0], [-0.42, 0]],
+    // Cupe: traseira curta e alta, cabine recuada, capo longo descendo ate o bico.
+    cupe: [[-0.5, -0.14], [-0.48, -0.62], [-0.32, -0.68], [-0.22, -0.98], [-0.02, -1], [0.14, -0.74], [0.46, -0.5], [0.5, -0.3], [0.5, -0.1], [0.44, 0], [-0.42, 0]],
     // Enzo: bico afilado la embaixo, cabine de bolha alta e curta, capo do motor descendo com lábio.
     enzo: [[-0.5, -0.12], [-0.5, -0.5], [-0.46, -0.6], [-0.36, -0.6], [-0.3, -0.66], [-0.16, -0.72], [-0.08, -1.02], [0.06, -1.08], [0.18, -1], [0.3, -0.74], [0.42, -0.5], [0.5, -0.32], [0.5, -0.1], [0.44, 0], [-0.42, 0]],
     // Lambo: cunha reta do bico ao teto baixo, traseira alta e cortada.
@@ -703,9 +736,13 @@
       c.beginPath(); c.moveTo(-L * 0.1, -h * 0.3); c.lineTo(L * 0.34, -h * 0.5); c.stroke();
       c.fillStyle = '#ed887f'; poli([[-0.5, -0.5], [-0.42, -0.46], [-0.42, -0.4], [-0.5, -0.38]]); c.fill();
     } else {
-      poli([[-0.16, -0.6], [-0.03, -0.94], [0.2, -0.94], [0.34, -0.6]]); c.fill();
+      poli([[-0.3, -0.66], [-0.2, -0.94], [-0.03, -0.94], [0.12, -0.7]]); c.fill();
       c.fillStyle = 'rgba(231,250,255,0.35)';
-      poli([[0.02, -0.9], [0.1, -0.9], [-0.02, -0.64], [-0.1, -0.64]]); c.fill();
+      poli([[-0.06, -0.9], [0.02, -0.9], [-0.1, -0.7], [-0.18, -0.7]]); c.fill();
+      // farol na frente e lanterna atras: e o que diz pra onde o carro anda
+      c.fillStyle = '#fff3c5'; poli([[0.42, -0.46], [0.5, -0.4], [0.5, -0.3], [0.42, -0.34]]); c.fill();
+      c.fillStyle = '#ed887f'; poli([[-0.5, -0.56], [-0.44, -0.58], [-0.44, -0.44], [-0.5, -0.42]]); c.fill();
+      c.fillStyle = m.escuro; c.fillRect(L * 0.2, -h * 0.62, L * 0.22, h * 0.04);
     }
     // rodas
     const rr = forma === 'lambo' ? 0.37 : 0.34;
@@ -865,7 +902,7 @@
     }
   }
   function medidorNitro() {
-    const x = W - 44, y0 = 120, alt = 300, larg = 18;
+    const x = W - 44, y0 = retrato ? 120 : 90, alt = retrato ? 300 : 230, larg = 18;
     ctx.fillStyle = 'rgba(255,255,255,0.1)';
     ctx.fillRect(x, y0, larg, alt);
     ctx.fillStyle = 'rgba(237,136,127,0.35)';
@@ -1004,14 +1041,15 @@
   function medidorNariz() {
     const r = RAMPAS[s.rampa];
     const cx = 86, cy = H - 210, R = 54;
-    const angDe = p => -(p - inclinacao(r));      // tela: y pra baixo
+    const chao = inclinacaoEm(r);
+    const angDe = p => -(p - chao);               // tela: y pra baixo
     ctx.lineWidth = 10;
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.beginPath(); ctx.arc(cx, cy, R, angDe(1.1), angDe(-1.1)); ctx.stroke();
     ctx.strokeStyle = '#a8dba0'; Neon.glow(ctx, '#a8dba0', 14);
     ctx.beginPath(); ctx.arc(cx, cy, R, angDe(POUSO.max), angDe(POUSO.min)); ctx.stroke();
     ctx.shadowBlur = 0;
-    const rel = s.pitch - inclinacao(r);
+    const rel = s.pitch - chao;
     const dentro = rel >= POUSO.min && rel <= POUSO.max;
     const cor = dentro ? '#a8dba0' : '#ed887f';
     ctx.strokeStyle = cor; ctx.lineWidth = 4; Neon.glow(ctx, cor, 14);

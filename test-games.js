@@ -1728,7 +1728,7 @@ const sFim = salto.indexOf('  // \u2500\u2500 fim da f\u00edsica \u2500\u2500');
 assert.ok(sIni > 0 && sFim > sIni, 'salto: marcadores do bloco de fisica nao encontrados');
 assert.ok(!/Math\.random/.test(salto.slice(sIni, sFim)), 'salto: a fisica tem que ser deterministica');
 const SJ = new Function(salto.slice(sIni, sFim)
-  + '; return { CARROS, RAMPAS, POUSO, CAPOTOU, novoSalto, passo, piloto, inclinacao, chaoDepois };')();
+  + '; return { CARROS, RAMPAS, POUSO, CAPOTOU, novoSalto, passo, piloto, inclinacaoEm, chaoDepois };')();
 const sSTEP = 1 / 120;
 function saltar(ci, ri, controle) {
   const s = SJ.novoSalto(ci, ri), evs = [];
@@ -1744,11 +1744,11 @@ const sVariante = (tira) => s => { const i = SJ.piloto(s); tira(s, i); return i;
 const semNitro = sVariante((s, i) => { if (s.fase === 'reta') i.segura = false; });
 const semLargada = sVariante((s, i) => { if (s.fase === 'reta' && !s.largou) i.toque = false; });
 const semCrista = sVariante((s, i) => { if (s.fase === 'rampa') i.toque = false; });
-const narizBaixo = sVariante((s, i) => { if (s.fase === 'ar') i.segura = s.pitch < 0.05 + SJ.inclinacao(SJ.RAMPAS[s.rampa]); });
+const narizBaixo = sVariante((s, i) => { if (s.fase === 'ar') i.segura = s.pitch < 0.05 + SJ.inclinacaoEm(SJ.RAMPAS[s.rampa]); });
 const semNada = sVariante((s, i) => { if (s.fase === 'reta') { i.segura = false; if (!s.largou) i.toque = false; } if (s.fase === 'rampa') i.toque = false; });
 
 assert.strictEqual(SJ.CARROS.length, 5, 'salto: cinco carros');
-assert.strictEqual(SJ.RAMPAS.length, 4, 'salto: quatro rampas');
+assert.strictEqual(SJ.RAMPAS.length, 8, 'salto: oito rampas');
 const melhorCom = (carros, rampas, controle) => Math.max(...carros.flatMap(ci => rampas.map(ri => saltar(ci, ri, controle).s.distancia)));
 for (const [ci, c] of SJ.CARROS.entries()) for (const [ri, r] of SJ.RAMPAS.entries()) {
   const rot = `salto: ${c.nome} em ${r.nome}`;
@@ -1756,7 +1756,7 @@ for (const [ci, c] of SJ.CARROS.entries()) for (const [ri, r] of SJ.RAMPAS.entri
   assert.strictEqual(s.pouso, 'limpo', `${rot}: o piloto capotou (${s.pouso})`);
   assert.ok(!evs.includes('superaqueceu'), `${rot}: o piloto pulsando a 92% nao pode superaquecer`);
   assert.ok(evs.includes('largada') && evs.includes('crista'), `${rot}: o piloto tem que acertar largada e crista`);
-  assert.ok(s.distancia > 100 && s.distancia < 200, `${rot}: salto fora de escala (${s.distancia} m)`);
+  assert.ok(s.distancia > 100 && s.distancia < 260, `${rot}: salto fora de escala (${s.distancia} m)`);
   assert.ok(s.t < 25, `${rot}: um salto nao pode passar de 25 s (${s.t.toFixed(1)}s)`);
   // cada habilidade vale metros; sem nenhuma ainda da pra pousar limpo (crianca joga)
   const nada = saltar(ci, ri, semNada).s;
