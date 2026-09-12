@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
@@ -1716,5 +1716,98 @@ for (let n = 1; n <= 30; n++) {
   assert.ok(a.quebraveis.every(q => q.x > 100 && q.x < a.largura - 100 && q.z >= 0 && q.z <= 215), `brawl: quebravel fora do chao no andar ${n}`);
 }
 assert.ok(B.montarAndar(1).ondas.flatMap(o => o.inimigos).every(t => t === 'capanga'), 'brawl: o primeiro andar so tem capanga');
+
+// ── NEON SALTO ─────────────────────────────────────
+// O bloco de fisica roda em Node com um piloto automatico. E o que garante que
+// todo carro pousa limpo em toda rampa, que cada habilidade (largada, nitro,
+// crista, nariz) vale metros de verdade e que os desbloqueios por recorde sao
+// alcancaveis com o que o jogador tem na hora.
+const salto = games.salto;
+const sIni = salto.indexOf('  // \u2500\u2500 f\u00edsica \u2500\u2500');
+const sFim = salto.indexOf('  // \u2500\u2500 fim da f\u00edsica \u2500\u2500');
+assert.ok(sIni > 0 && sFim > sIni, 'salto: marcadores do bloco de fisica nao encontrados');
+assert.ok(!/Math\.random/.test(salto.slice(sIni, sFim)), 'salto: a fisica tem que ser deterministica');
+const SJ = new Function(salto.slice(sIni, sFim)
+  + '; return { CARROS, RAMPAS, POUSO, CAPOTOU, novoSalto, passo, piloto, inclinacao, chaoDepois };')();
+const sSTEP = 1 / 120;
+function saltar(ci, ri, controle) {
+  const s = SJ.novoSalto(ci, ri), evs = [];
+  for (let i = 0; i < 120 * 60 && s.fase !== 'fim'; i++) {
+    SJ.passo(s, sSTEP, controle(s));
+    evs.push(...s.ev.map(e => e.tipo));
+    s.ev.length = 0;
+  }
+  assert.strictEqual(s.fase, 'fim', `salto: ${SJ.CARROS[ci].nome} em ${SJ.RAMPAS[ri].nome} nunca terminou`);
+  return { s, evs };
+}
+const sVariante = (tira) => s => { const i = SJ.piloto(s); tira(s, i); return i; };
+const semNitro = sVariante((s, i) => { if (s.fase === 'reta') i.segura = false; });
+const semLargada = sVariante((s, i) => { if (s.fase === 'reta' && !s.largou) i.toque = false; });
+const semCrista = sVariante((s, i) => { if (s.fase === 'rampa') i.toque = false; });
+const narizBaixo = sVariante((s, i) => { if (s.fase === 'ar') i.segura = s.pitch < 0.05 + SJ.inclinacao(SJ.RAMPAS[s.rampa]); });
+const semNada = sVariante((s, i) => { if (s.fase === 'reta') { i.segura = false; if (!s.largou) i.toque = false; } if (s.fase === 'rampa') i.toque = false; });
+
+assert.strictEqual(SJ.CARROS.length, 3, 'salto: tres carros');
+assert.strictEqual(SJ.RAMPAS.length, 4, 'salto: quatro rampas');
+const melhorCom = (carros, rampas, controle) => Math.max(...carros.flatMap(ci => rampas.map(ri => saltar(ci, ri, controle).s.distancia)));
+for (const [ci, c] of SJ.CARROS.entries()) for (const [ri, r] of SJ.RAMPAS.entries()) {
+  const rot = `salto: ${c.nome} em ${r.nome}`;
+  const { s, evs } = saltar(ci, ri, SJ.piloto);
+  assert.strictEqual(s.pouso, 'limpo', `${rot}: o piloto capotou (${s.pouso})`);
+  assert.ok(!evs.includes('superaqueceu'), `${rot}: o piloto pulsando a 92% nao pode superaquecer`);
+  assert.ok(evs.includes('largada') && evs.includes('crista'), `${rot}: o piloto tem que acertar largada e crista`);
+  assert.ok(s.distancia > 100 && s.distancia < 200, `${rot}: salto fora de escala (${s.distancia} m)`);
+  assert.ok(s.t < 25, `${rot}: um salto nao pode passar de 25 s (${s.t.toFixed(1)}s)`);
+  // cada habilidade vale metros; sem nenhuma ainda da pra pousar limpo (crianca joga)
+  const nada = saltar(ci, ri, semNada).s;
+  assert.strictEqual(nada.pouso, 'limpo', `${rot}: so nivelar o nariz ja tem que pousar limpo`);
+  assert.ok(saltar(ci, ri, semNitro).s.distancia < s.distancia - 20, `${rot}: o nitro tem que valer mais de 20 m`);
+  assert.ok(saltar(ci, ri, semLargada).s.distancia < s.distancia - 4, `${rot}: a largada perfeita tem que valer mais de 4 m`);
+  assert.ok(saltar(ci, ri, semCrista).s.distancia < s.distancia - 8, `${rot}: a crista no ponto tem que valer mais de 8 m`);
+  // o Muro e "duro no ar" (sust baixa), entao planar vale menos nele por desenho
+  assert.ok(saltar(ci, ri, narizBaixo).s.distancia < s.distancia - 5 * c.sust, `${rot}: planar de nariz alto tem que valer mais de ${5 * c.sust} m`);
+  // segurar o nitro ate cortar e pior do que pulsar: e o que faz o medidor importar
+  const afobado = saltar(ci, ri, sVariante((s, i) => { if (s.fase === 'reta') i.segura = s.corte <= 0; }));
+  assert.ok(afobado.evs.includes('superaqueceu'), `${rot}: segurar o nitro direto tem que superaquecer`);
+  assert.ok(afobado.s.distancia < s.distancia - 15, `${rot}: superaquecer tem que custar mais de 15 m`);
+}
+// nenhum carro e o melhor em toda rampa: cada um vence em alguma
+const vencedores = new Set(SJ.RAMPAS.map((_, ri) => {
+  const d = SJ.CARROS.map((_, ci) => saltar(ci, ri, SJ.piloto).s.distancia);
+  return d.indexOf(Math.max(...d));
+}));
+assert.ok(vencedores.size >= 2, `salto: um carro so ganha em todas as rampas (${[...vencedores]})`);
+// desbloqueios: o recorde que abre cada item tem que ser alcancavel so com o que ja esta aberto
+const abertos = pbr => ({ carros: SJ.CARROS.map((c, i) => c.libera <= pbr ? i : -1).filter(i => i >= 0), rampas: SJ.RAMPAS.map((r, i) => r.libera <= pbr ? i : -1).filter(i => i >= 0) });
+const metas = [...SJ.CARROS, ...SJ.RAMPAS].map(i => i.libera).filter(m => m > 0).sort((a, b) => a - b);
+assert.ok(metas.length >= 3, 'salto: pelo menos tres desbloqueios');
+for (const meta of metas) {
+  const antes = abertos(meta - 1);
+  const alcance = melhorCom(antes.carros, antes.rampas, SJ.piloto);
+  assert.ok(alcance >= meta * 1.05, `salto: a meta de ${meta} m nao e alcancavel com o que esta aberto antes dela (piloto faz ${alcance.toFixed(1)} m)`);
+  assert.ok(melhorCom(antes.carros, antes.rampas, semNada) < meta, `salto: a meta de ${meta} m sai sem usar nenhuma habilidade`);
+}
+assert.strictEqual(abertos(0).carros.length, 1, 'salto: comeca com um carro so');
+assert.ok(abertos(0).rampas.length >= 3, 'salto: comeca com pelo menos tres rampas');
+// capotar conta 70%: pousar de bico ainda e um salto, so vale menos
+{
+  const bico = saltar(0, 0, sVariante((s, i) => { if (s.fase === 'ar') i.segura = false; })).s;
+  assert.strictEqual(bico.pouso, 'bico', 'salto: soltar o nariz o voo inteiro capota de bico');
+  assert.strictEqual(bico.distancia, Math.round(bico.dist * SJ.CAPOTOU * 10) / 10, 'salto: capotar conta 70% da distancia');
+  const traseira = saltar(0, 1, sVariante((s, i) => { if (s.fase === 'ar') i.segura = true; })).s;
+  assert.strictEqual(traseira.pouso, 'traseira', 'salto: segurar o nariz o voo inteiro capota de traseira');
+}
+// queimar a largada trava o motor e custa o salto inteiro
+{
+  const queimou = saltar(0, 0, sVariante((s, i) => { if (s.fase === 'largada') i.toque = true; }));
+  assert.ok(queimou.evs.includes('queimou') && !queimou.evs.includes('largada'), 'salto: tocar na contagem queima a largada');
+  assert.ok(queimou.s.distancia < saltar(0, 0, SJ.piloto).s.distancia - 5, 'salto: queimar a largada tem que custar metros');
+}
+// o abismo e um vao de verdade: o chao depois da crista fica la embaixo
+assert.ok(SJ.chaoDepois(SJ.RAMPAS[3], 10) < -20, 'salto: o abismo tem que ser fundo');
+assert.ok(SJ.chaoDepois(SJ.RAMPAS[2], 50) < -5, 'salto: a prancha desce depois da crista');
+assert.strictEqual(SJ.chaoDepois(SJ.RAMPAS[0], 50), 0, 'salto: a classica e plana');
+// mesma entrada, mesmo salto
+assert.strictEqual(saltar(2, 3, SJ.piloto).s.distancia, saltar(2, 3, SJ.piloto).s.distancia, 'salto: o resultado tem que ser deterministico');
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);

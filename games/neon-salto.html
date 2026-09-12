@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON SALTO — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  .stage { --arw: 3; --arh: 4; --maxw: 460px; }
+  /* Garagem dentro do overlay: escolha de carro e rampa antes de cada salto.
+     HTML em vez de canvas, como o hub do Wheels: botão grande e tema de graça. */
+  .garagem { width: 100%; max-width: 440px; margin-bottom: 12px; text-align: left; }
+  .gar-lbl { font: 700 9px 'Orbitron', sans-serif; letter-spacing: .25em; color: var(--text-dim); margin: 6px 0 4px; }
+  .gar-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .gar-row.rampas { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .opcao { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 3px 7px; border: 1px solid #ffffff22; border-radius: 10px; background: #ffffff05; color: var(--text); font: inherit; cursor: pointer; text-align: center; }
+  .opcao canvas { width: 100%; height: 40px; }
+  .opcao b { font: 700 9.5px 'Orbitron', sans-serif; color: var(--cor); letter-spacing: .05em; }
+  .opcao span { font: 8px/1.35 'Space Mono', monospace; color: var(--text-dim); }
+  .opcao[aria-pressed="true"] { border-color: var(--cor); background: #ffffff0b; box-shadow: inset 0 -2px var(--cor); }
+  .opcao:disabled { cursor: not-allowed; }
+  .opcao:disabled canvas { opacity: .3; filter: grayscale(1); }
+  .opcao:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
+  .overlay.pausa .garagem, .overlay.pausa .final-stats { display: none !important; }
+  @media (orientation: landscape) and (max-height: 520px) {
+    .overlay { padding-top: 58px; }
+    .overlay h2 { font-size: 14px; }
+    .opcao canvas { height: 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON SALTO</h1></a>
+      <div class="tag">// | Quanto mais longe, maior o recorde | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Salto (m)</span><span class="val" id="score">0</span></div>
+    <div class="stat"><span class="lbl">Recorde (m)</span><span class="val" id="best" data-key="salto">0</span></div>
+    <div class="stat"><span class="lbl">Km/h</span><span class="val" id="kmh">0</span></div>
+    <div class="stat"><span class="lbl">Rampa (m)</span><span class="val" id="rampaBest">0</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">POUSO LIMPO!</div>
+    <canvas id="game" width="600" height="800"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON SALTO</h2>
+      <p id="overlayText">Toque no VAI, segure o nitro sem passar do vermelho, toque na crista da rampa e, no ar, segure para levantar o nariz. Pouse reto: o salto é a distância.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Distância</span><b id="fsDist">0 m</b></div>
+        <div class="fstat"><span>Na crista</span><b id="fsVel">0 km/h</b></div>
+        <div class="fstat"><span>Pouso</span><b id="fsPouso">—</b></div>
+      </div>
+      <div class="garagem" id="garagem">
+        <div class="gar-lbl">CARRO</div>
+        <div class="gar-row" id="garCarros" role="group" aria-label="Escolha seu carro"></div>
+        <div class="gar-lbl">RAMPA</div>
+        <div class="gar-row rampas" id="garRampas" role="group" aria-label="Escolha a rampa"></div>
+      </div>
+      <button class="btn" id="startBtn">SALTAR</button>
+      <div class="controls-hint">
+        <span class="key">Toque na tela</span><span class="key">SPACE nitro / salto</span><span class="key">↑ nitro / salto</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · nitro esquenta · toque na crista · pouse reto ou capota</footer>
+</div>
+
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 600, H = 800;
+
+  // ── física ──
+  // Unidades: metros e segundos. O bloco e puro (sem Neon, sem canvas, nada
+  // aleatorio): o test-games.js recorta daqui ate o marcador de fim e roda
+  // salto por salto em Node, entao todo carro e toda rampa tem que fechar.
+  const G = 9.81;
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+  // Cada carro troca uma coisa por outra. Nenhum e "o melhor": o Muro ganha na
+  // pista e perde no ar, o Ion e o contrario. libera = recorde (m) que abre.
+  const CARROS = [
+    { nome: 'VÉRTICE GT', cor: '#9be7ce', claro: '#defff1', escuro: '#247a73', libera: 0,
+      desc: 'Equilibrado', longa: 'Equilibrado: nitro estável e ar previsível.',
+      acel: 12, topo: 31, nitro: 8, aquece: 0.55, resfria: 0.5, giro: 1, sust: 1 },
+    { nome: 'MURO V8', cor: '#efb76f', claro: '#ffe5ad', escuro: '#a44e26', libera: 100,
+      desc: 'Nitro forte, esquenta', longa: 'Motor grande: nitro forte e teto alto, mas esquenta rápido e é duro no ar.',
+      acel: 9, topo: 33, nitro: 10, aquece: 0.9, resfria: 0.35, giro: 0.7, sust: 0.5 },
+    { nome: 'ÍON RX', cor: '#b4a2ff', claro: '#ece5ff', escuro: '#6551b2', libera: 150,
+      desc: 'Leve, plana no ar', longa: 'Leve: plana mais e responde no ar; teto de velocidade mais baixo.',
+      acel: 11, topo: 28, nitro: 8, aquece: 0.55, resfria: 0.5, giro: 1.4, sust: 1.9 },
+  ];
+  // ang em graus, comp = comprimento da rampa (m), pista = reta antes dela.
+  // chao diz o que vem depois da crista: plano, descida ou um vao fundo.
+  const RAMPAS = [
+    { nome: 'CLÁSSICA', ang: 30, comp: 14, pista: 140, chao: 'plano', libera: 0, desc: '30° · 140 m', longa: '30 graus e pista de 140 m. O padrão.' },
+    { nome: 'GANCHO', ang: 42, comp: 16, pista: 135, chao: 'plano', libera: 0, desc: '42° · alta', longa: '42 graus, alta e curta: muito tempo no ar, pouso difícil.' },
+    { nome: 'PRANCHA', ang: 18, comp: 20, pista: 135, chao: 'descida', libera: 0, desc: '18° · descida', longa: '18 graus e pista longa; a descida do outro lado estende o voo.' },
+    { nome: 'ABISMO', ang: 28, comp: 16, pista: 145, chao: 'abismo', libera: 120, desc: '28° · vão', longa: 'A crista fica na beira de um vão de 30 m: o voo dura o dobro.' },
+  ];
+  const QUEDA = 30, DESCIDA = Math.tan(10 * Math.PI / 180);
+  // Altura do chao depois da crista, pelo avanco horizontal desde ela.
+  function chaoDepois(r, dx) {
+    if (r.chao === 'descida') return -Math.max(0, dx) * DESCIDA;
+    if (r.chao === 'abismo') return dx > 1 ? -QUEDA : 0;
+    return 0;
+  }
+  const inclinacao = r => r.chao === 'descida' ? -Math.atan(DESCIDA) : 0;
+
+  const KD = 0.0015;               // arrasto: a = KD * (1 + KP|pitch|) * |v| * v
+  const KP = 1.2;                  // nariz fora do vento arrasta mais
+  const KL = 0.3;                  // sustentacao: nariz pra cima plana
+  const CRISTA_JANELA = 0.14;      // s antes da crista em que o toque conta
+  const CRISTA_TARDE = 0.10;       // s depois de decolar em que ainda conta
+  const CRISTA_BONUS = 3.2;        // m/s a mais pra cima no toque certo
+  const LARGADA_JANELA = 0.35, LARGADA_GRATIS = 1.2, LARGADA_FRIO = 0.5, QUEIMOU_TRAVA = 1;
+  const CORTE_T = 1.4;             // s de motor cortado depois de superaquecer
+  const POUSO = { min: -0.22, max: 0.42 };  // rad em relacao ao chao: fora disso capota
+  const CAPOTOU = 0.7;             // capotar ainda conta, mas so 70% do salto
+  const SOBE = 1.5, CAI = 0.7;     // rad/s do nariz segurando e soltando
+
+  function novoSalto(carro, rampa) {
+    return { carro, rampa, fase: 'largada', contagem: 3, t: 0, vaiT: 0,
+      x: 0, y: 0, v: 0, vx: 0, vy: 0, d: 0, pitch: 0, calor: 0, corte: 0, trava: 0,
+      nitro: false, queimou: false, largou: false, largadaPerfeita: false, gratis: 0,
+      crista: null, cristaOk: false, arT: 0, chaoT: 0, dist: 0, distancia: 0,
+      pouso: '', vCrista: 0, alturaMax: 0, ev: [] };
+  }
+
+  // inp.segura = botao apertado agora; inp.toque = apertou neste passo.
+  function passo(s, dt, inp) {
+    const c = CARROS[s.carro], r = RAMPAS[s.rampa], ang = r.ang * Math.PI / 180;
+    s.t += dt;
+    if (s.fase === 'largada') {
+      if (inp.toque && !s.queimou) { s.queimou = true; s.trava = QUEIMOU_TRAVA; s.ev.push({ tipo: 'queimou' }); }
+      s.contagem -= dt;
+      if (s.contagem <= 0) { s.fase = 'reta'; s.ev.push({ tipo: 'vai' }); }
+      return;
+    }
+    if (s.fase === 'reta' || s.fase === 'rampa') {
+      s.vaiT += dt;
+      if (s.fase === 'reta' && !s.largou && !s.queimou && inp.toque && s.vaiT <= LARGADA_JANELA) {
+        // nitro gratis por uns segundos e motor frio: a primeira puxada dura mais
+        s.largou = true; s.largadaPerfeita = true; s.gratis = LARGADA_GRATIS; s.calor = -LARGADA_FRIO; s.ev.push({ tipo: 'largada' });
+      }
+      if (s.vaiT > LARGADA_JANELA) s.largou = true;
+      // O nitro soma por cima do motor e esquenta. Passou de 1, corta: o jogo
+      // do nitro e pulsar perto do vermelho sem nunca encostar nele.
+      let empurra = c.acel;
+      if (s.trava > 0) { s.trava -= dt; empurra = 0; }
+      s.nitro = false;
+      if (s.corte > 0) {
+        s.corte -= dt; empurra *= 0.25;
+        if (s.corte <= 0) s.calor = 0.5;
+      } else if (s.gratis > 0) {
+        s.gratis -= dt; s.nitro = true; empurra += c.nitro;   // sem esquentar
+      } else if (s.fase === 'reta' && inp.segura && s.trava <= 0) {
+        s.nitro = true; empurra += c.nitro; s.calor += c.aquece * dt;
+        if (s.calor >= 1) { s.calor = 1; s.corte = CORTE_T; s.nitro = false; s.ev.push({ tipo: 'superaqueceu' }); }
+      } else s.calor = Math.max(0, s.calor - c.resfria * dt);
+      // Arrasto do chao: acel/topo^2 faz o teto ser topo sem nitro. Com o motor
+      // cortado o arrasto continua, entao superaquecer custa velocidade de verdade.
+      empurra -= c.acel * (s.v / c.topo) ** 2;
+      if (s.fase === 'rampa') empurra -= G * Math.sin(ang);
+      s.v = Math.max(0, s.v + empurra * dt);
+
+      if (s.fase === 'reta') {
+        s.x += s.v * dt;
+        if (s.x >= r.pista) { s.fase = 'rampa'; s.d = s.x - r.pista; s.ev.push({ tipo: 'rampa' }); }
+        return;
+      }
+      if (inp.toque && !s.cristaOk) {
+        if (s.v > 0 && (r.comp - s.d) / s.v <= CRISTA_JANELA) { s.cristaOk = true; s.ev.push({ tipo: 'crista' }); }
+        else s.ev.push({ tipo: 'cedo' });
+      }
+      s.d += s.v * dt;
+      s.x = r.pista + s.d * Math.cos(ang); s.y = s.d * Math.sin(ang);
+      if (s.d >= r.comp) {
+        s.fase = 'ar'; s.arT = 0;
+        s.x = r.pista + r.comp * Math.cos(ang); s.y = r.comp * Math.sin(ang);
+        s.vx = s.v * Math.cos(ang); s.vy = s.v * Math.sin(ang) + (s.cristaOk ? CRISTA_BONUS : 0);
+        s.pitch = ang; s.vCrista = s.v; s.crista = { x: s.x, y: s.y };
+        s.ev.push({ tipo: 'decolou' });
+      } else if (s.v <= 0.01) {
+        s.fase = 'fim'; s.pouso = 'parou'; s.distancia = 0; s.ev.push({ tipo: 'parou' });
+      }
+      return;
+    }
+    if (s.fase === 'ar') {
+      s.arT += dt;
+      if (inp.toque && !s.cristaOk && s.arT <= CRISTA_TARDE) { s.cristaOk = true; s.vy += CRISTA_BONUS; s.ev.push({ tipo: 'crista' }); }
+      s.pitch = clamp(s.pitch + (inp.segura ? SOBE : -CAI) * c.giro * dt, -1.1, 1.1);
+      const vel = Math.hypot(s.vx, s.vy);
+      const arrasto = KD * (1 + KP * Math.abs(s.pitch)) * vel;
+      const sust = KL * c.sust * Math.max(0, Math.sin(s.pitch)) * s.vx;
+      s.vx -= arrasto * s.vx * dt;
+      s.vy += (-G - arrasto * s.vy + sust) * dt;
+      s.x += s.vx * dt; s.y += s.vy * dt;
+      s.alturaMax = Math.max(s.alturaMax, s.y);
+      const solo = chaoDepois(r, s.x - s.crista.x);
+      if (s.y <= solo) {
+        s.y = solo;
+        s.dist = s.x - s.crista.x;
+        const rel = s.pitch - inclinacao(r);
+        s.pouso = rel < POUSO.min ? 'bico' : rel > POUSO.max ? 'traseira' : 'limpo';
+        s.distancia = Math.round((s.pouso === 'limpo' ? s.dist : s.dist * CAPOTOU) * 10) / 10;
+        s.fase = 'chao'; s.chaoT = 0;
+        s.v = s.vx * (s.pouso === 'limpo' ? 0.9 : 0.5); s.vy = 0;
+        s.ev.push({ tipo: 'pouso', pouso: s.pouso, dist: s.dist });
+      }
+      return;
+    }
+    if (s.fase === 'chao') {
+      s.chaoT += dt;
+      s.v = Math.max(0, s.v - (s.pouso === 'limpo' ? 5 : 16) * dt);
+      s.x += s.v * dt; s.y = chaoDepois(r, s.x - s.crista.x);
+      if (s.pouso === 'limpo') s.pitch += (inclinacao(r) - s.pitch) * Math.min(1, 8 * dt);
+      else s.pitch += (s.pouso === 'bico' ? -9 : 9) * dt;
+      if (s.chaoT >= 2.2 || (s.v <= 0 && s.chaoT > 0.6)) { s.fase = 'fim'; s.ev.push({ tipo: 'fim' }); }
+    }
+  }
+
+  // Piloto automatico pro teste: largada no ponto, nitro pulsado perto do
+  // vermelho, toque na crista e nariz alto, na beira da faixa de pouso.
+  function piloto(s) {
+    const r = RAMPAS[s.rampa], inp = { segura: false, toque: false };
+    if (s.fase === 'reta') {
+      inp.toque = !s.largou && s.vaiT <= LARGADA_JANELA;
+      inp.segura = s.calor < 0.92 && s.corte <= 0;
+    } else if (s.fase === 'rampa') {
+      inp.toque = !s.cristaOk && s.v > 0 && (r.comp - s.d) / s.v <= CRISTA_JANELA * 0.7;
+    } else if (s.fase === 'ar') {
+      inp.segura = s.pitch < POUSO.max - 0.06 + inclinacao(r);   // nariz alto plana mais
+    }
+    return inp;
+  }
+  // ── fim da física ──
+
+  // ── projecao da visao de tras ─────────────────────
+  const HY = 300, PASSO = 2, ZFAR = 8, ESC = 14;   // 1 unidade de z = 14 m
+  const pDeZ = z => Math.pow(Math.max(0, 1 - z / ZFAR), 2.2);
+  const yDeP = (p, hy) => hy + p * (H - hy);
+  const meiaDe = p => 26 + p * 250;               // metade da pista (10 m) em px
+
+  // ── save ──────────────────────────────────────────
+  const SAVE_KEY = 'neon-salto-save';
+  const saveVazio = () => ({ v: 1, carro: 0, rampa: 0, melhores: {} });
+  function carregarSave() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+      if (!s || typeof s !== 'object') return saveVazio();
+      return { ...saveVazio(), ...s, melhores: s.melhores || {} };
+    } catch (e) { return saveVazio(); }
+  }
+  let save = carregarSave();
+  const gravar = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* sem storage segue jogando */ } };
+  let pb = Neon.best.get('salto');
+  const aberto = item => pb >= item.libera;
+  if (!aberto(CARROS[save.carro] || CARROS[0])) save.carro = 0;
+  if (!aberto(RAMPAS[save.rampa] || RAMPAS[0])) save.rampa = 0;
+  if (!CARROS[save.carro]) save.carro = 0;
+  if (!RAMPAS[save.rampa]) save.rampa = 0;
+
+  const els = {
+    score: Neon.$('score'), best: Neon.$('best'), kmh: Neon.$('kmh'), rampaBest: Neon.$('rampaBest'),
+    fsDist: Neon.$('fsDist'), fsVel: Neon.$('fsVel'), fsPouso: Neon.$('fsPouso'),
+    stage: Neon.$('stage'), overlay: Neon.$('overlay'), garCarros: Neon.$('garCarros'), garRampas: Neon.$('garRampas'),
+  };
+  const fmtM = m => `${(Math.round(m * 10) / 10).toFixed(1)} m`;
+  const fmtPainel = m => m ? (Math.round(m * 10) / 10).toFixed(1) : '0';   // sem unidade: cabe no celular
+  const melhorNa = ri => save.melhores[ri] || 0;
+  els.best.textContent = fmtPainel(pb);
+  els.rampaBest.textContent = fmtPainel(melhorNa(save.rampa));
+
+  // ── estado ────────────────────────────────────────
+  let s = null, state = 'menu', lastFrame = performance.now(), startHi = 0;
+  let segura = false, toqueP = false, nitroAntes = false;
+  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, cor: '' };
+  let aviso = '', avisoT = 0, avisoCor = '#a8dba0';
+  let cam = { s: 6, y: -4, x: 0 };
+  let rastro = [], rastroT = 0;
+  const particles = new Neon.Particles();
+
+  function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
+  function flashAt(cor, ms) { if (!Neon.motion.reduced) flash = { t: ms, cor }; }
+  function mostrarAviso(t, cor, ms) { aviso = t; avisoT = ms || 900; avisoCor = cor; }
+
+  // ── garagem ───────────────────────────────────────
+  function montarGaragem() {
+    const monta = (lista, pai, escolhido, tipo) => {
+      pai.innerHTML = '';
+      lista.forEach((item, i) => {
+        const b = document.createElement('button'), fechado = !aberto(item);
+        b.className = 'opcao'; b.style.setProperty('--cor', item.cor || '#efce95'); b.disabled = fechado;
+        b.setAttribute('aria-pressed', String(i === escolhido));
+        const situacao = fechado ? `🔒 ${item.libera} m` : item.desc;
+        b.setAttribute('aria-label', `${item.nome}. ${item.longa} ${fechado ? `Abre com recorde de ${item.libera} m.` : ''}`);
+        b.title = item.longa + (fechado ? ` Abre com recorde de ${item.libera} m.` : '');
+        const preview = document.createElement('canvas'); preview.width = 200; preview.height = 80;
+        preview.setAttribute('aria-hidden', 'true');
+        b.appendChild(preview);
+        for (const [tag, texto] of [['b', item.nome], ['span', situacao]]) {
+          const el = document.createElement(tag); el.textContent = texto; b.appendChild(el);
+        }
+        b.addEventListener('click', () => {
+          if (tipo === 'carro') save.carro = i; else save.rampa = i;
+          gravar(); montarGaragem(); pai.children[i].focus(); Neon.audio.sfx.click();
+          els.rampaBest.textContent = fmtPainel(melhorNa(save.rampa));
+        });
+        pai.appendChild(b);
+        const c = preview.getContext('2d');
+        if (tipo === 'carro') { c.translate(100, 52); carroLado(c, 0, 0, 120, 0, item, false); }
+        else previewRampa(c, item);
+      });
+    };
+    monta(CARROS, els.garCarros, save.carro, 'carro');
+    monta(RAMPAS, els.garRampas, save.rampa, 'rampa');
+  }
+  function previewRampa(c, r) {
+    const ang = r.ang * Math.PI / 180, esc = 2.2;
+    const x0 = 30, y0 = r.chao === 'abismo' ? 30 : 42;
+    const lx = x0 + r.comp * Math.cos(ang) * esc, ly = y0 - r.comp * Math.sin(ang) * esc;
+    c.strokeStyle = r.cor || '#efce95'; c.lineWidth = 3; c.lineJoin = 'round';
+    c.shadowColor = c.strokeStyle; c.shadowBlur = 8;
+    c.beginPath(); c.moveTo(0, y0); c.lineTo(x0, y0); c.lineTo(lx, ly); c.lineTo(lx, y0);
+    if (r.chao === 'abismo') { c.moveTo(lx + 4, y0); c.lineTo(lx + 4, y0 + 34); c.lineTo(200, y0 + 34); }
+    else if (r.chao === 'descida') { c.moveTo(lx, y0); c.lineTo(200, y0 + (200 - lx) * DESCIDA); }
+    else { c.moveTo(lx, y0); c.lineTo(200, y0); }
+    c.stroke();
+    c.shadowBlur = 0;
+    c.fillStyle = 'rgba(255,255,255,0.08)';
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(lx, ly); c.lineTo(lx, y0); c.closePath(); c.fill();
+  }
+  RAMPAS[0].cor = '#9be7ce'; RAMPAS[1].cor = '#ed887f'; RAMPAS[2].cor = '#a8dba0'; RAMPAS[3].cor = '#afa3f5';
+
+  // ── partida ───────────────────────────────────────
+  function startGame() {
+    Neon.audio.ensure();
+    startHi = pb;
+    s = novoSalto(save.carro, save.rampa);
+    segura = false; toqueP = false; nitroAntes = false;
+    rastro = []; rastroT = 0;
+    particles.clear();
+    aviso = ''; avisoT = 0;
+    els.score.textContent = '0';
+    els.kmh.textContent = '0';
+    els.overlay.classList.remove('pausa');
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+    Neon.audio.sfx.tick();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    segura = false;
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    els.overlay.classList.add('pausa');
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar.', 'CONTINUAR');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    state = 'playing';
+    lastFrame = performance.now();
+    els.overlay.classList.remove('pausa');
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  function fim() {
+    state = 'gameover';
+    Neon.audio.music.down();
+    const distancia = s.distancia;
+    const abertosAntes = [...CARROS, ...RAMPAS].filter(aberto).length;
+    pb = Neon.best.update('salto', distancia);
+    els.best.textContent = fmtPainel(pb);
+    if (distancia > melhorNa(s.rampa)) { save.melhores[s.rampa] = distancia; gravar(); }
+    els.rampaBest.textContent = fmtPainel(melhorNa(s.rampa));
+    const isRecord = distancia > 0 && distancia > startHi;
+    const novos = [...CARROS, ...RAMPAS].filter(aberto).length - abertosAntes;
+    if (isRecord) Neon.audio.sfx.record();
+    els.fsDist.textContent = fmtM(distancia);
+    els.fsVel.textContent = `${Math.round(s.vCrista * 3.6)} km/h`;
+    const POUSOS = { limpo: 'LIMPO', bico: 'DE BICO', traseira: 'DE TRASEIRA', parou: 'PAROU' };
+    els.fsPouso.textContent = POUSOS[s.pouso] || '—';
+    els.fsPouso.className = s.pouso === 'limpo' ? 'gold' : 'pink';
+    Neon.$('finalStats').style.display = 'grid';
+    els.overlay.classList.remove('pausa');
+    montarGaragem();
+    const liberados = [...CARROS, ...RAMPAS].filter(i => i.libera > 0 && aberto(i) && i.libera > startHi).map(i => i.nome);
+    let texto;
+    if (s.pouso === 'parou') texto = 'Faltou velocidade: o carro parou na subida. Segure o nitro na reta.';
+    else if (s.pouso === 'limpo') texto = `Voou ${fmtM(s.dist)} de ${RAMPAS[s.rampa].nome} com ${CARROS[s.carro].nome}${s.cristaOk ? ', crista no ponto' : ''}.`;
+    else texto = `Foram ${fmtM(s.dist)}, mas capotou ${s.pouso === 'bico' ? 'de bico' : 'de traseira'}: só 70% conta. Nivele o nariz antes do chão.`;
+    if (novos > 0) texto += ` ${liberados.join(' e ')} liberado${liberados.length > 1 ? 's' : ''}!`;
+    Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : s.pouso === 'limpo' ? 'POUSO LIMPO' : s.pouso === 'parou' ? 'PAROU NA RAMPA' : 'CAPOTOU',
+      texto, 'SALTAR DE NOVO', isRecord ? 'record' : s.pouso === 'limpo' ? '' : 'go');
+  }
+
+  // ── input ─────────────────────────────────────────
+  function apertou() {
+    if (state !== 'playing') return;
+    segura = true; toqueP = true;
+  }
+  function soltou() { segura = false; }
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
+    if (k === ' ' || k === 'arrowup' || k === 'w' || k === 'enter') {
+      // botao da garagem com foco: o teclado escolhe carro/rampa, nao larga
+      if (e.target.closest('.opcao, .btn') && (k === ' ' || k === 'enter')) return;
+      e.preventDefault();
+      if (e.repeat) return;
+      if (state === 'menu' || state === 'gameover') startGame();
+      else if (state === 'paused') resumeGame();
+      else apertou();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === ' ' || k === 'arrowup' || k === 'w' || k === 'enter') soltou();
+  });
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay, .back-btn')) return;
+    e.preventDefault();
+    apertou();
+  });
+  window.addEventListener('pointerup', soltou);
+  window.addEventListener('pointercancel', soltou);
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  Neon.onHide(() => { soltou(); if (state === 'playing') pauseGame(); });
+
+  // ── eventos da fisica viram som e aviso ──────────
+  function reagir(e) {
+    const c = CARROS[s.carro];
+    switch (e.tipo) {
+      case 'queimou': mostrarAviso('QUEIMOU A LARGADA', '#ed887f', 1200); Neon.audio.sfx.wrong(); shakeAt(6, 200); break;
+      case 'vai': Neon.audio.sfx.level(); break;
+      case 'largada': mostrarAviso('LARGADA PERFEITA', '#a8dba0'); Neon.audio.sfx.point(); particles.burst(W / 2, H - 150, '#a8dba0', 14, 170, 3); break;
+      case 'superaqueceu': mostrarAviso('SUPERAQUECEU', '#ed887f', 1300); Neon.audio.sfx.wrong(); shakeAt(8, 260);
+        for (let i = 0; i < 16; i++) particles.emit(W / 2 + Neon.rand(-40, 40), H - 130, Neon.rand(-40, 40), Neon.rand(-140, -60), '#a8b9c8', Neon.rand(4, 8), 0.9);
+        break;
+      case 'rampa': Neon.audio.sfx.drop(); shakeAt(4, 200); break;
+      case 'crista': mostrarAviso('CRISTA NO PONTO', '#e9b77c'); Neon.audio.sfx.level(); break;
+      case 'cedo': mostrarAviso('CEDO', '#dda077', 500); Neon.audio.sfx.wall(); break;
+      case 'decolou': Neon.audio.sfx.boost(); flashAt('rgba(245,231,206,', 260);
+        cam = { s: 6, y: -4, x: s.x - 0.4 * W / 6 };
+        rastro = [{ x: s.x, y: s.y }]; rastroT = 0;
+        break;
+      case 'pouso': {
+        const p = telaLado(s.x, s.y);
+        if (e.pouso === 'limpo') {
+          mostrarAviso('POUSO LIMPO', '#a8dba0', 1400); Neon.audio.sfx.goal(); flashAt('rgba(168,219,160,', 240);
+          particles.burst(p.x, p.y, c.cor, 18, 180, 3);
+        } else {
+          mostrarAviso(e.pouso === 'bico' ? 'DE BICO! −30%' : 'DE TRASEIRA! −30%', '#ed887f', 1600);
+          Neon.audio.sfx.death(); flashAt('rgba(237,136,127,', 300); shakeAt(12, 400);
+          particles.burst(p.x, p.y, '#ed887f', 24, 220, 4);
+        }
+        break;
+      }
+      case 'parou': mostrarAviso('PAROU NA RAMPA', '#ed887f', 1400); Neon.audio.sfx.death(); break;
+      case 'fim': fim(); break;
+    }
+  }
+
+  // ── update ────────────────────────────────────────
+  function update(dt) {
+    if (state !== 'playing') return;
+    if (avisoT > 0) avisoT -= dt * 1000;
+    const inp = { segura, toque: toqueP };
+    toqueP = false;
+    passo(s, dt, inp);
+    for (const e of s.ev) reagir(e);
+    s.ev.length = 0;
+    if (state !== 'playing') return;
+    if (s.nitro && !nitroAntes) Neon.audio.sfx.boost();
+    nitroAntes = s.nitro;
+    const vel = s.fase === 'ar' ? Math.hypot(s.vx, s.vy) : s.v;
+    els.kmh.textContent = Math.round(vel * 3.6);
+    Neon.audio.music.intensity(vel / 70);
+    if (s.fase === 'ar' || s.fase === 'chao') {
+      els.score.textContent = fmtPainel(s.fase === 'ar' ? Math.max(0, s.x - s.crista.x) : s.distancia);
+      rastroT += dt;
+      if (s.fase === 'ar' && rastroT >= 0.08) { rastroT = 0; rastro.push({ x: s.x, y: s.y }); }
+      // camera do lado: segue o carro e afasta conforme ele sobe
+      const r = RAMPAS[s.rampa];
+      const chaoAqui = Math.min(0, chaoDepois(r, s.x - s.crista.x));
+      const alvoY = chaoAqui - 4;
+      const alvoS = clamp((H - 70 - 110) / Math.max(12, s.y - alvoY), 2.5, 6);
+      const k = Math.min(1, dt * 4);
+      cam.s += (alvoS - cam.s) * k;
+      cam.y += (alvoY - cam.y) * k;
+      cam.x = s.x - 0.4 * W / cam.s;
+    }
+  }
+
+  // ── render: carros ────────────────────────────────
+  function carroTras(x, y, larg, m, nitro, calor) {
+    const alt = larg * 0.62;
+    Neon.glow(ctx, m.cor, larg * 0.5);
+    ctx.fillStyle = m.cor;
+    ctx.beginPath();
+    ctx.moveTo(x - larg / 2, y);
+    ctx.lineTo(x - larg / 2, y - alt * 0.6);
+    ctx.lineTo(x - larg * 0.36, y - alt);
+    ctx.lineTo(x + larg * 0.36, y - alt);
+    ctx.lineTo(x + larg / 2, y - alt * 0.6);
+    ctx.lineTo(x + larg / 2, y);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(8,13,28,0.82)';
+    ctx.fillRect(x - larg * 0.32, y - alt * 0.94, larg * 0.64, alt * 0.36);
+    ctx.fillStyle = m.escuro;
+    ctx.fillRect(x - larg / 2, y - alt * 0.22, larg, alt * 0.22);
+    ctx.fillStyle = '#ed887f';
+    Neon.glow(ctx, '#ed887f', 10);
+    ctx.fillRect(x - larg * 0.46, y - alt * 0.4, larg * 0.2, alt * 0.12);
+    ctx.fillRect(x + larg * 0.26, y - alt * 0.4, larg * 0.2, alt * 0.12);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x - larg * 0.56, y - alt * 0.3, larg * 0.14, alt * 0.3);
+    ctx.fillRect(x + larg * 0.42, y - alt * 0.3, larg * 0.14, alt * 0.3);
+    if (nitro) {
+      for (const sx of [-0.3, 0.3]) {
+        const fl = larg * (0.35 + Math.random() * 0.25);
+        const cor = calor > 0.85 ? '#ed887f' : '#9be7ce';
+        ctx.fillStyle = cor; Neon.glow(ctx, cor, 26);
+        ctx.beginPath();
+        ctx.moveTo(x + sx * larg - larg * 0.07, y - alt * 0.08);
+        ctx.lineTo(x + sx * larg, y + fl);
+        ctx.lineTo(x + sx * larg + larg * 0.07, y - alt * 0.08);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.moveTo(x + sx * larg - larg * 0.03, y - alt * 0.05);
+        ctx.lineTo(x + sx * larg, y + fl * 0.5);
+        ctx.lineTo(x + sx * larg + larg * 0.03, y - alt * 0.05);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+  }
+  // Carro visto de lado, comprimento L px, nariz pra direita, pitch em rad
+  // (positivo = nariz pra cima).
+  function carroLado(c, x, y, L, pitch, m, nitro) {
+    const h = L * 0.3;
+    c.save(); c.translate(x, y); c.rotate(-pitch);
+    c.lineJoin = 'round';
+    if (nitro) {
+      c.fillStyle = '#9be7ce'; c.shadowColor = '#9be7ce'; c.shadowBlur = 16;
+      c.beginPath(); c.moveTo(-L * 0.5, -h * 0.35); c.lineTo(-L * (0.75 + Math.random() * 0.2), -h * 0.2); c.lineTo(-L * 0.5, -h * 0.05); c.closePath(); c.fill();
+      c.shadowBlur = 0;
+    }
+    const tinta = c.createLinearGradient(0, -h, 0, 0);
+    tinta.addColorStop(0, m.claro); tinta.addColorStop(0.4, m.cor); tinta.addColorStop(1, m.escuro);
+    c.fillStyle = tinta; c.shadowColor = m.cor; c.shadowBlur = 12;
+    c.beginPath();
+    c.moveTo(-L * 0.5, -h * 0.15);
+    c.lineTo(-L * 0.46, -h * 0.55);
+    c.lineTo(-L * 0.2, -h * 0.62);
+    c.lineTo(-L * 0.05, -h);
+    c.lineTo(L * 0.22, -h);
+    c.lineTo(L * 0.4, -h * 0.55);
+    c.lineTo(L * 0.5, -h * 0.4);
+    c.lineTo(L * 0.5, -h * 0.1);
+    c.lineTo(L * 0.42, 0);
+    c.lineTo(-L * 0.42, 0);
+    c.closePath(); c.fill();
+    c.shadowBlur = 0;
+    c.strokeStyle = m.claro; c.lineWidth = Math.max(1, L * 0.012); c.stroke();
+    // vidro
+    c.fillStyle = '#254c65';
+    c.beginPath(); c.moveTo(-L * 0.16, -h * 0.6); c.lineTo(-L * 0.03, -h * 0.94); c.lineTo(L * 0.2, -h * 0.94); c.lineTo(L * 0.34, -h * 0.6); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(231,250,255,0.35)';
+    c.beginPath(); c.moveTo(L * 0.02, -h * 0.9); c.lineTo(L * 0.1, -h * 0.9); c.lineTo(-L * 0.02, -h * 0.64); c.lineTo(-L * 0.1, -h * 0.64); c.closePath(); c.fill();
+    // rodas
+    for (const rx of [-L * 0.3, L * 0.3]) {
+      c.fillStyle = '#0c1220'; c.beginPath(); c.arc(rx, 0, h * 0.34, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = m.claro; c.lineWidth = Math.max(1, L * 0.014); c.beginPath(); c.arc(rx, 0, h * 0.2, 0, Math.PI * 2); c.stroke();
+    }
+    // luz de baixo
+    c.strokeStyle = m.cor; c.shadowColor = m.cor; c.shadowBlur = 14; c.lineWidth = Math.max(1.5, L * 0.02);
+    c.beginPath(); c.moveTo(-L * 0.38, h * 0.08); c.lineTo(L * 0.38, h * 0.08); c.stroke();
+    c.shadowBlur = 0;
+    c.restore();
+  }
+
+  // ── render: visao de tras (largada, reta, rampa) ─
+  function renderTras() {
+    const r = RAMPAS[s.rampa], m = CARROS[s.carro], ang = r.ang * Math.PI / 180;
+    const naRampa = s.fase === 'rampa';
+    const subida = naRampa ? clamp(s.d / r.comp, 0, 1) : 0;
+    const hy = HY + 150 * subida;
+
+    const ceu = ctx.createLinearGradient(0, 0, 0, hy);
+    ceu.addColorStop(0, '#111d2c');
+    ceu.addColorStop(1, '#434363');
+    ctx.fillStyle = ceu;
+    ctx.fillRect(0, 0, W, hy);
+    ctx.fillStyle = '#efce95';
+    Neon.glow(ctx, '#dda077', 40);
+    Neon.circle(ctx, W / 2, hy - 46, 40);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#434363';
+    for (let i = 0; i < 4; i++) ctx.fillRect(W / 2 - 40, hy - 46 + 8 + i * 8, 80, 2 + i);
+    // serra ao fundo
+    ctx.fillStyle = '#152136';
+    ctx.beginPath(); ctx.moveTo(0, hy);
+    for (let x = 0; x <= W; x += 20) ctx.lineTo(x, hy - 22 - Math.abs(Math.sin(x * 0.021)) * 40 - Math.abs(Math.sin(x * 0.007 + 2)) * 26);
+    ctx.lineTo(W, hy); ctx.closePath(); ctx.fill();
+
+    const xPista = naRampa ? r.pista + s.d : s.x;   // avanco pelo chao, pra rolar as faixas
+    for (let y = hy; y < H; y += PASSO) {
+      const p = (y - hy) / (H - hy);
+      const z = (1 - Math.pow(Math.max(0, p), 1 / 2.2)) * ZFAR + xPista / 5;
+      const meia = meiaDe(p);
+      const banda = ((z * 1.4) | 0) % 2;
+      const luz = 0.7 + p * 0.3;
+      ctx.fillStyle = banda ? `rgb(${(28 * luz) | 0},${(38 * luz) | 0},${(55 * luz) | 0})`
+                            : `rgb(${(20 * luz) | 0},${(29 * luz) | 0},${(44 * luz) | 0})`;
+      ctx.fillRect(0, y, W, PASSO);
+      ctx.fillStyle = `rgb(${(52 * luz) | 0},${(52 * luz) | 0},${(68 * luz) | 0})`;
+      ctx.fillRect(W / 2 - meia, y, meia * 2, PASSO);
+      const borda = Math.max(2, meia * 0.055);
+      ctx.fillStyle = banda ? `rgb(${(155 * luz) | 0},${(231 * luz) | 0},${(206 * luz) | 0})`
+                            : `rgb(${(240 * luz) | 0},${(240 * luz) | 0},${(237 * luz) | 0})`;
+      ctx.fillRect(W / 2 - meia, y, borda, PASSO);
+      ctx.fillRect(W / 2 + meia - borda, y, borda, PASSO);
+      if (banda && p > 0.12) {
+        ctx.fillStyle = 'rgba(255,255,255,0.45)';
+        ctx.fillRect(W / 2 - meia * 0.02, y, Math.max(1, meia * 0.04), PASSO);
+      }
+    }
+    // postes a cada 20 m: e o que da a sensacao de velocidade
+    for (let k = 0; k < 6; k++) {
+      const dx = 20 * (k + 1) - (xPista % 20);
+      const p = pDeZ(dx / ESC);
+      if (p <= 0.02) continue;
+      const meia = meiaDe(p), y = yDeP(p, hy), alt = meia * 0.5;
+      ctx.fillStyle = `rgba(175,163,245,${0.35 + p * 0.65})`;
+      Neon.glow(ctx, '#afa3f5', 10 * p);
+      ctx.fillRect(W / 2 - meia - meia * 0.12, y - alt, Math.max(2, meia * 0.03), alt);
+      ctx.fillRect(W / 2 + meia + meia * 0.09, y - alt, Math.max(2, meia * 0.03), alt);
+      ctx.shadowBlur = 0;
+    }
+
+    // a rampa: quadrilatero da base ate a crista, crista levantada pela altura
+    const dxB = r.pista - s.x, dxT = r.pista + r.comp * Math.cos(ang) - s.x;
+    if (dxT > 0 && dxB < ZFAR * ESC) {
+      const pB = pDeZ(dxB / ESC), pT = pDeZ(dxT / ESC);
+      const mB = meiaDe(pB), mT = meiaDe(pT);
+      const yB = yDeP(pB, hy), yT = yDeP(pT, hy);
+      const hT = r.comp * Math.sin(ang) * mT / 5;
+      const hCar = naRampa ? s.d * Math.sin(ang) * mB / 5 : 0;
+      const grad = ctx.createLinearGradient(0, yB, 0, yT - hT);
+      grad.addColorStop(0, '#3a3d5c'); grad.addColorStop(1, '#6e6a9c');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(W / 2 - mB, yB + hCar); ctx.lineTo(W / 2 + mB, yB + hCar);
+      ctx.lineTo(W / 2 + mT, yT - hT + hCar); ctx.lineTo(W / 2 - mT, yT - hT + hCar);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = r.cor; ctx.lineWidth = Math.max(2, 4 * pT); Neon.glow(ctx, r.cor, 18);
+      ctx.stroke();
+      // listras da crista
+      for (let i = 0; i < 6; i++) {
+        const f = i / 6, mx = mT + (mB - mT) * f;
+        const y = (yT - hT) + ((yB) - (yT - hT)) * f + hCar;
+        ctx.fillStyle = i % 2 ? 'rgba(237,136,127,0.55)' : 'rgba(245,231,206,0.55)';
+        ctx.fillRect(W / 2 + mx * 0.65, y - 2, mx * 0.25, 3);
+        ctx.fillRect(W / 2 - mx * 0.9, y - 2, mx * 0.25, 3);
+      }
+      ctx.shadowBlur = 0;
+      // borda da crista
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; Neon.glow(ctx, r.cor, 22);
+      ctx.beginPath(); ctx.moveTo(W / 2 - mT, yT - hT + hCar); ctx.lineTo(W / 2 + mT, yT - hT + hCar); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    const pEu = 0.95, mEu = meiaDe(pEu);
+    // sombra
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(W / 2, yDeP(pEu, hy) + 4, mEu * 0.22, 8, 0, 0, Math.PI * 2); ctx.fill();
+    carroTras(W / 2, yDeP(pEu, hy), mEu * 0.36, m, s.nitro, s.calor);
+
+    // HUD: distancia pra rampa (centro: os cantos tem os botoes)
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 13px Orbitron, sans-serif';
+    ctx.fillStyle = 'rgba(237,244,240,0.75)';
+    ctx.fillText(naRampa ? 'RAMPA' : `${Math.max(0, Math.round(r.pista - s.x))} m p/ rampa`, W / 2, 30);
+    if (naRampa && !s.cristaOk) {
+      ctx.font = '700 26px Orbitron, sans-serif';
+      ctx.fillStyle = '#e9b77c'; Neon.glow(ctx, '#e9b77c', 20);
+      ctx.fillText('TOQUE NA CRISTA', W / 2, hy - 60);
+      ctx.shadowBlur = 0;
+    }
+    // velocidade
+    ctx.textAlign = 'left';
+    ctx.font = '700 40px Orbitron, sans-serif';
+    ctx.fillStyle = '#efce95'; Neon.glow(ctx, '#efce95', 14);
+    ctx.fillText(String(Math.round(s.v * 3.6)), 18, H - 60);
+    ctx.shadowBlur = 0;
+    ctx.font = '700 11px Orbitron, sans-serif';
+    ctx.fillStyle = 'rgba(237,244,240,0.55)';
+    ctx.fillText('KM/H', 20, H - 30);
+    medidorNitro();
+
+    ctx.textAlign = 'center';
+    if (s.fase === 'largada') {
+      const n = Math.ceil(s.contagem);
+      ctx.font = '700 110px Orbitron, sans-serif';
+      ctx.fillStyle = s.queimou ? '#ed887f' : '#efce95';
+      Neon.glow(ctx, ctx.fillStyle, 30);
+      ctx.fillText(String(Math.max(1, n)), W / 2, hy + 120);
+      ctx.shadowBlur = 0;
+      if (!s.queimou) {
+        ctx.font = '700 13px Orbitron, sans-serif';
+        ctx.fillStyle = 'rgba(237,244,240,0.7)';
+        ctx.fillText('TOQUE NO VAI', W / 2, hy + 200);
+      }
+    } else if (s.vaiT < 0.7 && s.fase === 'reta') {
+      ctx.font = '700 96px Orbitron, sans-serif';
+      ctx.fillStyle = '#a8dba0'; Neon.glow(ctx, '#a8dba0', 30);
+      ctx.fillText('VAI!', W / 2, hy + 120);
+      ctx.shadowBlur = 0;
+    }
+  }
+  function medidorNitro() {
+    const x = W - 44, y0 = 120, alt = 300, larg = 18;
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(x, y0, larg, alt);
+    ctx.fillStyle = 'rgba(237,136,127,0.35)';
+    ctx.fillRect(x, y0, larg, alt * 0.15);
+    const cor = s.corte > 0 ? '#ed887f' : s.calor > 0.85 ? '#efce95' : '#9be7ce';
+    ctx.fillStyle = cor; Neon.glow(ctx, cor, 16);
+    const h = alt * s.calor;
+    ctx.fillRect(x, y0 + alt - h, larg, h);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y0 + 0.5, larg - 1, alt - 1);
+    ctx.save();
+    ctx.translate(x + larg + 14, y0 + alt / 2); ctx.rotate(Math.PI / 2);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 11px Orbitron, sans-serif';
+    ctx.fillStyle = s.corte > 0 ? '#ed887f' : 'rgba(237,244,240,0.6)';
+    ctx.fillText(s.corte > 0 ? 'MOTOR CORTADO' : s.fase === 'rampa' ? 'SOLTE' : 'NITRO · SEGURE', 0, 0);
+    ctx.restore();
+  }
+
+  // ── render: visao de lado (voo e pouso) ──────────
+  const telaLado = (x, y) => ({ x: (x - cam.x) * cam.s, y: H - 70 - (y - cam.y) * cam.s });
+  function alturaChao(r, x) {
+    const ang = r.ang * Math.PI / 180;
+    if (x < r.pista) return 0;
+    if (x <= s.crista.x) return (x - r.pista) * Math.tan(ang);
+    return chaoDepois(r, x - s.crista.x);
+  }
+  function renderLado() {
+    const r = RAMPAS[s.rampa], m = CARROS[s.carro];
+    const ceu = ctx.createLinearGradient(0, 0, 0, H);
+    ceu.addColorStop(0, '#0b1224'); ceu.addColorStop(0.55, '#3a3a5e'); ceu.addColorStop(1, '#6b4a6a');
+    ctx.fillStyle = ceu; ctx.fillRect(0, 0, W, H);
+    // sol e serra com parallax
+    const sunX = W * 0.72 - (cam.x * 0.15 % W), sunY = H * 0.42;
+    ctx.fillStyle = '#efce95'; Neon.glow(ctx, '#dda077', 50);
+    Neon.circle(ctx, sunX, sunY, 70);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#3a3a5e';
+    for (let i = 0; i < 5; i++) ctx.fillRect(sunX - 72, sunY + 10 + i * 12, 144, 3 + i);
+    ctx.fillStyle = '#152136';
+    ctx.beginPath(); ctx.moveTo(0, H);
+    for (let x = 0; x <= W; x += 16) {
+      const wx = x + cam.x * cam.s * 0.25;
+      ctx.lineTo(x, H * 0.62 - Math.abs(Math.sin(wx * 0.013)) * 90 - Math.abs(Math.sin(wx * 0.004 + 1)) * 60);
+    }
+    ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+
+    // chao: perfil continuo (reta, rampa, o que vem depois)
+    const passoPx = 4;
+    ctx.beginPath(); ctx.moveTo(0, H);
+    const pontos = [];
+    for (let sx = 0; sx <= W + passoPx; sx += passoPx) {
+      const wx = cam.x + sx / cam.s;
+      const p = telaLado(wx, alturaChao(r, wx));
+      pontos.push(p);
+      ctx.lineTo(sx, p.y);
+    }
+    ctx.lineTo(W, H); ctx.closePath();
+    const solo = ctx.createLinearGradient(0, H * 0.4, 0, H);
+    solo.addColorStop(0, '#1c2440'); solo.addColorStop(1, '#0b1020');
+    ctx.fillStyle = solo; ctx.fill();
+    // grade abaixo do chao, rolando com a camera
+    ctx.strokeStyle = 'rgba(175,163,245,0.18)'; ctx.lineWidth = 1;
+    ctx.save(); ctx.clip();
+    for (let k = -2; k < 6; k++) {
+      const y = H - 70 - (cam.y - 8 * k - cam.y) * cam.s;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    for (let wx = Math.floor(cam.x / 10) * 10; wx < cam.x + W / cam.s; wx += 10) {
+      const sx = (wx - cam.x) * cam.s;
+      ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
+    }
+    ctx.restore();
+    // linha do chao em neon
+    ctx.strokeStyle = r.cor; ctx.lineWidth = 3; Neon.glow(ctx, r.cor, 16);
+    ctx.beginPath();
+    pontos.forEach((p, i) => i ? ctx.lineTo(i * passoPx, p.y) : ctx.moveTo(0, p.y));
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // marcas de distancia a partir da crista
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    const ini = Math.max(10, Math.ceil((cam.x - s.crista.x) / 10) * 10);
+    const fimX = cam.x + W / cam.s - s.crista.x;
+    for (let d = ini; d <= fimX; d += 10) {
+      const wx = s.crista.x + d, p = telaLado(wx, chaoDepois(r, d));
+      const grande = d % 50 === 0;
+      ctx.fillStyle = grande ? '#f5e7ce' : 'rgba(245,231,206,0.45)';
+      ctx.fillRect(p.x - 1, p.y - (grande ? 16 : 8), 2, grande ? 16 : 8);
+      if (grande || cam.s > 4.5) {
+        ctx.font = `700 ${grande ? 13 : 10}px Orbitron, sans-serif`;
+        ctx.fillText(String(d), p.x, p.y - (grande ? 20 : 11));
+      }
+    }
+    // recorde: uma linha vertical pra ter o que bater
+    const marcas = [[pb, 'RECORDE', '#e9b77c'], [melhorNa(s.rampa), 'NESTA RAMPA', '#a8dba0']];
+    for (const [d, rotulo, cor] of marcas) {
+      if (!d || d < ini - 10 || d > fimX) continue;
+      const wx = s.crista.x + d, p = telaLado(wx, chaoDepois(r, d));
+      ctx.strokeStyle = cor; ctx.setLineDash([6, 6]); ctx.lineWidth = 2; Neon.glow(ctx, cor, 12);
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, 60); ctx.stroke();
+      ctx.setLineDash([]); ctx.shadowBlur = 0;
+      ctx.font = '700 10px Orbitron, sans-serif'; ctx.fillStyle = cor; ctx.textBaseline = 'top';
+      ctx.fillText(`${rotulo} ${fmtM(d)}`, p.x, 62);
+      ctx.textBaseline = 'bottom';
+    }
+
+    // rastro do voo
+    ctx.fillStyle = 'rgba(155,231,206,0.5)';
+    for (const q of rastro) { const p = telaLado(q.x, q.y); Neon.circle(ctx, p.x, p.y, 2.2); }
+    // sombra no chao e carro
+    const pc = telaLado(s.x, s.y), ps = telaLado(s.x, alturaChao(r, s.x));
+    const L = clamp(4.5 * cam.s, 56, 90);
+    const altura = Math.max(0, s.y - alturaChao(r, s.x));
+    ctx.fillStyle = `rgba(0,0,0,${clamp(0.45 - altura * 0.006, 0.08, 0.45)})`;
+    ctx.beginPath(); ctx.ellipse(ps.x, ps.y, L * 0.45 * clamp(1 - altura * 0.008, 0.4, 1), L * 0.06, 0, 0, Math.PI * 2); ctx.fill();
+    carroLado(ctx, pc.x, pc.y - L * 0.06, L, s.pitch, m, false);
+
+    // HUD: distancia atual
+    const dAtual = s.fase === 'ar' ? Math.max(0, s.x - s.crista.x) : s.dist;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 44px Orbitron, sans-serif';
+    ctx.fillStyle = s.fase === 'chao' && s.pouso !== 'limpo' ? '#ed887f' : '#f5e7ce';
+    Neon.glow(ctx, ctx.fillStyle, 16);
+    ctx.fillText(fmtM(dAtual), W / 2, 40);
+    ctx.shadowBlur = 0;
+    if (s.fase === 'chao' && s.pouso !== 'limpo') {
+      ctx.font = '700 13px Orbitron, sans-serif'; ctx.fillStyle = '#ed887f';
+      ctx.fillText(`CONTA ${fmtM(s.distancia)}`, W / 2, 96);
+    }
+    medidorNariz();
+  }
+  // Nariz do carro contra a faixa de pouso limpo. E a unica forma de o
+  // jogador saber, de lado e em voo, se vai pousar reto ou capotar.
+  function medidorNariz() {
+    const r = RAMPAS[s.rampa];
+    const cx = 86, cy = H - 210, R = 54;
+    const angDe = p => -(p - inclinacao(r));      // tela: y pra baixo
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath(); ctx.arc(cx, cy, R, angDe(1.1), angDe(-1.1)); ctx.stroke();
+    ctx.strokeStyle = '#a8dba0'; Neon.glow(ctx, '#a8dba0', 14);
+    ctx.beginPath(); ctx.arc(cx, cy, R, angDe(POUSO.max), angDe(POUSO.min)); ctx.stroke();
+    ctx.shadowBlur = 0;
+    const rel = s.pitch - inclinacao(r);
+    const dentro = rel >= POUSO.min && rel <= POUSO.max;
+    const cor = dentro ? '#a8dba0' : '#ed887f';
+    ctx.strokeStyle = cor; ctx.lineWidth = 4; Neon.glow(ctx, cor, 14);
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(-s.pitch) * (R - 4), cy + Math.sin(-s.pitch) * (R - 4));
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    Neon.circle(ctx, cx, cy, 5, cor);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '700 10px Orbitron, sans-serif';
+    ctx.fillStyle = 'rgba(237,244,240,0.6)';
+    ctx.fillText('NARIZ', cx, cy + 22);
+    if (s.fase === 'ar') {
+      ctx.fillStyle = dentro ? '#a8dba0' : '#efce95';
+      ctx.fillText(dentro ? 'POUSO LIMPO' : rel > POUSO.max ? 'SOLTE' : 'SEGURE', cx, cy + 36);
+    }
+  }
+
+  function render() {
+    ctx.save();
+    if (shake.t > 0) {
+      const k = shake.t / shake.max;
+      ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
+    }
+    if (!s) {
+      s = novoSalto(save.carro, save.rampa);
+      renderTras();
+      s = null;
+    } else if (s.fase === 'ar' || s.fase === 'chao' || (s.fase === 'fim' && s.crista)) renderLado();
+    else renderTras();
+
+    if (avisoT > 0) {
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.globalAlpha = Math.min(1, avisoT / 400);
+      ctx.font = '700 22px Orbitron, sans-serif';
+      ctx.fillStyle = avisoCor; Neon.glow(ctx, avisoCor, 16);
+      ctx.fillText(aviso, W / 2, H * 0.3);
+      ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+    }
+    particles.draw(ctx);
+    if (flash.t > 0) {
+      ctx.fillStyle = `${flash.cor} ${Math.min(0.45, flash.t / 220)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    particles.update(dt);
+    if (shake.t > 0) shake.t -= dt * 1000;
+    if (flash.t > 0) flash.t -= dt * 1000;
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  montarGaragem();
+  render();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
