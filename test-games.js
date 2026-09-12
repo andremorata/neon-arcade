@@ -1747,7 +1747,7 @@ const semCrista = sVariante((s, i) => { if (s.fase === 'rampa') i.toque = false;
 const narizBaixo = sVariante((s, i) => { if (s.fase === 'ar') i.segura = s.pitch < 0.05 + SJ.inclinacao(SJ.RAMPAS[s.rampa]); });
 const semNada = sVariante((s, i) => { if (s.fase === 'reta') { i.segura = false; if (!s.largou) i.toque = false; } if (s.fase === 'rampa') i.toque = false; });
 
-assert.strictEqual(SJ.CARROS.length, 3, 'salto: tres carros');
+assert.strictEqual(SJ.CARROS.length, 5, 'salto: cinco carros');
 assert.strictEqual(SJ.RAMPAS.length, 4, 'salto: quatro rampas');
 const melhorCom = (carros, rampas, controle) => Math.max(...carros.flatMap(ci => rampas.map(ri => saltar(ci, ri, controle).s.distancia)));
 for (const [ci, c] of SJ.CARROS.entries()) for (const [ri, r] of SJ.RAMPAS.entries()) {

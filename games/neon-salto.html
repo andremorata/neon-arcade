@@ -107,6 +107,13 @@
     { nome: 'ÍON RX', cor: '#b4a2ff', claro: '#ece5ff', escuro: '#6551b2', libera: 150,
       desc: 'Leve, plana no ar', longa: 'Leve: plana mais e responde no ar; teto de velocidade mais baixo.',
       acel: 11, topo: 28, nitro: 8, aquece: 0.55, resfria: 0.5, giro: 1.4, sust: 1.9 },
+    // forma muda o desenho (lado e traseira); sem forma e o cupe generico.
+    { nome: 'ROSSA V12', cor: '#ff3b4a', claro: '#ffc2c2', escuro: '#7d0f1c', libera: 135, forma: 'enzo',
+      desc: 'V12 de Maranello', longa: 'Bico de Fórmula 1 e cabine de bolha: teto alto e plana bem, mas o nitro esquenta.',
+      acel: 12, topo: 31, nitro: 9, aquece: 0.7, resfria: 0.45, giro: 1.1, sust: 1.2 },
+    { nome: 'TOURO SV', cor: '#c8ff3a', claro: '#f0ffb0', escuro: '#4f6d0c', libera: 160, forma: 'lambo',
+      desc: 'Cunha com asa', longa: 'Cunha italiana com asa: nitro brutal e aderente no pouso, mas esquenta rápido e voa pesado.',
+      acel: 13, topo: 32, nitro: 15, aquece: 1.0, resfria: 0.55, giro: 0.9, sust: 0.8 },
   ];
   // ang em graus, comp = comprimento da rampa (m), pista = reta antes dela.
   // chao diz o que vem depois da crista: plano, descida ou um vao fundo.
@@ -520,33 +527,106 @@
 
   // ── render: carros ────────────────────────────────
   function carroTras(x, y, larg, m, nitro, calor) {
-    const alt = larg * 0.62;
+    const alt = larg * 0.62, forma = m.forma || 'cupe';
     Neon.glow(ctx, m.cor, larg * 0.5);
     ctx.fillStyle = m.cor;
     ctx.beginPath();
-    ctx.moveTo(x - larg / 2, y);
-    ctx.lineTo(x - larg / 2, y - alt * 0.6);
-    ctx.lineTo(x - larg * 0.36, y - alt);
-    ctx.lineTo(x + larg * 0.36, y - alt);
-    ctx.lineTo(x + larg / 2, y - alt * 0.6);
-    ctx.lineTo(x + larg / 2, y);
+    if (forma === 'enzo') {
+      // Enzo: para-lamas altos nos cantos, cabine estreita de bolha no meio.
+      ctx.moveTo(x - larg / 2, y);
+      ctx.lineTo(x - larg / 2, y - alt * 0.52);
+      ctx.lineTo(x - larg * 0.4, y - alt * 0.62);
+      ctx.lineTo(x - larg * 0.26, y - alt * 0.66);
+      ctx.quadraticCurveTo(x - larg * 0.22, y - alt * 1.02, x, y - alt * 1.04);
+      ctx.quadraticCurveTo(x + larg * 0.22, y - alt * 1.02, x + larg * 0.26, y - alt * 0.66);
+      ctx.lineTo(x + larg * 0.4, y - alt * 0.62);
+      ctx.lineTo(x + larg / 2, y - alt * 0.52);
+      ctx.lineTo(x + larg / 2, y);
+    } else if (forma === 'lambo') {
+      // Lambo: traseira larga e chata, teto baixo e reto.
+      ctx.moveTo(x - larg * 0.54, y);
+      ctx.lineTo(x - larg * 0.54, y - alt * 0.5);
+      ctx.lineTo(x - larg * 0.44, y - alt * 0.66);
+      ctx.lineTo(x - larg * 0.28, y - alt * 0.7);
+      ctx.lineTo(x - larg * 0.2, y - alt * 0.92);
+      ctx.lineTo(x + larg * 0.2, y - alt * 0.92);
+      ctx.lineTo(x + larg * 0.28, y - alt * 0.7);
+      ctx.lineTo(x + larg * 0.44, y - alt * 0.66);
+      ctx.lineTo(x + larg * 0.54, y - alt * 0.5);
+      ctx.lineTo(x + larg * 0.54, y);
+    } else {
+      ctx.moveTo(x - larg / 2, y);
+      ctx.lineTo(x - larg / 2, y - alt * 0.6);
+      ctx.lineTo(x - larg * 0.36, y - alt);
+      ctx.lineTo(x + larg * 0.36, y - alt);
+      ctx.lineTo(x + larg / 2, y - alt * 0.6);
+      ctx.lineTo(x + larg / 2, y);
+    }
     ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0;
+    // vidro traseiro
     ctx.fillStyle = 'rgba(8,13,28,0.82)';
-    ctx.fillRect(x - larg * 0.32, y - alt * 0.94, larg * 0.64, alt * 0.36);
+    if (forma === 'enzo') {
+      ctx.beginPath();
+      ctx.moveTo(x - larg * 0.2, y - alt * 0.68);
+      ctx.quadraticCurveTo(x - larg * 0.17, y - alt * 0.96, x, y - alt * 0.98);
+      ctx.quadraticCurveTo(x + larg * 0.17, y - alt * 0.96, x + larg * 0.2, y - alt * 0.68);
+      ctx.closePath(); ctx.fill();
+      // grade do motor entre os para-lamas
+      ctx.fillStyle = 'rgba(8,13,28,0.55)';
+      ctx.fillRect(x - larg * 0.4, y - alt * 0.58, larg * 0.8, alt * 0.1);
+    } else if (forma === 'lambo') {
+      ctx.fillRect(x - larg * 0.17, y - alt * 0.88, larg * 0.34, alt * 0.16);
+      // lamelas do motor
+      ctx.fillStyle = 'rgba(8,13,28,0.5)';
+      for (let i = 0; i < 4; i++) ctx.fillRect(x - larg * 0.4, y - alt * (0.62 - i * 0.07), larg * 0.8, alt * 0.03);
+      // asa traseira sobre a carroceria
+      ctx.fillStyle = m.escuro;
+      ctx.fillRect(x - larg * 0.1, y - alt * 1.12, larg * 0.05, alt * 0.22);
+      ctx.fillRect(x + larg * 0.05, y - alt * 1.12, larg * 0.05, alt * 0.22);
+      ctx.fillStyle = m.cor; Neon.glow(ctx, m.cor, 8);
+      ctx.fillRect(x - larg * 0.5, y - alt * 1.18, larg, alt * 0.07);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillRect(x - larg * 0.32, y - alt * 0.94, larg * 0.64, alt * 0.36);
+    }
+    // para-choque e difusor
     ctx.fillStyle = m.escuro;
-    ctx.fillRect(x - larg / 2, y - alt * 0.22, larg, alt * 0.22);
+    ctx.fillRect(x - larg * (forma === 'lambo' ? 0.54 : 0.5), y - alt * 0.22, larg * (forma === 'lambo' ? 1.08 : 1), alt * 0.22);
+    // lanternas
     ctx.fillStyle = '#ed887f';
     Neon.glow(ctx, '#ed887f', 10);
-    ctx.fillRect(x - larg * 0.46, y - alt * 0.4, larg * 0.2, alt * 0.12);
-    ctx.fillRect(x + larg * 0.26, y - alt * 0.4, larg * 0.2, alt * 0.12);
+    if (forma === 'enzo') {
+      // quatro olhos redondos, dois por lado, e escapes duplos no meio
+      for (const sx of [-0.42, -0.3, 0.3, 0.42]) Neon.circle(ctx, x + sx * larg, y - alt * 0.4, larg * 0.045);
+    } else if (forma === 'lambo') {
+      // lanternas em Y, esticadas pra fora
+      for (const sx of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(x + sx * larg * 0.48, y - alt * 0.46);
+        ctx.lineTo(x + sx * larg * 0.26, y - alt * 0.4);
+        ctx.lineTo(x + sx * larg * 0.3, y - alt * 0.34);
+        ctx.lineTo(x + sx * larg * 0.5, y - alt * 0.38);
+        ctx.closePath(); ctx.fill();
+      }
+    } else {
+      ctx.fillRect(x - larg * 0.46, y - alt * 0.4, larg * 0.2, alt * 0.12);
+      ctx.fillRect(x + larg * 0.26, y - alt * 0.4, larg * 0.2, alt * 0.12);
+    }
     ctx.shadowBlur = 0;
+    // escapes
     ctx.fillStyle = '#111';
-    ctx.fillRect(x - larg * 0.56, y - alt * 0.3, larg * 0.14, alt * 0.3);
-    ctx.fillRect(x + larg * 0.42, y - alt * 0.3, larg * 0.14, alt * 0.3);
+    if (forma === 'enzo') { for (const sx of [-0.08, 0.08]) Neon.circle(ctx, x + sx * larg, y - alt * 0.1, larg * 0.04); }
+    else if (forma === 'lambo') { for (const sx of [-0.14, -0.06, 0.06, 0.14]) Neon.circle(ctx, x + sx * larg, y - alt * 0.1, larg * 0.03); }
+    // rodas
+    ctx.fillStyle = '#111';
+    const rw = forma === 'lambo' ? 0.6 : 0.56;
+    ctx.fillRect(x - larg * rw, y - alt * 0.3, larg * 0.14, alt * 0.3);
+    ctx.fillRect(x + larg * (rw - 0.14), y - alt * 0.3, larg * 0.14, alt * 0.3);
     if (nitro) {
-      for (const sx of [-0.3, 0.3]) {
-        const fl = larg * (0.35 + Math.random() * 0.25);
+      const bicos = forma === 'enzo' ? [-0.08, 0.08] : forma === 'lambo' ? [-0.14, -0.06, 0.06, 0.14] : [-0.3, 0.3];
+      for (const sx of bicos) {
+        const fl = larg * (0.35 + Math.random() * 0.25) * (bicos.length > 2 ? 0.8 : 1);
         const cor = calor > 0.85 ? '#ed887f' : '#9be7ce';
         ctx.fillStyle = cor; Neon.glow(ctx, cor, 26);
         ctx.beginPath();
@@ -566,8 +646,19 @@
   }
   // Carro visto de lado, comprimento L px, nariz pra direita, pitch em rad
   // (positivo = nariz pra cima).
+  // Perfis de lado em fracoes de L (x) e de h (y, negativo pra cima).
+  const PERFIS = {
+    cupe: [[-0.5, -0.15], [-0.46, -0.55], [-0.2, -0.62], [-0.05, -1], [0.22, -1], [0.4, -0.55], [0.5, -0.4], [0.5, -0.1], [0.42, 0], [-0.42, 0]],
+    // Enzo: bico afilado la embaixo, cabine de bolha alta e curta, capo do motor descendo com lábio.
+    enzo: [[-0.5, -0.12], [-0.5, -0.5], [-0.46, -0.6], [-0.36, -0.6], [-0.3, -0.66], [-0.16, -0.72], [-0.08, -1.02], [0.06, -1.08], [0.18, -1], [0.3, -0.74], [0.42, -0.5], [0.5, -0.32], [0.5, -0.1], [0.44, 0], [-0.42, 0]],
+    // Lambo: cunha reta do bico ao teto baixo, traseira alta e cortada.
+    lambo: [[-0.5, -0.12], [-0.5, -0.66], [-0.4, -0.7], [-0.2, -0.72], [-0.06, -0.98], [0.14, -0.98], [0.3, -0.66], [0.5, -0.28], [0.5, -0.08], [0.44, 0], [-0.42, 0]],
+  };
+  // Carro visto de lado, comprimento L px, nariz pra direita, pitch em rad
+  // (positivo = nariz pra cima).
   function carroLado(c, x, y, L, pitch, m, nitro) {
-    const h = L * 0.3;
+    const h = L * 0.3, forma = m.forma || 'cupe';
+    const poli = pts => { c.beginPath(); pts.forEach(([px, py], i) => i ? c.lineTo(px * L, py * h) : c.moveTo(px * L, py * h)); c.closePath(); };
     c.save(); c.translate(x, y); c.rotate(-pitch);
     c.lineJoin = 'round';
     if (nitro) {
@@ -575,32 +666,57 @@
       c.beginPath(); c.moveTo(-L * 0.5, -h * 0.35); c.lineTo(-L * (0.75 + Math.random() * 0.2), -h * 0.2); c.lineTo(-L * 0.5, -h * 0.05); c.closePath(); c.fill();
       c.shadowBlur = 0;
     }
+    if (forma === 'lambo') {
+      // asa traseira: hastes e lamina acima do motor
+      c.fillStyle = m.escuro;
+      c.fillRect(-L * 0.44, -h * 0.9, L * 0.04, h * 0.26);
+      c.fillStyle = m.cor; c.shadowColor = m.cor; c.shadowBlur = 8;
+      poli([[-0.56, -0.9], [-0.3, -0.84], [-0.3, -0.78], [-0.56, -0.84]]); c.fill();
+      c.shadowBlur = 0;
+    }
     const tinta = c.createLinearGradient(0, -h, 0, 0);
     tinta.addColorStop(0, m.claro); tinta.addColorStop(0.4, m.cor); tinta.addColorStop(1, m.escuro);
     c.fillStyle = tinta; c.shadowColor = m.cor; c.shadowBlur = 12;
-    c.beginPath();
-    c.moveTo(-L * 0.5, -h * 0.15);
-    c.lineTo(-L * 0.46, -h * 0.55);
-    c.lineTo(-L * 0.2, -h * 0.62);
-    c.lineTo(-L * 0.05, -h);
-    c.lineTo(L * 0.22, -h);
-    c.lineTo(L * 0.4, -h * 0.55);
-    c.lineTo(L * 0.5, -h * 0.4);
-    c.lineTo(L * 0.5, -h * 0.1);
-    c.lineTo(L * 0.42, 0);
-    c.lineTo(-L * 0.42, 0);
-    c.closePath(); c.fill();
+    poli(PERFIS[forma]); c.fill();
     c.shadowBlur = 0;
     c.strokeStyle = m.claro; c.lineWidth = Math.max(1, L * 0.012); c.stroke();
-    // vidro
+    // vidro e detalhes por forma
     c.fillStyle = '#254c65';
-    c.beginPath(); c.moveTo(-L * 0.16, -h * 0.6); c.lineTo(-L * 0.03, -h * 0.94); c.lineTo(L * 0.2, -h * 0.94); c.lineTo(L * 0.34, -h * 0.6); c.closePath(); c.fill();
-    c.fillStyle = 'rgba(231,250,255,0.35)';
-    c.beginPath(); c.moveTo(L * 0.02, -h * 0.9); c.lineTo(L * 0.1, -h * 0.9); c.lineTo(-L * 0.02, -h * 0.64); c.lineTo(-L * 0.1, -h * 0.64); c.closePath(); c.fill();
+    if (forma === 'enzo') {
+      poli([[-0.12, -0.7], [-0.06, -0.98], [0.06, -1.03], [0.17, -0.96], [0.29, -0.72]]); c.fill();
+      c.fillStyle = 'rgba(231,250,255,0.35)';
+      poli([[0.04, -0.98], [0.12, -0.96], [0.02, -0.74], [-0.06, -0.74]]); c.fill();
+      // entrada de ar lateral funda e o labio do bico
+      c.fillStyle = 'rgba(8,13,28,0.7)';
+      poli([[-0.34, -0.36], [-0.12, -0.42], [-0.1, -0.22], [-0.3, -0.2]]); c.fill();
+      c.fillStyle = m.escuro; c.fillRect(L * 0.3, -h * 0.34, L * 0.2, h * 0.05);
+      // lanterna redonda
+      c.fillStyle = '#ed887f'; c.beginPath(); c.arc(-L * 0.47, -h * 0.4, h * 0.06, 0, Math.PI * 2); c.fill();
+    } else if (forma === 'lambo') {
+      poli([[-0.14, -0.7], [-0.04, -0.94], [0.13, -0.94], [0.28, -0.66]]); c.fill();
+      c.fillStyle = 'rgba(231,250,255,0.35)';
+      poli([[0.02, -0.92], [0.1, -0.92], [0.0, -0.7], [-0.08, -0.7]]); c.fill();
+      // entradas de ar hexagonais e o vinco da porta
+      c.fillStyle = 'rgba(8,13,28,0.7)';
+      poli([[-0.36, -0.5], [-0.22, -0.56], [-0.14, -0.5], [-0.14, -0.3], [-0.22, -0.24], [-0.36, -0.3]]); c.fill();
+      c.strokeStyle = m.escuro; c.lineWidth = Math.max(1, L * 0.012);
+      c.beginPath(); c.moveTo(-L * 0.1, -h * 0.3); c.lineTo(L * 0.34, -h * 0.5); c.stroke();
+      c.fillStyle = '#ed887f'; poli([[-0.5, -0.5], [-0.42, -0.46], [-0.42, -0.4], [-0.5, -0.38]]); c.fill();
+    } else {
+      poli([[-0.16, -0.6], [-0.03, -0.94], [0.2, -0.94], [0.34, -0.6]]); c.fill();
+      c.fillStyle = 'rgba(231,250,255,0.35)';
+      poli([[0.02, -0.9], [0.1, -0.9], [-0.02, -0.64], [-0.1, -0.64]]); c.fill();
+    }
     // rodas
+    const rr = forma === 'lambo' ? 0.37 : 0.34;
     for (const rx of [-L * 0.3, L * 0.3]) {
-      c.fillStyle = '#0c1220'; c.beginPath(); c.arc(rx, 0, h * 0.34, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#0c1220'; c.beginPath(); c.arc(rx, 0, h * rr, 0, Math.PI * 2); c.fill();
       c.strokeStyle = m.claro; c.lineWidth = Math.max(1, L * 0.014); c.beginPath(); c.arc(rx, 0, h * 0.2, 0, Math.PI * 2); c.stroke();
+      if (forma !== 'cupe') {
+        // raios: cinco na Enzo, estrela fechada no Touro
+        c.lineWidth = Math.max(0.8, L * 0.008);
+        for (let i = 0; i < 5; i++) { const a = i * Math.PI * 2 / 5; c.beginPath(); c.moveTo(rx, 0); c.lineTo(rx + Math.cos(a) * h * 0.2, Math.sin(a) * h * 0.2); c.stroke(); }
+      }
     }
     // luz de baixo
     c.strokeStyle = m.cor; c.shadowColor = m.cor; c.shadowBlur = 14; c.lineWidth = Math.max(1.5, L * 0.02);
