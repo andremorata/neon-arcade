@@ -54,7 +54,9 @@ Darts, os anéis do Archer, o apoio por centro de massa do Siege, a curva de vel
 Piano, a cruz de explosão e a fuga da própria bomba no Bomber, e a projeção da pista, as
 curvas de clima e a contagem de ultrapassagem do Enduro, o gerador de rio do River (margens,
 ilhas, ponte e respawn determinístico por semente) e a física do Salto (todo carro pousa limpo
-em toda rampa, cada habilidade vale metros e os desbloqueios por recorde são alcançáveis). Boa parte desses testes nasceu de um
+em toda rampa, cada habilidade vale metros e os desbloqueios por recorde são alcançáveis) e a mesa do Pinball
+(lançamento, tiro de flipper, dreno, portão de mão única e uma varredura que solta a bola parada em cada ponto
+livre da mesa pra garantir que nenhum canto prende). Boa parte desses testes nasceu de um
 bug real, e o comentário acima de cada um diz qual.
 
 ## Estrutura

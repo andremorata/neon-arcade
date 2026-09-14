@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
@@ -1809,5 +1809,180 @@ assert.ok(SJ.chaoDepois(SJ.RAMPAS[2], 50) < -5, 'salto: a prancha desce depois d
 assert.strictEqual(SJ.chaoDepois(SJ.RAMPAS[0], 50), 0, 'salto: a classica e plana');
 // mesma entrada, mesmo salto
 assert.strictEqual(saltar(2, 3, SJ.piloto).s.distancia, saltar(2, 3, SJ.piloto).s.distancia, 'salto: o resultado tem que ser deterministico');
+
+
+// ── NEON PINBALL ───────────────────────────────────
+// A mesa inteira roda em Node: o bloco de fisica sai do fonte, um piloto joga
+// partidas completas e a bola e solta parada em cada ponto livre da mesa. Foi
+// assim que apareceram o vao entre as pontas dos flippers que segurava a bola,
+// o bolsao atras do banco de alvos e a saida estreita do inlane.
+const pinball = games.pinball;
+const pIni = pinball.indexOf('  // ── física ──');
+const pFim = pinball.indexOf('  // ── fim da física ──');
+assert.ok(pIni > 0 && pFim > pIni, 'pinball: marcadores do bloco de fisica nao encontrados');
+assert.ok(!/Math\.random/.test(pinball.slice(pIni, pFim)), 'pinball: a fisica tem que ser deterministica');
+const PB = new Function(pinball.slice(pIni, pFim)
+  + '; return { K, MESA, ALVOS, CX, R, novoJogo, passo, piloto, pontaFlipper };')();
+const pSTEP = 1 / 120;
+const pNada = () => ({ L: false, R: false, carrega: false, nudge: null });
+// roda ate `ate(s, eventos)` ou o tempo acabar; a bola nunca pode atravessar a mesa
+function jogar(s, segundos, controle, ate) {
+  const evs = [];
+  for (let i = 0; i < segundos * 120; i++) {
+    PB.passo(s, pSTEP, controle ? controle(s, i) : pNada());
+    evs.push(...s.ev.map(e => e.tipo));
+    s.ev.length = 0;
+    const b = s.bola;
+    if (s.fase === 'vivo') assert.ok(b.x > 10 && b.x < 440 && b.y > 0, `pinball: bola atravessou a mesa em (${b.x.toFixed(0)}, ${b.y.toFixed(0)})`);
+    if (ate && ate(s, evs)) break;
+  }
+  return evs;
+}
+const pSolta = (x, y, vx = 0, vy = 0) => { const s = PB.novoJogo(); s.bola = { x, y, vx, vy }; s.fase = 'vivo'; return s; };
+const embolo = f => s => ({ ...pNada(), carrega: s.fase === 'embolo' && s.forca < f });
+
+// embolo cheio: a bola passa o portao, contorna o arco e desce pelo campo
+{
+  const s = PB.novoJogo(); let topo = 1e9;
+  const evs = jogar(s, 4, embolo(1), st => { if (st.fase === 'vivo') topo = Math.min(topo, st.bola.y); return false; });
+  assert.ok(evs.includes('lancou'), 'pinball: soltar o embolo carregado lanca a bola');
+  assert.ok(topo < 40, `pinball: no embolo cheio a bola tem que chegar ao teto (chegou a y=${topo.toFixed(0)})`);
+  assert.ok(!evs.includes('volta'), 'pinball: lancamento cheio nao pode voltar pra canaleta');
+}
+// embolo fraco: a bola volta e descansa no embolo de novo, sem gastar bola
+{
+  const s = PB.novoJogo();
+  const evs = jogar(s, 6, embolo(0.15), (st, e) => e.includes('volta'));
+  assert.ok(evs.includes('volta'), 'pinball: lancamento fraco volta pra canaleta');
+  assert.strictEqual(s.fase, 'embolo', 'pinball: bola que volta espera no embolo');
+  assert.strictEqual(s.bolaN, 1, 'pinball: voltar pra canaleta nao gasta bola');
+}
+// flipper: bola parada no meio do flipper esquerdo, um toque leva ela ate os bumpers
+{
+  const piv = PB.MESA.flippers.L.piv, tip = PB.pontaFlipper('L', PB.MESA.flippers.L.rest);
+  const s = pSolta(piv.x + (tip.x - piv.x) * 0.5, piv.y + (tip.y - piv.y) * 0.5 - 22);
+  let topo = 1e9;
+  const evs = jogar(s, 3, (st, i) => ({ ...pNada(), L: i >= 12 && i < 40 }),
+    st => { if (st.fase === 'vivo') topo = Math.min(topo, st.bola.y); return false; });
+  assert.ok(evs.includes('bate'), 'pinball: o flipper batendo na bola avisa');
+  assert.ok(topo < 380, `pinball: o tiro do flipper tem que alcancar os bumpers (subiu ate y=${topo.toFixed(0)})`);
+}
+// flipper parado nao segura a bola: ela escorrega pela ponta e drena
+{
+  const s = pSolta(PB.CX, 600);
+  const evs = jogar(s, 6, null, (st, e) => e.includes('nova'));
+  assert.ok(evs.includes('dreno'), 'pinball: bola solta no meio drena entre os flippers');
+  assert.strictEqual(s.bolaN, 2, 'pinball: drenar passa pra bola 2');
+  assert.strictEqual(s.fase, 'embolo', 'pinball: a bola nova espera no embolo');
+}
+// bola salva: drenar logo depois do lancamento devolve a bola; a segunda vez nao
+{
+  const s = PB.novoJogo();
+  jogar(s, 2, embolo(1), st => st.fase === 'vivo');
+  s.bola = { x: PB.CX, y: 780, vx: 0, vy: 300 };
+  let evs = jogar(s, 2, null, (st, e) => e.includes('salva') || e.includes('dreno'));
+  assert.ok(evs.includes('salva') && !evs.includes('dreno'), 'pinball: dentro da janela a bola e salva');
+  assert.strictEqual(s.bolaN, 1, 'pinball: bola salva nao conta');
+  jogar(s, 2, embolo(1), st => st.fase === 'vivo');
+  s.bola = { x: PB.CX, y: 780, vx: 0, vy: 300 };
+  evs = jogar(s, 2, null, (st, e) => e.includes('salva') || e.includes('dreno'));
+  assert.ok(evs.includes('dreno') && !evs.includes('salva'), 'pinball: a bola salva arma uma vez so por bola');
+}
+// banco de alvos: derrubar os tres da o bonus e eles sobem de novo
+{
+  const s = PB.novoJogo(); s.fase = 'vivo';
+  const evs = [];
+  [-26, 0, 26].forEach(t => {
+    const [x, y] = PB.ALVOS.p(t, 30);
+    s.bola = { x, y, vx: -PB.ALVOS.n.x * 500, vy: -PB.ALVOS.n.y * 500 };
+    evs.push(...jogar(s, 0.5, null, (st, e) => e.includes('alvo')));
+  });
+  assert.strictEqual(evs.filter(e => e === 'alvo').length, 3, 'pinball: cada alvo cai uma vez');
+  assert.ok(evs.includes('banco'), 'pinball: os tres alvos derrubados fecham o banco');
+  assert.ok(s.score >= 3 * 500 + 5000, `pinball: banco vale os alvos mais o bonus (deu ${s.score})`);
+  assert.deepStrictEqual(s.alvos, [false, false, false], 'pinball: alvos derrubados ficam embaixo');
+  jogar(s, 1.2, null);
+  assert.deepStrictEqual(s.alvos, [true, true, true], 'pinball: o banco sobe de novo um segundo depois');
+}
+// faixas do topo: quatro letras acesas viram multiplicador; o flipper gira as letras
+{
+  const s = PB.novoJogo(); s.fase = 'vivo';
+  const evs = [];
+  for (const f of PB.MESA.faixas) {
+    s.bola = { x: f.x, y: f.y - 30, vx: 0, vy: 200 };
+    evs.push(...jogar(s, 0.4, null, (st, e) => e.includes('faixa')));
+  }
+  assert.strictEqual(evs.filter(e => e === 'faixa').length, 4, 'pinball: cada faixa acende uma letra');
+  assert.ok(evs.includes('neon'), 'pinball: N-E-O-N completo avisa');
+  assert.strictEqual(s.mult, 2, 'pinball: o multiplicador sobe pra 2');
+  assert.deepStrictEqual(s.letras, [false, false, false, false], 'pinball: as letras apagam pra proxima volta');
+  s.bola = { x: 220, y: 500, vx: 0, vy: 0 };
+  s.letras = [true, false, false, false];
+  PB.passo(s, pSTEP, { ...pNada(), R: true });
+  assert.deepStrictEqual(s.letras, [false, true, false, false], 'pinball: flipper direito gira as letras pra direita');
+  PB.passo(s, pSTEP, pNada());
+  PB.passo(s, pSTEP, { ...pNada(), L: true });
+  assert.deepStrictEqual(s.letras, [true, false, false, false], 'pinball: flipper esquerdo gira de volta');
+}
+// poco: captura, segura, ejeta e nao recaptura na hora
+{
+  const sc = PB.MESA.saucer;
+  const s = pSolta(sc.x, sc.y);
+  let evs = jogar(s, 0.1, null, (st, e) => e.includes('saucer'));
+  assert.ok(evs.includes('saucer'), 'pinball: o poco captura a bola');
+  assert.strictEqual(s.fase, 'saucer');
+  assert.strictEqual(s.score, 2000, 'pinball: o poco vale 2000 no multiplicador 1');
+  evs = jogar(s, 2, null, (st, e) => e.includes('ejeta'));
+  assert.ok(evs.includes('ejeta'), 'pinball: o poco devolve a bola');
+  jogar(s, 0.5, null);
+  assert.ok(Math.hypot(s.bola.x - sc.x, s.bola.y - sc.y) > 60, 'pinball: a bola ejetada sai de perto do poco');
+  assert.strictEqual(s.fase, 'vivo', 'pinball: o poco nao recaptura a bola que acabou de sair');
+}
+// portao de mao unica: a bola que desce pelo lado direito volta pro campo, nao pra canaleta
+{
+  const s = pSolta(418, 150);
+  const evs = jogar(s, 8, null, (st, e) => e.includes('volta') || e.includes('nova'));
+  assert.ok(!evs.includes('volta'), 'pinball: o portao devolve pro campo a bola que desce pela direita');
+  assert.ok(evs.includes('dreno'), 'pinball: e ela segue pelo campo ate drenar');
+}
+// busca de bola: parada em equilibrio em cima de um separador, leva um toque e volta a rolar
+{
+  const s = pSolta(208, 100 - 4 - PB.R);
+  const evs = jogar(s, 5, null, (st, e) => e.includes('busca'));
+  assert.ok(evs.includes('busca'), 'pinball: bola parada em equilibrio recebe a busca');
+  jogar(s, 1, null);
+  assert.ok(s.bola.y > 110, 'pinball: depois da busca a bola cai do separador');
+}
+// piloto: uma partida inteira termina, pontua e e deterministica
+{
+  const s = PB.novoJogo();
+  const evs = jogar(s, 600, PB.piloto, st => st.fase === 'fim');
+  assert.strictEqual(s.fase, 'fim', 'pinball: o piloto tem que terminar a partida em 10 minutos');
+  assert.strictEqual(evs.filter(e => e === 'dreno').length, 3, 'pinball: tres bolas, tres drenos');
+  assert.ok(s.score > 1000, `pinball: o piloto tem que pontuar (fez ${s.score})`);
+  assert.ok(evs.includes('bumper'), 'pinball: uma partida inteira passa pelos bumpers');
+  const s2 = PB.novoJogo();
+  jogar(s2, 600, PB.piloto, st => st.fase === 'fim');
+  assert.strictEqual(s2.score, s.score, 'pinball: mesma entrada, mesma partida');
+}
+// varredura: bola solta parada em qualquer ponto livre acaba drenando ou no embolo
+{
+  const dentroTri = (x, y, [[ax, ay], [bx, by], [cx, cy]]) => {
+    const d1 = (x - bx) * (ay - by) - (ax - bx) * (y - by);
+    const d2 = (x - cx) * (by - cy) - (bx - cx) * (y - cy);
+    const d3 = (x - ax) * (cy - ay) - (cx - ax) * (y - ay);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+  };
+  // dentro dos slingshots e da cavidade fechada atras do banco a bola nao chega
+  const solidos = [...PB.MESA.slings.map(sl => sl.pts), [[20, 378], PB.ALVOS.p(40, -12), PB.ALVOS.p(-40, -12)]];
+  const presas = [];
+  for (let y = 40; y < 760; y += 20) for (let x = 30; x < 425; x += 20) {
+    if (solidos.some(t => dentroTri(x, y, t))) continue;
+    const s = pSolta(x, y);
+    jogar(s, 14, null, st => st.fase !== 'vivo' && st.fase !== 'saucer');
+    if (s.fase === 'vivo') presas.push(`(${x},${y})→(${s.bola.x.toFixed(0)},${s.bola.y.toFixed(0)})`);
+  }
+  assert.deepStrictEqual(presas, [], `pinball: a bola fica presa quando solta em: ${presas.join(' ')}`);
+}
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);
