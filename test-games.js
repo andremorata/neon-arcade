@@ -602,17 +602,18 @@ const breach = games.breach;
   const noop = () => {}, marks = [];
   const ctx = new Proxy({}, { get: (obj, key) => key in obj ? obj[key] :
     (...args) => marks.push([key, ...args]) });
-  const nodes = new Map();
+  const nodes = new Map(), docEvents = new Map(), winEvents = new Map();
   const Neon = {
     $: id => {
-      if (!nodes.has(id)) nodes.set(id, { textContent: '', style: {}, clientHeight: 500,
-        addEventListener: noop, getContext: () => ctx });
+      if (!nodes.has(id)) nodes.set(id, { textContent: '', style: {}, clientHeight: 500, events: new Map(),
+        addEventListener(type, fn) { this.events.set(type, fn); }, focus: noop,
+        requestPointerLock: noop, getContext: () => ctx });
       return nodes.get(id);
     },
     best: { get: () => 0, update: (_, score) => score },
-    Particles: class { clear() {} }, motion: { reduced: true },
+    motion: { reduced: true }, clamp: clampFn,
     audio: { ensure: noop, sfx: new Proxy({}, { get: () => noop }),
-      music: { start: noop, down: noop } },
+      music: { start: noop, down: noop, stop: noop, intensity: noop } },
     overlay: { hide: noop, show: noop }, onHide: noop, popEl: noop, toast: noop,
     rand: (a, b) => (a + b) / 2,
   };
@@ -620,10 +621,15 @@ const breach = games.breach;
     .replace('(() => {', 'return (() => {')
     .replace('  render(performance.now());\n  requestAnimationFrame(loop);',
       `  return { jog, comecar, levarDano, update, entrarNaSala, pegarItens, minimapa,
+        enxerga, atualizarProjeteis, atirar, esquivar, trocarArma, escolherMelhoria, matar,
+        get state() { return state; }, get score() { return score; }, get combo() { return combo; },
+        get tiros() { return tiros; },
+        get municao() { return municao; }, get temArma() { return temArma; },
+        get projeteis() { return projeteis; },
         get inimigos() { return inimigos; }, get itens() { return itens; } };`);
   const game = new Function('window', 'document', 'performance', source)(
-    { Neon, addEventListener: noop },
-    { addEventListener: noop, body: { classList: { toggle: noop } } }, { now: () => 0 });
+    { Neon, addEventListener: (type, fn) => winEvents.set(type, fn) },
+    { addEventListener: (type, fn) => docEvents.set(type, fn), body: { classList: { toggle: noop } } }, { now: () => 0 });
   for (const fps of [30, 60, 120]) {
     game.comecar();
     assert.strictEqual(game.jog.vida, 150, 'Breach: começa com 150 de vida');
@@ -663,6 +669,156 @@ const breach = games.breach;
     assert.strictEqual(marks.filter(m => m[0] === 'arc').length, game.inimigos.length,
       'Breach: inimigo removido desaparece do radar');
   }
+  game.comecar();
+  assert.strictEqual(game.enxerga({ x: 2.8, y: 2.2 }, { x: 3.21, y: 1.8 }), false,
+    'Breach: nem um canto fino de parede pode ser saltado pela linha de visão');
+  for (const fps of [30, 60, 120]) {
+    for (const tipo of ['atirador', 'chefe']) {
+      game.comecar(); game.entrarNaSala(4);
+      const inimigo = game.inimigos.find(e => e.tipo === tipo);
+      game.inimigos.splice(0, game.inimigos.length, inimigo);
+      Object.assign(inimigo, { x: 8.5, y: 11.5, cd: 0 });
+      game.update(1 / fps);
+      assert.strictEqual(game.jog.vida, 150, 'Breach: disparo distante não causa dano instantâneo');
+      assert.strictEqual(game.projeteis.length, 0, 'Breach: inimigo avisa antes de disparar');
+      assert.ok(inimigo.preparando > 0, 'Breach: preparação aparece no inimigo');
+      for (let i = 0; i < fps && !game.projeteis.length; i++) game.update(1 / fps);
+      assert.strictEqual(game.projeteis.length, 1, 'Breach: ataque distante cria projétil visível');
+      for (let i = 0; i < fps * 0.5; i++) game.update(1 / fps);
+      assert.strictEqual(game.jog.vida, 150, 'Breach: há tempo para reagir ao tiro a três metros');
+      for (let i = 0; i < fps * 0.3; i++) game.update(1 / fps);
+      assert.strictEqual(game.jog.vida, 150 - inimigo.dano, 'Breach: tiro só machuca ao chegar');
+      assert.strictEqual(game.projeteis.length, 0, 'Breach: impacto consome o projétil');
+      if (tipo === 'chefe') {
+        assert.ok(inimigo.dano <= 12, 'Breach: chefe tira no máximo 12 de vida por acerto');
+        for (let i = 0; i < fps * 0.4; i++) game.update(1 / fps);
+        assert.strictEqual(game.projeteis.length, 1, 'Breach: chefe dispara novamente em cerca de 0,9 s');
+      }
+      // O tiro mantém a direção inicial: sair da linha permite desviar.
+      inimigo.cd = 0; inimigo.preparando = 0; game.update(1 / fps);
+      for (let i = 0; i < fps && !game.projeteis.length; i++) game.update(1 / fps);
+      game.inimigos.length = 0;
+      game.jog.x += 1;
+      const vida = game.jog.vida;
+      for (let i = 0; i < fps; i++) game.update(1 / fps);
+      assert.strictEqual(game.jog.vida, vida, 'Breach: deslocamento lateral desvia do projétil');
+    }
+    game.comecar(); game.entrarNaSala(4);
+    const chefe = game.inimigos.find(e => e.tipo === 'chefe');
+    game.inimigos.splice(0, game.inimigos.length, chefe);
+    Object.assign(chefe, { x: 8.5, y: 10.5, cd: 0 });
+    for (let i = 0; i < fps * 10 && game.inimigos.length; i++) {
+      game.atirar(); game.update(1 / fps);
+    }
+    assert.strictEqual(game.inimigos.length, 0, 'Breach: pistola consegue vencer o chefe isolado');
+    assert.ok(game.jog.vida >= 30 && game.jog.vida < 90,
+      'Breach: chefe pressiona quem fica parado, mas ainda permite vencer com a pistola');
+  }
+  game.comecar(); game.entrarNaSala(4); game.inimigos.length = 0;
+  Object.assign(game.jog, { x: 5.5, y: 6.5 });
+  game.projeteis.push({ x: 5.5, y: 4.5, ang: Math.PI / 2, vel: 4, dano: 8 });
+  game.atualizarProjeteis(1);
+  assert.strictEqual(game.jog.vida, 150, 'Breach: parede intercepta tiro mesmo num passo longo');
+  assert.strictEqual(game.projeteis.length, 0, 'Breach: tiro desaparece ao bater na parede');
+  game.projeteis.push({ x: 8.5, y: 11.5, ang: 0, vel: 4, dano: 8 });
+  game.entrarNaSala(0);
+  assert.strictEqual(game.projeteis.length, 0, 'Breach: trocar de sala limpa os tiros anteriores');
+  game.comecar(); game.entrarNaSala(4);
+  const atirador = game.inimigos.find(e => e.tipo === 'atirador');
+  game.inimigos.splice(0, game.inimigos.length, atirador);
+  Object.assign(atirador, { x: 5.5, y: 4.5, cd: 0 });
+  Object.assign(game.jog, { x: 5.5, y: 2.5 });
+  game.update(0.01);
+  assert.ok(atirador.preparando > 0, 'Breach: atirador inicia preparação ao avistar o jogador');
+  game.jog.y = 6.5;
+  game.update(0.5);
+  assert.strictEqual(game.projeteis.length, 0, 'Breach: buscar cobertura cancela o tiro em preparação');
+  game.comecar();
+  game.matar(game.inimigos[0]); game.matar(game.inimigos[0]);
+  assert.strictEqual(game.combo, 2, 'Breach: abates próximos aumentam o combo');
+  assert.strictEqual(game.score, 300, 'Breach: segundo corredor vale o dobro');
+  game.levarDano(8);
+  assert.strictEqual(game.combo, 0, 'Breach: receber dano encerra a sequência');
+
+  // Campanha: limpar a sala pausa de verdade, entrega o loot e aplica só uma escolha.
+  game.comecar();
+  for (let sala = 0; sala < 5; sala++) {
+    if (sala === 1 || sala === 2) {
+      const arma = game.itens.find(it => it.tipo === 'arma');
+      assert.ok(arma && game.enxerga(game.jog, arma), 'Breach: arma da sala aparece à vista da entrada');
+      assert.ok(Math.hypot(arma.x - game.jog.x, arma.y - game.jog.y) <= 2, 'Breach: arma nova fica perto');
+    }
+    for (const e of [...game.inimigos]) game.matar(e);
+    for (let i = 0; i < 100; i++) game.update(1 / 60);
+    if (sala === 4) { assert.strictEqual(game.state, 'fim', 'Breach: última sala encerra a campanha'); break; }
+    assert.strictEqual(game.state, 'melhoria', 'Breach: sala limpa abre a escolha');
+    assert.strictEqual(game.itens.length, 0, 'Breach: loot restante é recolhido ao terminar a sala');
+    const antes = JSON.stringify(game.jog);
+    game.update(10); game.esquivar(); game.atirar(); game.escolherMelhoria(8);
+    assert.strictEqual(JSON.stringify(game.jog), antes, 'Breach: combate congela durante a escolha');
+    const escolha = sala % 3;
+    nodes.get('melhoria' + escolha).events.get('click')();
+    game.escolherMelhoria(escolha);
+    assert.strictEqual(game.state, 'playing', 'Breach: escolha retoma uma única sala');
+    assert.strictEqual(+nodes.get('sala').textContent, sala + 2, 'Breach: clique duplo não pula salas');
+    if (sala === 0) assert.strictEqual(game.jog.vidaMax, 175, 'Breach: blindagem amplia a vida máxima');
+    if (sala === 1) assert.ok(game.temArma[1], 'Breach: escopeta esquecida é entregue na saída');
+    if (sala === 2) assert.ok(game.temArma[2], 'Breach: metralhadora esquecida é entregue na saída');
+  }
+  game.comecar();
+  assert.strictEqual(game.jog.vidaMax, 150, 'Breach: nova partida reinicia a blindagem');
+  assert.strictEqual(game.jog.impacto + game.jog.cadencia, 0, 'Breach: melhorias não vazam entre partidas');
+  assert.deepStrictEqual(game.temArma, [true, false, false], 'Breach: armas reiniciam com a campanha');
+
+  for (const fps of [30, 60, 120]) {
+    game.comecar(); game.inimigos.length = 0;
+    const y = game.jog.y;
+    docEvents.get('keydown')({ key: ' ', repeat: false, preventDefault: noop });
+    game.levarDano(20);
+    assert.strictEqual(game.jog.vida, 150, 'Breach: esquiva protege durante o impulso');
+    for (let i = 0; i < fps * 0.3; i++) game.update(1 / fps);
+    assert.ok(Math.abs(game.jog.y - y - 1.28) < 0.01, 'Breach: esquiva tem alcance igual em qualquer FPS');
+    const cd = game.jog.esquivaCD;
+    game.esquivar();
+    assert.strictEqual(game.jog.esquivaCD, cd, 'Breach: não pode repetir esquiva durante a recarga');
+    game.levarDano(20);
+    assert.strictEqual(game.jog.vida, 130, 'Breach: proteção da esquiva termina');
+    Object.assign(game.jog, { x: 1.3, y: 14.5, ang: 0, esquivaCD: 0 });
+    game.esquivar();
+    for (let i = 0; i < fps * 0.3; i++) game.update(1 / fps);
+    assert.ok(game.jog.x >= 1.24, 'Breach: esquiva não atravessa parede');
+  }
+
+  game.comecar(); game.entrarNaSala(4);
+  const alvo = game.inimigos.find(e => e.tipo === 'chefe');
+  game.inimigos.splice(0, game.inimigos.length, alvo);
+  Object.assign(alvo, { x: 8.5, y: 10.5 });
+  game.jog.impacto = 1;
+  game.atirar();
+  assert.strictEqual(alvo.vida, alvo.vidaMax - 39, 'Breach: melhoria de impacto aumenta o dano real');
+  const disparosEmUmSegundo = cadencia => {
+    game.comecar(); game.inimigos.length = 0; game.jog.cadencia = cadencia;
+    for (let i = 0; i < 60; i++) { game.atirar(); game.update(1 / 60); }
+    return game.tiros;
+  };
+  assert.ok(disparosEmUmSegundo(2) > disparosEmUmSegundo(0), 'Breach: cadência melhora a frequência real');
+  game.comecar(); game.inimigos.length = 0;
+  game.temArma[1] = true; game.municao[1] = 2;
+  nodes.get('trocarArma').events.get('click')();
+  assert.strictEqual(game.jog.arma, 1, 'Breach: botão troca para arma desbloqueada');
+  game.municao[1] = 0; game.atirar();
+  assert.strictEqual(game.jog.arma, 0, 'Breach: arma vazia volta para pistola');
+  let cancelouMouse = false;
+  nodes.get('stage').events.get('pointerdown')({ pointerType: 'mouse', preventDefault() { cancelouMouse = true; } });
+  assert.strictEqual(cancelouMouse, false, 'Breach: toque não cancela mousedown do disparo contínuo');
+  nodes.get('game').events.get('mousedown')({ button: 0 });
+  for (let i = 0; i < 60; i++) game.update(1 / 60);
+  assert.ok(game.tiros > 1, 'Breach: segurar mouse dispara continuamente');
+  docEvents.get('keydown')({ key: 'p' });
+  docEvents.get('keydown')({ key: 'p' });
+  const tirosAntes = game.tiros;
+  for (let i = 0; i < 60; i++) game.update(1 / 60);
+  assert.strictEqual(game.tiros, tirosAntes, 'Breach: pausar limpa o disparo preso');
 }
 const dda = new Function('MAPA', 'celula',
   block(breach, '  function castar(px, py, ang)') + '; return castar;');

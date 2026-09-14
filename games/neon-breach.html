@@ -29,7 +29,29 @@
   @media (pointer: coarse) and (orientation: portrait) { #gire { display: flex; } }
 
   /* a faixa de HUD ocupa os 30px do topo do quadro; o toast desce pra nao cobrir */
-  .toast { top: 52px; }
+  .toast { top: auto; bottom: 76px; }
+  #melhorias { width: min(680px, 94%); gap: 10px; }
+  #startBtn[hidden] { display: none; }
+  #melhorias:not([hidden]) { display: grid; grid-template-columns: repeat(3, 1fr); }
+  #melhorias button { min-height: 116px; padding: 16px; text-align: left; color: #d8e5ed;
+    background: #101e2b; border: 1px solid #3a655d; border-radius: 8px; cursor: pointer; }
+  #melhorias button:hover, #melhorias button:focus-visible { background: #1b363b; outline: 2px solid #9be7ce; }
+  #melhorias b { display: block; margin: 8px 0; color: #9be7ce; font: 700 14px Orbitron, sans-serif; }
+  #melhorias small { line-height: 1.5; color: #bdcbd6; }
+  #melhorias span { color: #efce95; font: 11px monospace; }
+  #acoes { display: none; position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); gap: 8px; z-index: 5; }
+  .imersivo #acoes { display: flex; }
+  #acoes button { min-height: 44px; min-width: 90px; padding: 8px 12px; border-radius: 6px;
+    border: 1px solid #56746e; color: #b9f5df; background: #0b172bea; font: 700 10px Orbitron, sans-serif; }
+  #acoes button:focus-visible { outline: 2px solid #efce95; }
+  #acoes button:disabled { color: #7d929d; border-color: #344651; }
+  #stage:has(.overlay:not(.hidden)) #acoes { display: none; }
+  @media (max-height: 500px) {
+    #melhorias button { min-height: 84px; padding: 10px; }
+    #melhorias b { font-size: 12px; margin: 4px 0; }
+    #melhorias small { font-size: 11px; }
+    #overlay:has(#melhorias:not([hidden])) .controls-hint { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -53,11 +75,20 @@
     <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
     <div class="toast" id="toast">SALA LIMPA!</div>
     <canvas id="game" width="800" height="500"></canvas>
+    <div id="acoes" aria-label="Ações de combate">
+      <button id="trocarArma" type="button" title="Trocar arma (Q)">ARMA · Q</button>
+      <button id="esquivarBtn" type="button" title="Esquiva na direção do movimento (Espaço)">ESQUIVA</button>
+    </div>
     <div id="gire"><span class="icone">📱</span><p>Gire o telefone</p><p style="color:var(--text-dim);letter-spacing:0.1em">FPS só funciona deitado</p></div>
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON BREACH</h2>
-      <p id="overlayText">Cinco salas, uma horda em cada. Comece só com a pistola e ache o resto no chão. No computador: WASD anda, mouse gira, clique atira. No celular deitado: manche à esquerda, arraste à direita para girar, botão vermelho atira.</p>
-      <div class="sub" id="overlaySub">Minimapa: seta verde = você · pontos vermelhos = inimigos · quadrados dourados = itens. Avançar de sala recupera 30 de vida.</div>
+      <p id="overlayText">Invada cinco setores e desligue o núcleo. Pegue armas, desvie dos tiros e escolha uma melhoria a cada sala. WASD move · mouse mira · segure o clique para atirar · Espaço esquiva.</p>
+      <div class="sub" id="overlaySub">No celular deitado: manche à esquerda, arraste à direita e segure FOGO. Radar: vermelho = inimigos · dourado = suprimentos. Cada sala recupera 30 de vida.</div>
+      <div id="melhorias" role="group" aria-label="Escolha uma melhoria para esta partida" hidden>
+        <button id="melhoria0" type="button"><span>01 / SOBREVIVER</span><b>BLINDAGEM</b><small>+25 de vida máxima.<br>Recupera mais 25 de vida.</small></button>
+        <button id="melhoria1" type="button"><span>02 / BATER MAIS FORTE</span><b>IMPACTO</b><small>+15% de dano base<br>em todas as armas.</small></button>
+        <button id="melhoria2" type="button"><span>03 / ACELERAR</span><b>CADÊNCIA</b><small>+12% de velocidade<br>de disparo base.</small></button>
+      </div>
       <div class="final-stats" id="finalStats" style="display:none;">
         <div class="fstat"><span>Pontos</span><b id="fsScore">0</b></div>
         <div class="fstat"><span>Salas</span><b id="fsSalas">1</b></div>
@@ -65,7 +96,7 @@
       </div>
       <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
-        <span class="key">WASD anda</span><span class="key">Mouse gira</span><span class="key">Clique atira</span><span class="key">1 2 3 arma</span><span class="key">P pausa</span>
+        <span class="key">WASD anda</span><span class="key">Mouse mira</span><span class="key">Segure para atirar</span><span class="key">Espaço esquiva</span><span class="key">Q / 1 2 3 arma</span><span class="key">P pausa</span>
       </div>
     </div>
   </div>
@@ -143,16 +174,18 @@
     fsScore: Neon.$('fsScore'), fsSalas: Neon.$('fsSalas'), fsMira: Neon.$('fsMira'), stage: Neon.$('stage'),
   };
 
-  const jog = { x: 7.5, y: 12.5, ang: -Math.PI / 2, vida: VIDA_MAX, protecao: 0, arma: 0 };
-  let inimigos = [], itens = [], recarga = 0, municao = [Infinity, 0, 0], temArma = [true, false, false];
+  const jog = { x: 7.5, y: 12.5, ang: -Math.PI / 2, vida: VIDA_MAX, vidaMax: VIDA_MAX,
+    protecao: 0, arma: 0, impacto: 0, cadencia: 0, esquiva: 0, esquivaCD: 0, esquivaAng: 0 };
+  let inimigos = [], itens = [], projeteis = [], recarga = 0, municao = [Infinity, 0, 0], temArma = [true, false, false];
   let kills = 0, tiros = 0, acertos = 0, tempo = 0, score = 0, virando = 0;
+  let combo = 0, comboT = 0, hitT = 0, matouT = 0, aviso = '', avisoT = 0;
+  let efeitos = [];
   let pb = Neon.best.get('breach'), startHi = 0;
   els.best.textContent = pb;
   let state = 'menu', lastFrame = performance.now(), quadros = 0, fpsT = 0;
   let travado = false, fpsAtual = 0;
   const zbuf = new Float32Array(COLUNAS);
   let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, cor: '' }, clarao = 0;
-  const particles = new Neon.Particles();
 
   function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
   function flashAt(cor, ms) { if (!Neon.motion.reduced) flash = { t: ms, cor }; }
@@ -189,7 +222,7 @@
     corredor: { vida: 40, vel: 1.6, cor: '#ed887f', raio: 0.3, dano: 12, alcance: 0.7, recarga: 900 },
     atirador: { vida: 30, vel: 0.8, cor: '#efce95', raio: 0.28, dano: 8, alcance: 7, recarga: 1600 },
     tanque:   { vida: 110, vel: 0.55, cor: '#dda077', raio: 0.42, dano: 20, alcance: 0.9, recarga: 1400 },
-    chefe:    { vida: 620, vel: 0.95, cor: '#afa3f5', raio: 0.6, dano: 22, alcance: 8, recarga: 850, pontos: 2500, alto: 1.5 },
+    chefe:    { vida: 1000, vel: 0.95, cor: '#afa3f5', raio: 0.6, dano: 12, alcance: 6, recarga: 900, pontos: 2500, alto: 1.5 },
   };
   const PONTOS = { corredor: 100, atirador: 140, tanque: 260, chefe: 2500 };
 
@@ -222,9 +255,11 @@
     MAPA = SALAS[i].planta;
     const [ex, ey, ea] = SALAS[i].entrada;
     jog.x = ex; jog.y = ey; jog.ang = ea;
-    if (i > 0) jog.vida = Math.min(VIDA_MAX, jog.vida + 30);
+    if (i > 0) jog.vida = Math.min(jog.vidaMax, jog.vida + 30);
     els.vida.textContent = jog.vida;
-    inimigos = []; itens = []; virando = 0;
+    inimigos = []; itens = []; projeteis = []; efeitos = []; virando = 0;
+    jog.esquiva = 0; jog.esquivaCD = 0; combo = 0; comboT = 0;
+    limparControles();
     const daPraChegar = alcancaveis(ex, ey);
     const vagas = [];
     for (let y = 1; y < MAPA_A - 1; y++)
@@ -235,39 +270,88 @@
       if (!vagas.length) break;
       const [x, y] = vagas.splice((Math.random() * vagas.length) | 0, 1)[0];
       const t = TIPOS[nome];
-      inimigos.push({ x: x + 0.5, y: y + 0.5, tipo: nome, ...t, vidaMax: t.vida, cd: Neon.rand(0, 900) });
+      inimigos.push({ x: x + 0.5, y: y + 0.5, tipo: nome, ...t, vidaMax: t.vida, cd: Neon.rand(700, 1400), preparando: 0 });
     }
-    // A arma nova espera no chao da sala 2 e da 3: e a recompensa por chegar la.
+    // Armas à vista da entrada: a progressão não depende de achar uma caixa escondida.
     if (i === 1 || i === 2) {
-      const [x, y] = vagas.splice((Math.random() * vagas.length) | 0, 1)[0];
-      itens.push({ x: x + 0.5, y: y + 0.5, tipo: 'arma' });
+      const perto = [...daPraChegar].map(k => k.split(',').map(Number))
+        .map(([x, y]) => ({ x: x + 0.5, y: y + 0.5 }))
+        .filter(p => Math.hypot(p.x - ex, p.y - ey) >= 0.8 && enxerga(jog, p))
+        .sort((a, b) => Math.hypot(a.x - ex, a.y - ey) - Math.hypot(b.x - ex, b.y - ey));
+      itens.push({ ...(perto[0] || { x: ex, y: ey }), tipo: 'arma', arma: i });
     }
     els.sala.textContent = i + 1;
     Neon.popEl(els.sala);
     Neon.toast(`SALA ${i + 1} · ${SALAS[i].nome}`);
   }
 
-  // Linha de visao pela grade: o inimigo so atira se enxergar, senao ele acerta atraves da parede.
+  function oferecerMelhoria() {
+    state = 'melhoria';
+    limparControles();
+    // A sala limpa entrega tudo que ficou no chão, inclusive a arma esquecida.
+    for (const it of [...itens]) recolherItem(it);
+    projeteis = [];
+    Neon.audio.music.down();
+    Neon.overlay.show('SETOR CONCLUÍDO', `Próximo: ${SALAS[sala + 1].nome}. Escolha uma melhoria; elas acumulam nesta partida.`, 'CONTINUAR');
+    Neon.$('startBtn').hidden = true;
+    Neon.$('melhorias').hidden = false;
+    if (document.pointerLockElement) document.exitPointerLock();
+    Neon.$('melhoria0').focus();
+  }
+
+  function escolherMelhoria(i) {
+    if (state !== 'melhoria' || ![0, 1, 2].includes(i)) return;
+    if (i === 0) { jog.vidaMax += 25; jog.vida = Math.min(jog.vidaMax, jog.vida + 25); }
+    if (i === 1) jog.impacto++;
+    if (i === 2) jog.cadencia++;
+    Neon.$('melhorias').hidden = true;
+    Neon.$('startBtn').hidden = false;
+    entrarNaSala(sala + 1);
+    state = 'playing'; lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.sfx.golden(); Neon.audio.music.start();
+    pedirMouse();
+  }
+  for (let i = 0; i < 3; i++) Neon.$('melhoria' + i).addEventListener('click', () => escolherMelhoria(i));
+
+  // Usa o mesmo raio das paredes, sem saltar cantos entre amostras.
   function enxerga(a, b) {
     const d = Math.hypot(b.x - a.x, b.y - a.y);
-    const passos = Math.ceil(d * 8);
-    for (let i = 1; i < passos; i++) {
-      const t = i / passos;
-      if (celula(Math.floor(a.x + (b.x - a.x) * t), Math.floor(a.y + (b.y - a.y) * t))) return false;
-    }
-    return true;
+    return castar(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x)).dist >= d;
+  }
+
+  function atualizarProjeteis(dt) {
+    projeteis = projeteis.filter(p => {
+      const passo = p.vel * dt, dx = Math.cos(p.ang), dy = Math.sin(p.ang);
+      const parede = castar(p.x, p.y, p.ang).dist;
+      const x = jog.x - p.x, y = jog.y - p.y;
+      const frente = x * dx + y * dy, lado = x * dy - y * dx;
+      const raio = RAIO_JOG + 0.08;
+      if (Math.abs(lado) < raio) {
+        const metade = Math.sqrt(raio * raio - lado * lado);
+        const impacto = Math.max(0, frente - metade);
+        if (frente + metade >= 0 && impacto <= passo && impacto < parede) {
+          levarDano(p.dano);
+          return false;
+        }
+      }
+      if (parede <= passo) return false;
+      p.x += dx * passo; p.y += dy * passo;
+      return true;
+    });
   }
 
   // ── tiro ──────────────────────────────────────────
   function atirar() {
     if (state !== 'playing' || recarga > 0) return;
     const arma = ARMAS[jog.arma];
-    if (municao[jog.arma] <= 0) { Neon.audio.sfx.wrong(); recarga = 300; return; }
-    recarga = arma.cad;
+    if (municao[jog.arma] <= 0) { jog.arma = 0; aviso = 'SEM MUNIÇÃO · PISTOLA'; avisoT = 2; return; }
+    recarga = arma.cad / (1 + jog.cadencia * 0.12);
     if (municao[jog.arma] !== Infinity) municao[jog.arma]--;
     Neon.audio.sfx[arma.som]();
     shakeAt(arma.tiros > 1 ? 7 : 3, 110);
     clarao = 90;
+    const danos = new Map();
     for (let t = 0; t < arma.tiros; t++) {
       tiros++;
       const ang = jog.ang + Neon.rand(-arma.esp, arma.esp);
@@ -283,27 +367,37 @@
       }
       if (alvo) {
         acertos++;
-        alvo.vida -= arma.dano;
-        particles.burst(0, 0, alvo.cor, 0);          // marcador; o sangue e desenhado na projecao
+        const dano = Math.round(arma.dano * (1 + jog.impacto * 0.15));
+        alvo.vida -= dano;
+        hitT = 0.16;
+        danos.set(alvo, (danos.get(alvo) || 0) + dano);
         alvo.piscaT = 120;
         if (alvo.vida <= 0) matar(alvo);
       }
+    }
+    for (const [alvo, dano] of danos) {
+      efeitos.push({ x: alvo.x, y: alvo.y, texto: String(dano), cor: alvo.cor, t: 0.55, max: 0.55 });
     }
   }
 
   function matar(e) {
     inimigos = inimigos.filter(o => o !== e);
     kills++;
-    pontuar(PONTOS[e.tipo] || 100);
+    combo = comboT > 0 ? Math.min(4, combo + 1) : 1; comboT = 5; matouT = 0.3;
+    const pontos = (PONTOS[e.tipo] || 100) * combo;
+    pontuar(pontos);
+    efeitos.push({ x: e.x, y: e.y, texto: '+' + pontos, cor: '#9be7ce', t: 0.9, max: 0.9 });
+    if (combo > 1) { aviso = `${combo}× · ABATES EM SEQUÊNCIA`; avisoT = 1.6; }
     Neon.audio.sfx.golden();
     if (e.tipo === 'chefe') { flashAt('rgba(175,163,245,', 400); shakeAt(16, 500); }
     // 40% de chance de largar algo. Vida so cai se estiver fazendo falta.
     if (Math.random() < 0.4) {
-      const tipo = jog.vida < VIDA_MAX * 0.6 && Math.random() < 0.6 ? 'vida' : 'muni';
+      const tipo = jog.vida < jog.vidaMax * 0.6 && Math.random() < 0.6 ? 'vida' : 'muni';
       itens.push({ x: e.x, y: e.y, tipo });
     }
     if (!inimigos.length && !virando) {
       virando = 1600;
+      projeteis = [];
       Neon.audio.sfx.level();
       Neon.toast(sala + 1 >= SALAS.length ? '🏆 NÚCLEO LIMPO!' : '✅ SALA LIMPA');
     }
@@ -317,29 +411,32 @@
 
   function pegarItens() {
     for (const it of [...itens]) {
-      if (Math.hypot(it.x - jog.x, it.y - jog.y) > 0.55) continue;
-      itens = itens.filter(o => o !== it);
-      Neon.audio.sfx.golden();
-      if (it.tipo === 'vida') { jog.vida = Math.min(VIDA_MAX, jog.vida + 40); els.vida.textContent = jog.vida; }
-      else if (it.tipo === 'muni') {
-        // municao vai pra arma equipada, ou pra que estiver mais vazia se for a pistola
-        const alvo = jog.arma > 0 ? jog.arma : (temArma[2] ? 2 : temArma[1] ? 1 : 0);
-        if (alvo > 0) municao[alvo] += alvo === 1 ? 10 : 40;
-      } else {
-        const nova = temArma[1] ? 2 : 1;
-        temArma[nova] = true;
-        municao[nova] += nova === 1 ? 20 : 90;
-        jog.arma = nova;
-        Neon.toast(`🔓 ${ARMAS[nova].nome}!`);
-      }
-      pontuar(50);
+      if (Math.hypot(it.x - jog.x, it.y - jog.y) <= 0.75 && enxerga(jog, it)) recolherItem(it);
     }
+  }
+
+  function recolherItem(it) {
+    itens = itens.filter(o => o !== it);
+    Neon.audio.sfx.golden();
+    if (it.tipo === 'vida') { jog.vida = Math.min(jog.vidaMax, jog.vida + 40); els.vida.textContent = jog.vida; }
+    else if (it.tipo === 'muni') {
+      const alvo = jog.arma > 0 ? jog.arma : (temArma[2] ? 2 : temArma[1] ? 1 : 0);
+      if (alvo > 0) municao[alvo] += alvo === 1 ? 10 : 40;
+    } else {
+      const nova = it.arma || (temArma[1] ? 2 : 1);
+      temArma[nova] = true;
+      municao[nova] += nova === 1 ? 20 : 90;
+      jog.arma = nova;
+      Neon.toast(`🔓 ${ARMAS[nova].nome}!`);
+    }
+    pontuar(50);
   }
 
   function levarDano(q) {
     if (state !== 'playing' || jog.protecao > 0) return;
     jog.protecao = 0.65; // Evita que a horda acumule vários acertos no mesmo instante.
     jog.vida = Math.max(0, jog.vida - q);
+    combo = 0; comboT = 0;
     els.vida.textContent = jog.vida;
     flashAt('rgba(237,136,127,', 240);
     shakeAt(9, 220);
@@ -353,10 +450,12 @@
     Neon.audio.ensure();
     imersivo(true);
     startHi = pb;
-    jog.vida = VIDA_MAX; jog.protecao = 0; jog.arma = 0;
+    jog.vida = VIDA_MAX; jog.vidaMax = VIDA_MAX; jog.protecao = 0; jog.arma = 0;
+    jog.impacto = 0; jog.cadencia = 0; jog.esquiva = 0; jog.esquivaCD = 0;
     municao = [Infinity, 0, 0]; temArma = [true, false, false];
     kills = 0; tiros = 0; acertos = 0; tempo = 0; recarga = 0; score = 0;
-    particles.clear();
+    combo = 0; comboT = 0; hitT = 0; matouT = 0; avisoT = 0;
+    Neon.$('melhorias').hidden = true; Neon.$('startBtn').hidden = false;
     els.vida.textContent = jog.vida;
     els.score.textContent = '0';
     entrarNaSala(0);
@@ -367,6 +466,7 @@
 
   function fim(venceu) {
     state = 'fim';
+    limparControles();
     imersivo(false);
     Neon.audio.music.down();
     if (venceu) { score += 3000; els.score.textContent = score; }
@@ -389,12 +489,50 @@
 
   // ── controles: teclado e mouse ────────────────────
   const teclas = new Set();
+  function limparControles() { teclas.clear(); toques.clear(); manche = null; segurandoTiro = false; }
+
+  function direcaoMovimento() {
+    let frente = 0, lado = 0;
+    if (teclas.has('w') || teclas.has('arrowup')) frente++;
+    if (teclas.has('s') || teclas.has('arrowdown')) frente--;
+    if (teclas.has('a')) lado--;
+    if (teclas.has('d')) lado++;
+    if (manche) { frente -= manche.dy; lado += manche.dx; }
+    const tamanho = Math.max(1, Math.hypot(frente, lado));
+    return [frente / tamanho, lado / tamanho];
+  }
+
+  function esquivar() {
+    if (state !== 'playing' || jog.esquivaCD > 0) return;
+    let [frente, lado] = direcaoMovimento();
+    if (!frente && !lado) frente = -1;
+    jog.esquivaAng = jog.ang + Math.atan2(lado, frente);
+    jog.esquiva = 0.16; jog.esquivaCD = 2.4;
+    jog.protecao = Math.max(jog.protecao, 0.22);
+    Neon.audio.sfx.boost();
+  }
+
+  function trocarArma() {
+    if (state !== 'playing') return;
+    for (let i = 1; i <= ARMAS.length; i++) {
+      const nova = (jog.arma + i) % ARMAS.length;
+      if (temArma[nova] && municao[nova] > 0) { jog.arma = nova; Neon.audio.sfx.click(); break; }
+    }
+  }
+  Neon.$('esquivarBtn').addEventListener('click', esquivar);
+  Neon.$('trocarArma').addEventListener('click', trocarArma);
   document.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase();
+    if (state === 'melhoria') {
+      if (!e.repeat && k >= '1' && k <= '3') { e.preventDefault(); escolherMelhoria(+k - 1); }
+      return;
+    }
     if ('wasd'.includes(k) || k.startsWith('arrow')) { e.preventDefault(); teclas.add(k); }
     if (k >= '1' && k <= '3' && temArma[+k - 1]) { jog.arma = +k - 1; Neon.audio.sfx.click(); }
     if (k === 'p') { if (state === 'playing') pausar(); else if (state === 'pausado') retomar(); }
-    if (k === ' ' || k === 'enter') { e.preventDefault(); if (state === 'menu' || state === 'fim') Neon.$('startBtn').click(); }
+    if (k === 'q' && !e.repeat) trocarArma();
+    if (k === ' ' || k === 'shift') { e.preventDefault(); if (!e.repeat) esquivar(); }
+    if (k === ' ' || k === 'enter') { e.preventDefault(); if (!e.repeat && (state === 'menu' || state === 'fim')) Neon.$('startBtn').click(); }
   });
   document.addEventListener('keyup', (e) => teclas.delete(e.key.toLowerCase()));
 
@@ -425,7 +563,7 @@
   };
 
   els.stage.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('.sound-toggle, .overlay') || state !== 'playing') return;
+    if (e.pointerType === 'mouse' || e.target.closest('button, a, .overlay') || state !== 'playing') return;
     e.preventDefault();
     if (e.pointerType === 'touch') dedo = true;
     const p = paraQuadro(e);
@@ -464,6 +602,7 @@
   function pausar() {
     if (state !== 'playing') return;
     state = 'pausado';
+    limparControles();
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
     Neon.overlay.show('PAUSADO', dedo
@@ -509,6 +648,12 @@
   function update(dt) {
     if (state !== 'playing') return;
     tempo += dt;
+    comboT = Math.max(0, comboT - dt); hitT = Math.max(0, hitT - dt); matouT = Math.max(0, matouT - dt);
+    avisoT = Math.max(0, avisoT - dt);
+    efeitos = efeitos.filter(e => (e.t -= dt) > 0);
+    jog.esquivaCD = Math.max(0, jog.esquivaCD - dt);
+    Neon.$('esquivarBtn').disabled = jog.esquivaCD > 0;
+    Neon.$('esquivarBtn').textContent = jog.esquivaCD > 0 ? `ESQUIVA ${jog.esquivaCD.toFixed(1)}s` : 'ESQUIVA · ESPAÇO';
     jog.protecao = Math.max(0, jog.protecao - dt);
     if (recarga > 0) recarga -= dt * 1000;
     if (segurandoTiro) atirar();
@@ -519,39 +664,95 @@
       if (virando <= 0) {
         if (sala + 1 >= SALAS.length) return fim(true);
         pontuar(400 * (sala + 1));
-        entrarNaSala(sala + 1);
+        return oferecerMelhoria();
       }
     }
 
-    let frente = 0, lado = 0;
-    if (teclas.has('w') || teclas.has('arrowup')) frente += 1;
-    if (teclas.has('s') || teclas.has('arrowdown')) frente -= 1;
-    if (teclas.has('a')) lado -= 1;
-    if (teclas.has('d')) lado += 1;
+    const [frente, lado] = direcaoMovimento();
     if (teclas.has('arrowleft')) jog.ang -= 2.2 * dt;
     if (teclas.has('arrowright')) jog.ang += 2.2 * dt;
-    if (manche) { frente -= manche.dy; lado += manche.dx; }
-
     const vel = 2.9 * dt;
     const cos = Math.cos(jog.ang), sin = Math.sin(jog.ang);
-    const nx = jog.x + (cos * frente - sin * lado) * vel;
-    const ny = jog.y + (sin * frente + cos * lado) * vel;
+    const impulso = Math.min(dt, jog.esquiva) * 8;
+    jog.esquiva = Math.max(0, jog.esquiva - dt);
+    const nx = jog.x + (impulso ? Math.cos(jog.esquivaAng) * impulso : (cos * frente - sin * lado) * vel);
+    const ny = jog.y + (impulso ? Math.sin(jog.esquivaAng) * impulso : (sin * frente + cos * lado) * vel);
     mover(jog, nx, ny, RAIO_JOG);
 
+    atualizarProjeteis(dt);
     for (const e of inimigos) {
       if (e.piscaT > 0) e.piscaT -= dt * 1000;
       const d = Math.hypot(jog.x - e.x, jog.y - e.y);
       const vendo = enxerga(e, jog);
-      if (vendo && d > e.alcance * 0.9) {
+      if (vendo && !e.preparando && d > e.alcance * 0.9) {
         const a = Math.atan2(jog.y - e.y, jog.x - e.x);
         mover(e, e.x + Math.cos(a) * e.vel * dt, e.y + Math.sin(a) * e.vel * dt, e.raio);
       }
       e.cd -= dt * 1000;
-      if (vendo && d < e.alcance && e.cd <= 0) { e.cd = e.recarga; levarDano(e.dano); }
+      if (e.preparando > 0) {
+        e.preparando = Math.max(0, e.preparando - dt);
+        if (e.preparando === 0 && vendo) {
+          projeteis.push({ x: e.x, y: e.y, ang: e.mira, vel: 4, dano: e.dano, cor: e.cor });
+          Neon.audio.sfx.shoot();
+        }
+        continue;
+      }
+      if (vendo && d < e.alcance && e.cd <= 0) {
+        e.cd = e.recarga;
+        if (e.tipo === 'atirador' || e.tipo === 'chefe') {
+          e.preparando = 0.45;
+          e.mira = Math.atan2(jog.y - e.y, jog.x - e.x);
+        } else levarDano(e.dano);
+      }
     }
+    Neon.audio.music.intensity(sala === SALAS.length - 1 ? 0.7 : Math.min(0.6, combo * 0.15));
   }
 
   // ── render ────────────────────────────────────────
+  // Pequenos sprites procedurais, desenhados uma vez por tipo/estado.
+  const sprites = new Map();
+  function spriteInimigo(e) {
+    const estado = e.piscaT > 0 ? 1 : e.preparando > 0 ? 2 : 0;
+    const chave = e.tipo + estado;
+    if (sprites.has(chave)) return sprites.get(chave);
+    const s = document.createElement('canvas'); s.width = 64; s.height = 80;
+    const c = s.getContext('2d'), cor = estado === 1 ? '#ffffff' : e.cor;
+    const bloco = (x, y, w, h, tinta) => { c.fillStyle = tinta; c.fillRect(x, y, w, h); };
+    const poligono = (pontos, tinta) => {
+      c.fillStyle = tinta; c.beginPath(); pontos.forEach(([x, y]) => c.lineTo(x, y)); c.closePath(); c.fill();
+    };
+    if (e.tipo === 'atirador') {
+      poligono([[5, 30], [18, 14], [46, 14], [59, 30], [48, 53], [16, 53]], cor);
+      bloco(1, 31, 12, 9, '#c79751'); bloco(51, 31, 12, 9, '#c79751');
+      bloco(18, 23, 28, 22, '#18232d'); bloco(24, 46, 16, 13, '#364956');
+      bloco(22, 58, 5, 12, cor); bloco(37, 58, 5, 12, cor);
+    } else {
+      const pesado = e.tipo === 'tanque' || e.tipo === 'chefe';
+      bloco(pesado ? 5 : 14, 28, pesado ? 54 : 36, 29, cor);
+      bloco(19, 8, 26, 23, cor); bloco(16, 53, 12, 24, '#354858'); bloco(36, 53, 12, 24, '#354858');
+      bloco(13, 71, 16, 7, cor); bloco(35, 71, 16, 7, cor);
+      bloco(20, 35, 24, 16, '#18232d');
+      if (e.tipo === 'corredor') {
+        poligono([[4, 36], [12, 32], [8, 64], [0, 70]], '#ffd1cc');
+        poligono([[60, 36], [52, 32], [56, 64], [64, 70]], '#ffd1cc');
+      } else {
+        bloco(2, 26, 13, 34, '#67717a'); bloco(49, 26, 13, 34, '#67717a');
+        bloco(2, 31, 13, 5, cor); bloco(49, 31, 13, 5, cor);
+      }
+      if (e.tipo === 'chefe') {
+        poligono([[15, 15], [12, 0], [27, 9], [32, 0], [37, 9], [52, 0], [49, 15]], cor);
+        bloco(0, 21, 17, 9, cor); bloco(47, 21, 17, 9, cor);
+      }
+      bloco(21, 16, 22, 7, '#080d1c'); bloco(24, 18, 16, 3, '#fff4ce');
+    }
+    const brilho = estado === 2 ? '#ffffff' : cor;
+    if (estado === 2) { c.shadowColor = '#fff0b0'; c.shadowBlur = 12; }
+    bloco(27, 31, 10, 10, brilho);
+    c.shadowBlur = 0;
+    sprites.set(chave, s);
+    return s;
+  }
+
   function minimapa() {
     const escala = 8, x0 = 14, y0 = Math.max(48, 58 * H / canvas.clientHeight);
     ctx.save();
@@ -598,6 +799,13 @@
     ctx.fillStyle = chao;
     ctx.fillRect(0, H / 2, W, H / 2);
 
+    // Linhas de perspectiva e painéis dão escala ao corredor.
+    ctx.strokeStyle = 'rgba(155,231,206,0.07)'; ctx.lineWidth = 1;
+    for (let i = -5; i <= 5; i++) {
+      ctx.beginPath(); ctx.moveTo(W / 2, H / 2); ctx.lineTo(W / 2 + i * 180, H); ctx.stroke();
+    }
+    for (const y of [278, 296, 326, 376, 454]) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
     // paredes, coluna por coluna
     for (let i = 0; i < COLUNAS; i++) {
       const camX = (2 * i) / COLUNAS - 1;
@@ -616,6 +824,10 @@
       ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${Math.min(1, k * 1.6)})`;
       ctx.fillRect(i * LARG_COL, y0, LARG_COL + 1, 2);
       ctx.fillRect(i * LARG_COL, y0 + alt - 2, LARG_COL + 1, 2);
+      ctx.fillStyle = `rgba(8,13,28,${0.3 * k})`;
+      ctx.fillRect(i * LARG_COL, y0 + alt * 0.23, LARG_COL + 1, Math.max(1, alt * 0.025));
+      ctx.fillStyle = `rgba(${c.join(',')},${k * 0.6})`;
+      ctx.fillRect(i * LARG_COL, y0 + alt * 0.72, LARG_COL + 1, Math.max(1, alt * 0.009));
     }
 
     // inimigos como billboard, do mais longe pro mais perto, testando o z-buffer por coluna
@@ -628,26 +840,25 @@
       while (da < -Math.PI) da += Math.PI * 2;
       if (Math.abs(da) > FOV * 0.85 || d < 0.25) continue;
       const sx = W / 2 + (Math.tan(da) / Math.tan(FOV / 2)) * (W / 2);
-      const alt = Math.min(H * 3, (H / d) * 0.8 * (e.alto || 1));
+      const profundidade = d * Math.cos(da);
+      const alt = Math.min(H * 3, (H / profundidade) * 0.8 * (e.alto || 1));
       const larg = alt * 0.62;
-      const y0 = H / 2 - alt * 0.42;
+      const flutua = e.tipo === 'atirador' && !Neon.motion.reduced ? Math.sin(now / 240 + e.x) * alt * 0.025 : 0;
+      const y0 = H / 2 + H / profundidade * 0.34 - alt * 0.84 + flutua;
       const c0 = Math.max(0, Math.floor((sx - larg / 2) / LARG_COL));
       const c1 = Math.min(COLUNAS - 1, Math.ceil((sx + larg / 2) / LARG_COL));
-      const k = Math.max(0.15, 1 - d / 13);
+      const sprite = spriteInimigo(e);
+      ctx.imageSmoothingEnabled = false;
       for (let i = c0; i <= c1; i++) {
-        if (zbuf[i] <= d) continue;                 // parede na frente: nao desenha essa fatia
-        const x = i * LARG_COL;
-        ctx.globalAlpha = k;
-        ctx.fillStyle = e.piscaT > 0 ? '#ffffff' : e.cor;
-        ctx.fillRect(x, y0, LARG_COL + 1, alt * 0.84);
+        if (zbuf[i] <= profundidade) continue;
+        const x = Math.max(i * LARG_COL, sx - larg / 2);
+        const largura = Math.min((i + 1) * LARG_COL, sx + larg / 2) - x;
+        if (largura <= 0) continue;
+        ctx.drawImage(sprite, (x - sx + larg / 2) / larg * 64, 0, largura / larg * 64, 80,
+          x, y0, largura, alt * 0.84);
         ctx.globalAlpha = 1;
       }
-      // olhos e barra de vida: le o estado sem HUD extra
-      if (zbuf[Math.round(sx / LARG_COL)] > d) {
-        ctx.globalAlpha = k;
-        ctx.fillStyle = '#080d1c';
-        ctx.fillRect(sx - larg * 0.26, y0 + alt * 0.16, larg * 0.16, alt * 0.1);
-        ctx.fillRect(sx + larg * 0.1, y0 + alt * 0.16, larg * 0.16, alt * 0.1);
+      if (zbuf[Math.floor(sx / LARG_COL)] > profundidade) {
         const vv = e.vida / e.vidaMax;
         if (vv < 1) {
           ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -655,7 +866,31 @@
           ctx.fillStyle = vv > 0.5 ? '#a8dba0' : '#ed887f';
           ctx.fillRect(sx - larg / 2, y0 - 9, larg * vv, 5);
         }
+        if (e.preparando > 0) {
+          ctx.fillStyle = '#fff4ce'; ctx.textAlign = 'center'; ctx.font = 'bold 11px monospace';
+          ctx.fillText('! PREPARANDO', sx, y0 - 18);
+        }
         ctx.globalAlpha = 1;
+      }
+    }
+
+    // Tiros na altura da mira, recortados pelas mesmas paredes do cenário.
+    for (const p of projeteis) {
+      const x = p.x - jog.x, y = p.y - jog.y;
+      const frente = x * Math.cos(jog.ang) + y * Math.sin(jog.ang);
+      if (frente <= 0.05) continue;
+      const lado = y * Math.cos(jog.ang) - x * Math.sin(jog.ang);
+      const sx = W / 2 + lado / frente * W / (2 * Math.tan(FOV / 2));
+      const raio = Math.min(30, H * 0.08 / frente);
+      for (let i = Math.max(0, Math.floor((sx - raio) / LARG_COL));
+           i <= Math.min(COLUNAS - 1, Math.ceil((sx + raio) / LARG_COL)); i++) {
+        if (zbuf[i] <= frente) continue;
+        const borda = Math.min(1, Math.abs((i + 0.5) * LARG_COL - sx) / raio);
+        const altura = raio * Math.sqrt(1 - borda * borda);
+        ctx.fillStyle = p.cor;
+        ctx.fillRect(i * LARG_COL, H / 2 - altura, LARG_COL, altura * 2);
+        ctx.fillStyle = '#ffffff';
+        if (borda < 0.5) ctx.fillRect(i * LARG_COL, H / 2 - altura / 2, LARG_COL, altura);
       }
     }
 
@@ -680,9 +915,15 @@
       ctx.globalAlpha = 1;
     }
 
-    if (clarao > 0) {
-      ctx.fillStyle = `rgba(255,230,180, ${clarao / 400})`;
-      ctx.fillRect(0, 0, W, H);
+    for (const e of efeitos) {
+      const x = e.x - jog.x, y = e.y - jog.y;
+      const frente = x * Math.cos(jog.ang) + y * Math.sin(jog.ang);
+      if (frente < 0.2 || !enxerga(jog, e)) continue;
+      const sx = W / 2 + (y * Math.cos(jog.ang) - x * Math.sin(jog.ang)) / frente * W / (2 * Math.tan(FOV / 2));
+      const sobe = Neon.motion.reduced ? 0 : (1 - e.t / e.max) * 35;
+      ctx.globalAlpha = Math.min(1, e.t * 4); ctx.fillStyle = e.cor;
+      ctx.font = `bold ${e.texto.startsWith('+') ? 20 : 14}px monospace`; ctx.textAlign = 'center';
+      ctx.fillText(e.texto, sx, H / 2 - 28 - sobe); ctx.globalAlpha = 1;
     }
 
     // mira
@@ -694,21 +935,36 @@
     ctx.moveTo(W / 2, H / 2 - 12); ctx.lineTo(W / 2, H / 2 - 4);
     ctx.moveTo(W / 2, H / 2 + 4); ctx.lineTo(W / 2, H / 2 + 12);
     ctx.stroke();
+    if (hitT > 0 || matouT > 0) {
+      ctx.strokeStyle = matouT > 0 ? '#efce95' : '#ffffff'; ctx.lineWidth = 3;
+      for (const [x, y] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        ctx.beginPath(); ctx.moveTo(W / 2 + x * 8, H / 2 + y * 8);
+        ctx.lineTo(W / 2 + x * 15, H / 2 + y * 15); ctx.stroke();
+      }
+    }
 
-    // arma na mão: dois trapézios, o suficiente pra ancorar a visão
-    const recuo = recarga > 0 ? Math.min(14, recarga / 8) : 0;
-    ctx.fillStyle = '#152136';
-    ctx.strokeStyle = CORES[1] && `rgb(${CORES[1][0]},${CORES[1][1]},${CORES[1][2]})`;
-    ctx.lineWidth = 2;
+    const recuo = Neon.motion.reduced ? 0 : Math.min(14, clarao / 6);
+    ctx.save(); ctx.translate(W / 2, H + recuo);
+    const canos = jog.arma === 1 ? [-12, 12] : [0];
+    const larguraArma = jog.arma === 0 ? 27 : 44;
+    ctx.fillStyle = '#1e3040'; ctx.strokeStyle = '#718994'; ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(W / 2 - 34, H + 4);
-    ctx.lineTo(W / 2 - 16, H - 96 + recuo);
-    ctx.lineTo(W / 2 + 16, H - 96 + recuo);
-    ctx.lineTo(W / 2 + 34, H + 4);
-    ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = ARMAS[jog.arma].nome === 'ESCOPETA' ? '#dda077' : '#9be7ce';
-    ctx.fillRect(W / 2 - 8, H - 100 + recuo, 16, 6);
+    ctx.moveTo(-larguraArma, 8); ctx.lineTo(-larguraArma * 0.6, -100);
+    ctx.lineTo(larguraArma * 0.6, -100); ctx.lineTo(larguraArma, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+    for (const x of canos) {
+      ctx.fillStyle = '#080d1c'; ctx.fillRect(x - 8, -110, 16, 45);
+      ctx.strokeStyle = '#9aadb5'; ctx.strokeRect(x - 8, -110, 16, 45);
+      ctx.fillStyle = '#9be7ce'; ctx.fillRect(x - 6, -106, 12, 3);
+      if (clarao > 0 && !Neon.motion.reduced) {
+        ctx.fillStyle = '#fff4ce'; ctx.beginPath();
+        ctx.moveTo(x - 16, -113); ctx.lineTo(x - 7, -130); ctx.lineTo(x, -150);
+        ctx.lineTo(x + 7, -130); ctx.lineTo(x + 16, -113); ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.fillStyle = jog.arma === 1 ? '#dda077' : '#9be7ce';
+    ctx.fillRect(-larguraArma * 0.6, -54, larguraArma * 1.2, 7);
+    if (jog.arma === 2) { ctx.fillStyle = '#516476'; ctx.fillRect(32, -47, 18, 40); }
+    ctx.restore();
 
     // controles de toque desenhados no quadro
     if (dedo && state === 'playing') {
@@ -740,7 +996,7 @@
     ctx.textBaseline = 'middle';
     ctx.font = `700 12px Orbitron, sans-serif`;
     const campos = [
-      ['VIDA', jog.vida, jog.vida > VIDA_MAX * 0.5 ? '#a8dba0' : jog.vida > VIDA_MAX * 0.25 ? '#efce95' : '#ed887f'],
+      ['VIDA', jog.vida, jog.vida > jog.vidaMax * 0.5 ? '#a8dba0' : jog.vida > jog.vidaMax * 0.25 ? '#efce95' : '#ed887f'],
       [ARMAS[jog.arma].nome, municao[jog.arma] === Infinity ? '∞' : municao[jog.arma], '#efce95'],
       ['SALA', `${sala + 1}/${SALAS.length}`, '#9be7ce'],
       ['RESTAM', inimigos.length, '#afa3f5'],
@@ -759,6 +1015,20 @@
       cx += ctx.measureText(String(val)).width + 26;
     }
     ctx.textBaseline = 'alphabetic';
+
+    ctx.textAlign = 'center'; ctx.fillStyle = '#8ba9b4'; ctx.font = '11px monospace';
+    const chefe = inimigos.find(e => e.tipo === 'chefe');
+    if (chefe) {
+      ctx.fillStyle = '#afa3f5'; ctx.fillText('GUARDIÃO DO NÚCLEO', W / 2, 48);
+      ctx.fillStyle = '#192433'; ctx.fillRect(W / 2 - 120, 55, 240, 7);
+      ctx.fillStyle = chefe.preparando > 0 ? '#fff4ce' : '#afa3f5';
+      ctx.fillRect(W / 2 - 120, 55, 240 * Math.max(0, chefe.vida / chefe.vidaMax), 7);
+    } else ctx.fillText(`${SALAS[sala].nome} / ${inimigos.length ? 'ELIMINE OS HOSTIS' : 'SETOR SEGURO'}`, W / 2, 48);
+    if (avisoT > 0) { ctx.fillStyle = '#efce95'; ctx.font = 'bold 12px monospace'; ctx.fillText(aviso, W / 2, H * 0.7); }
+    if (comboT > 0 && combo > 1) {
+      ctx.fillStyle = '#efce95'; ctx.font = 'bold 14px monospace'; ctx.fillText(`COMBO ${combo}×`, W - 85, 60);
+      ctx.fillRect(W - 125, 68, 80 * comboT / 5, 3);
+    }
 
     if (flash.t > 0) {
       ctx.fillStyle = `${flash.cor} ${Math.min(0.4, flash.t / 200)})`;
