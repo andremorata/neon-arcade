@@ -59,24 +59,24 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  // Em pe o mundo fica 450x800. O salto e identico (gravidade, impulso e bola
-  // nao mudam); encolhe so o eixo horizontal, na proporcao da largura. Assim o
-  // tempo entre aros e a janela de passagem ficam iguais nos dois formatos.
-  const { W, H } = Neon.world(canvas, [900, 600], [450, 800]);
-  const KX = W / 900;
+  // Em pe o mundo fica 450x800. O salto e identico (gravidade e impulso nao
+  // mudam). O eixo horizontal encolhe, mas nao pela metade: bola, rim e
+  // corredor ficam em 72% do tamanho deitado (metade virava uma bolinha de
+  // 7 px e o aro uma fresta no celular) e a velocidade cai na mesma
+  // proporcao, entao a janela de travessia do corredor fica igual nos dois
+  // formatos. As cestas ficam mais espacadas: e dai que vem o tempo de reacao
+  // a mais na tela estreita.
+  const { W, H, retrato } = Neon.world(canvas, [900, 600], [450, 800]);
+  const KS = retrato ? 0.72 : 1;        // escala horizontal: bola, rim, corredor, rede e velocidade
   const G = 1500, IMPULSE = -400;
-  // A bola e as pontas do rim escalam com o eixo horizontal, igual ao resto do
-  // percurso. Sem isso elas ficavam do tamanho de sempre num mundo com metade
-  // da largura e o aro virava uma fresta: 7 unidades de folga em pe contra 44
-  // deitado. Agora em pe o desenho e o mesmo do deitado, so que menor.
-  const R = 15 * KX, RIM_R = 6 * KX;
-  const BALL_X = Math.round(230 * KX);
+  const R = 15 * KS, RIM_R = 6 * KS;
+  const BALL_X = retrato ? 120 : 230;
   // 74 e o corredor livre: o vao menos o espaco que a bola precisa pra nao
   // raspar em nenhuma das duas pontas do rim. E ele que decide o tempo de
   // travessia, entao e ele que escala.
-  const GAP_W = Math.round(74 * KX) + 2 * (R + RIM_R);
-  const SPACING = Math.round(380 * KX);
-  const SPEED0 = 210 * KX, SPEED_INC = 2 * KX, SPEED_MAX = 270 * KX;
+  const GAP_W = 74 * KS + 2 * (R + RIM_R);
+  const SPACING = retrato ? 300 : 380;
+  const SPEED0 = 210 * KS, SPEED_INC = 2 * KS, SPEED_MAX = 270 * KS;
   const CYAN = '#9be7ce', MAGENTA = '#afa3f5';
   const EMBER = ['#fff2a8', '#ffd000', '#dda077', '#ff4d00', '#afa3f5'];
 
@@ -354,10 +354,10 @@
     ctx.strokeStyle = color;
     ctx.globalAlpha = 0.35;
     ctx.lineWidth = 1.5;
-    const netH = 34 * h.dir, inset = 14 * KX;   // horizontal: escala com o mundo
+    const netH = 34 * h.dir, inset = 14 * KS;   // horizontal: escala com a bola
     ctx.beginPath();
     for (const [x0, x1] of [[h.x, h.x + inset], [h.x + GAP_W, h.x + GAP_W - inset],
-                            [h.x + GAP_W * 0.33, h.x + inset + 12 * KX], [h.x + GAP_W * 0.67, h.x + GAP_W - inset - 12 * KX]]) {
+                            [h.x + GAP_W * 0.33, h.x + inset + 12 * KS], [h.x + GAP_W * 0.67, h.x + GAP_W - inset - 12 * KS]]) {
       ctx.moveTo(x0, ry);
       ctx.lineTo(x1, ry + netH);
     }

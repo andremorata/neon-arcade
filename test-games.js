@@ -1164,26 +1164,31 @@ for (const [nome, w] of [['deitado', deitado], ['em pé', emPe]]) {
 // Hoops: o que decide se dá pra passar é o corredor livre entre as pontas do
 // rim, não o vão inteiro. Duas coisas têm que bater nos dois formatos: o tempo
 // de travessia e a folga medida em bolas. A segunda é o que quebrava quando a
-// bola não escalava junto — em pé sobravam 7 unidades contra 44 deitado.
+// bola não escalava junto — em pé sobravam 7 unidades contra 44 deitado. E a
+// escala em pé não pode ser a metade da largura: virava uma bola de 7 px.
 const gapSrc = games.hoops.match(/const GAP_W = ([^;]+);/)[1];
 const raioSrc = games.hoops.match(/const R = ([^,]+), RIM_R = ([^;]+);/);
-const aro = W => {
-  const KX = W / 900;
-  const ev = src => new Function('KX', `return ${src};`)(KX);
+const escalaSrc = games.hoops.match(/const KS = ([^;]+);/)[1];
+const velSrc = games.hoops.match(/const SPEED0 = ([^,]+), SPEED_INC = [^,]+, SPEED_MAX = ([^;]+);/);
+const aro = retrato => {
+  const KS = new Function('retrato', `return ${escalaSrc};`)(retrato);
+  const ev = src => new Function('KS', `return ${src};`)(KS);
   const R = ev(raioSrc[1]), RIM_R = ev(raioSrc[2]);
-  const GAP_W = new Function('KX', 'R', 'RIM_R', `return ${gapSrc};`)(KX, R, RIM_R);
-  return { corredor: GAP_W - 2 * (R + RIM_R), R };
+  const GAP_W = new Function('KS', 'R', 'RIM_R', `return ${gapSrc};`)(KS, R, RIM_R);
+  return { corredor: GAP_W - 2 * (R + RIM_R), R, speed0: ev(velSrc[1]), speedMax: ev(velSrc[2]) };
 };
-const travessia = (W, speed) => aro(W).corredor / speed;
-const folga = W => aro(W).corredor / (2 * aro(W).R);   // corredor medido em bolas
-assert.ok(Math.abs(folga(900) - folga(450)) < 0.01,
-  `Hoops: folga de ${folga(900).toFixed(2)} bolas deitado contra ${folga(450).toFixed(2)} em pé; ` +
+const travessia = (a, speed) => a.corredor / speed;
+const folga = a => a.corredor / (2 * a.R);   // corredor medido em bolas
+const aroDeitado = aro(false), aroEmPe = aro(true);
+assert.ok(Math.abs(folga(aroDeitado) - folga(aroEmPe)) < 0.01,
+  `Hoops: folga de ${folga(aroDeitado).toFixed(2)} bolas deitado contra ${folga(aroEmPe).toFixed(2)} em pé; ` +
   'em pé o aro fica apertado porque a bola não escala junto com o mundo');
-const tDeitado = travessia(900, 210), tEmPe = travessia(450, 105);
+const tDeitado = travessia(aroDeitado, aroDeitado.speed0), tEmPe = travessia(aroEmPe, aroEmPe.speed0);
 assert.ok(Math.abs(tDeitado - tEmPe) < 0.01,
   `Hoops: travessia de ${tDeitado.toFixed(3)}s deitado contra ${tEmPe.toFixed(3)}s em pé; o aro em pé fica apertado`);
-assert.ok(Math.abs(travessia(900, 270) - travessia(450, 135)) < 0.01,
+assert.ok(Math.abs(travessia(aroDeitado, aroDeitado.speedMax) - travessia(aroEmPe, aroEmPe.speedMax)) < 0.01,
   'Hoops: na velocidade máxima a travessia também tem que bater nos dois formatos');
+assert.ok(aroEmPe.R >= 10, `Hoops: em pé a bola precisa de pelo menos 10 px de raio pra dar pra ver no celular (tem ${aroEmPe.R.toFixed(1)})`);
 
 // mobile: página de jogo é quadro travado. Sem zoom de dois toques, sem menu de
 // seleção, sem scroll. O menu (index.html) fica de fora, lá dá pra ampliar texto.
