@@ -1997,94 +1997,125 @@ assert.ok(gIni > 0 && gFim > gIni, 'planador: marcadores do bloco de fisica nao 
 assert.ok(!/Math\.random/.test(planador.slice(gIni, gFim)), 'planador: a fisica so pode usar o gerador com semente');
 const GL = new Function(planador.slice(gIni, gFim) + '; return { K, novoVoo, lancar, passo, piloto, gerar };')();
 const gSTEP = 1 / 120;
-const gNada = () => ({ sobe: false, desce: false });
-const grau = g => g * Math.PI / 180;
-function voar(s, controle, segundos = 120, ate) {
+const gNada = () => ({ pitch: 0, lado: 0 });
+function voar(s, controle, segundos = 150, ate) {
   const evs = [];
   for (let i = 0; i < segundos * 120 && s.fase !== 'fim'; i++) {
     GL.passo(s, gSTEP, controle(s));
     evs.push(...s.ev.map(e => e.tipo));
     s.ev.length = 0;
+    if (s.fase === 'voo') assert.ok(Math.abs(s.x) <= GL.K.LARG + 1e-9, `planador: o aviao saiu do corredor (x=${s.x.toFixed(1)})`);
     if (ate && ate(s)) break;
   }
   return evs;
 }
-const lancado = (ang, forca, semente = 1, obst = false) => { const s = GL.novoVoo(semente, obst); GL.lancar(s, grau(ang), forca); return s; };
+const lancado = (forca, semente = 1, obst = false, lado = 0) => { const s = GL.novoVoo(semente, obst); GL.lancar(s, forca, lado); return s; };
+// aviao ja no ar, reto e nivelado, pra testar um objeto especifico no caminho
+const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = 'voo'; s.x = x; s.y = y; s.z = z; s.vz = v; s.vy = 0; s.th = 0; s.v = v; s.objs.push(...objs); return s; };
 
-// cenario: mesma semente, mesmo cenario; nada na zona segura; alturas alcancaveis
+// cenario: mesma semente, mesmo cenario; nada na zona segura; tudo dentro do corredor e ao alcance
 {
   const a = GL.novoVoo(7), b = GL.novoVoo(7), c = GL.novoVoo(8);
-  GL.gerar(a, 1500); GL.gerar(b, 1500); GL.gerar(c, 1500);
+  GL.gerar(a, 3000); GL.gerar(b, 3000); GL.gerar(c, 3000);
   assert.deepStrictEqual(a.objs, b.objs, 'planador: a mesma semente tem que gerar o mesmo cenario');
   assert.notDeepStrictEqual(a.objs, c.objs, 'planador: sementes diferentes geram cenarios diferentes');
-  assert.ok(a.objs.length > 30, `planador: 1500 m tem que ter cenario (${a.objs.length} objetos)`);
-  assert.ok(a.objs.every(o => o.x >= GL.K.SEGURO), 'planador: nada nasce na zona segura do lancamento');
+  assert.ok(a.objs.length > 60, `planador: 3000 m tem que ter cenario (${a.objs.length} objetos)`);
+  assert.ok(a.objs.every(o => o.z >= GL.K.SEGURO), 'planador: nada nasce na zona segura do lancamento');
+  assert.ok(a.objs.every(o => Math.abs(o.x === undefined ? o.x0 : o.x) <= 10), 'planador: objeto fora do corredor');
   assert.ok(a.objs.filter(o => o.tipo === 'torre').every(o => o.h < 45), 'planador: torre alta demais nao da pra passar');
   assert.ok(a.objs.filter(o => o.tipo === 'anel').every(o => o.y >= 4 && o.y <= 50), 'planador: anel fora do alcance');
-  for (const t of ['torre', 'laje', 'anel', 'termica', 'drone']) assert.ok(a.objs.some(o => o.tipo === t), `planador: falta ${t} no cenario`);
+  for (const t of ['torre', 'laje', 'anel', 'termica', 'drone', 'portal']) assert.ok(a.objs.some(o => o.tipo === t), `planador: falta ${t} no cenario`);
 }
 // voo livre: o piloto voa longe e mais que sem tocar; segurar estola e mergulhar crava
 {
-  const bot = lancado(40, 1); voar(bot, GL.piloto);
+  const bot = lancado(1); voar(bot, GL.piloto);
   assert.strictEqual(bot.fimPor, 'pouso', 'planador: o piloto pousa suave');
   assert.ok(bot.dist > 450, `planador: o piloto tem que passar de 450 m (fez ${bot.dist.toFixed(0)})`);
-  const solto = lancado(40, 1); voar(solto, gNada);
+  const solto = lancado(1); voar(solto, gNada);
   assert.ok(solto.dist > 200, `planador: sem tocar o aviao ainda plana (fez ${solto.dist.toFixed(0)})`);
   assert.ok(bot.dist > solto.dist * 1.3, `planador: ajudar tem que valer metros (piloto ${bot.dist.toFixed(0)} vs solto ${solto.dist.toFixed(0)})`);
-  const meio = lancado(40, 0.5); voar(meio, GL.piloto);
+  const meio = lancado(0.5); voar(meio, GL.piloto);
   assert.ok(meio.dist < bot.dist * 0.75, `planador: meia forca no estilingue voa bem menos (${meio.dist.toFixed(0)})`);
-  const segura = lancado(30, 1);
-  const evS = voar(segura, () => ({ sobe: true, desce: false }));
+  const segura = lancado(1);
+  const evS = voar(segura, () => ({ pitch: 1, lado: 0 }));
   assert.ok(evS.includes('estol'), 'planador: nariz alto o tempo todo estola');
   assert.ok(segura.dist < 120, `planador: quem estola cai perto (${segura.dist.toFixed(0)})`);
-  const mergulha = lancado(30, 1); voar(mergulha, () => ({ sobe: false, desce: true }));
+  const mergulha = lancado(1); voar(mergulha, () => ({ pitch: -1, lado: 0 }));
   assert.ok(mergulha.dist < 80 && mergulha.fimPor === 'chao', 'planador: mergulhar direto crava no chao');
-  const alto = lancado(55, 1); let minVx = 99;
-  voar(alto, GL.piloto, 120, st => { minVx = Math.min(minVx, st.vx); return false; });
-  assert.ok(minVx > 0, 'planador: o aviao nunca pode dar loop e voar pra tras');
+  let minVz = 99;
+  voar(lancado(1), GL.piloto, 150, st => { minVz = Math.min(minVz, st.vz); return false; });
+  assert.ok(minVz > 0, 'planador: o aviao nunca pode dar loop e voar pra tras');
+}
+// desvio: inclinar leva pro lado, para na borda do corredor e custa planeio
+{
+  const s = lancado(1); let x3 = 0;
+  voar(s, () => ({ pitch: 0, lado: 1 }), 150, st => { if (st.t >= 3 && !x3) x3 = st.x; return false; });
+  assert.ok(x3 > 5, `planador: tres segundos inclinado tem que andar pro lado (x=${x3.toFixed(1)})`);
+  assert.ok(Math.abs(s.x - GL.K.LARG) < 0.01 || s.fase === 'fim', 'planador: a borda do corredor segura o aviao');
+  const reto = lancado(1); voar(reto, gNada);
+  assert.ok(s.dist < reto.dist, 'planador: voar inclinado o tempo todo afunda mais que voar reto');
+}
+// torre no caminho: reto bate e a distancia congela na batida; desviando passa
+{
+  const torre = { tipo: 'torre', z: 30, x: 0, w: 6, h: 40 };
+  const bate = emVoo(0, 10, 20, 20, [{ ...torre }]);
+  const evs = voar(bate, gNada, 30);
+  assert.ok(evs.includes('bateu'), 'planador: torre no caminho derruba o aviao');
+  assert.strictEqual(bate.fimPor, 'torre', 'planador: o fim diz no que bateu');
+  assert.strictEqual(bate.fase, 'fim', 'planador: depois da batida o aviao cai ate o chao e o voo acaba');
+  assert.ok(bate.dist > 27 && bate.dist < 30, `planador: a distancia e a da batida, nao a da queda (${bate.dist.toFixed(1)})`);
+  const desvia = emVoo(0, 10, 10, 20, [{ ...torre }]);
+  const evD = voar(desvia, () => ({ pitch: 0, lado: 1 }), 30, st => st.z > 40);
+  assert.ok(!evD.includes('bateu') && desvia.z > 40, 'planador: inclinando a tempo o aviao passa ao lado da torre');
+}
+// portal: pelo buraco ganha impulso, na parede bate
+{
+  const portal = { tipo: 'portal', z: 30, x: 0, y: 20, r: GL.K.PORTAL_R, passou: false };
+  const passa = emVoo(0, 20, 25, 20, [{ ...portal }]);
+  const evP = voar(passa, gNada, 5, st => st.z > 35);
+  assert.ok(evP.includes('portal') && !evP.includes('bateu'), 'planador: pelo buraco do portal o aviao passa e ganha impulso');
+  const bate = emVoo(7, 20, 25, 20, [{ ...portal }]);
+  const evB = voar(bate, gNada, 5, st => st.z > 35 || st.fase !== 'voo');
+  assert.ok(evB.includes('bateu') && bate.fimPor === 'portal', 'planador: fora do buraco a parede do portal derruba');
 }
 // anel: passar por dentro da um impulso
 {
-  const s = lancado(0, 0.5);
-  s.objs.push({ tipo: 'anel', x: 6, y: GL.K.H0 - 0.6, r: GL.K.ANEL_R, pego: false });
-  let antes = 0;
-  const evs = voar(s, gNada, 3, st => { if (st.x < 3) antes = st.v; return st.aneis > 0; });
+  const s = emVoo(0, 20, 25, 20, [{ tipo: 'anel', z: 30, x: 0, y: 20, r: GL.K.ANEL_R, pego: false }]);
+  const evs = voar(s, gNada, 3, st => st.aneis > 0);
   assert.ok(evs.includes('anel'), 'planador: o anel conta quando o aviao passa por dentro');
-  assert.ok(s.v > antes + 4, `planador: o anel empurra o aviao (${antes.toFixed(1)} -> ${s.v.toFixed(1)} m/s)`);
+  assert.ok(s.v > 20 + 4, `planador: o anel empurra o aviao (20 -> ${s.v.toFixed(1)} m/s)`);
 }
 // termica: a coluna de ar levanta o aviao
 {
-  const com = lancado(10, 0.6), sem = lancado(10, 0.6);
-  com.objs.push({ tipo: 'termica', x: 20, w: 40, forca: GL.K.TERMICA, entrou: false });
-  const ate = st => st.x >= 70;
+  const termica = { tipo: 'termica', z: 20, x: 0, r: GL.K.TERM_R, w: 50, forca: GL.K.TERMICA, entrou: false };
+  const com = lancado(0.6), sem = lancado(0.6);
+  com.objs.push(termica);
+  const ate = st => st.z >= 70;
   const evs = voar(com, gNada, 30, ate); voar(sem, gNada, 30, ate);
   assert.ok(evs.includes('termica'), 'planador: entrar na termica avisa');
   assert.ok(com.y > sem.y + 3, `planador: a termica tem que levantar o aviao (${com.y.toFixed(1)} vs ${sem.y.toFixed(1)} m)`);
 }
-// torre no caminho: bate, cai rodopiando e a distancia congela na batida
-{
-  const s = lancado(0, 0.6);
-  s.objs.push({ tipo: 'torre', x: 30, w: 4, h: 40 });
-  const evs = voar(s, gNada, 30);
-  assert.ok(evs.includes('bateu'), 'planador: torre no caminho derruba o aviao');
-  assert.strictEqual(s.fimPor, 'torre', 'planador: o fim diz no que bateu');
-  assert.strictEqual(s.fase, 'fim', 'planador: depois da batida o aviao cai ate o chao e o voo acaba');
-  assert.ok(s.dist > 28 && s.dist < 31, `planador: a distancia e a da batida, nao a da queda (${s.dist.toFixed(1)})`);
-}
 // pouso: deslizar no chao ainda conta metros
 {
-  const s = lancado(0, 0.4); let toque = 0;
-  const evs = voar(s, gNada, 30, st => { if (st.fase === 'desliza' && !toque) toque = st.x; return false; });
+  const s = lancado(0.4); let toque = 0;
+  const evs = voar(s, gNada, 30, st => { if (st.fase === 'desliza' && !toque) toque = st.z; return false; });
   assert.ok(evs.includes('pousou') && evs.includes('fim'), 'planador: o voo termina num pouso');
   assert.ok(s.dist > toque + 2, `planador: o deslize depois do pouso soma distancia (${toque.toFixed(1)} -> ${s.dist.toFixed(1)})`);
 }
-// com obstaculos o voo acaba, e e deterministico
+// com obstaculos: o piloto que desvia sobrevive, quem nao desvia bate; tudo deterministico
 {
-  const a = lancado(35, 1, 3, true), b = lancado(35, 1, 3, true);
-  voar(a, GL.piloto, 200); voar(b, GL.piloto, 200);
-  assert.strictEqual(a.fase, 'fim', 'planador: o voo com obstaculos termina');
-  assert.strictEqual(a.dist, b.dist, 'planador: mesma semente e mesmo piloto, mesmo voo');
-  assert.ok(['torre', 'laje', 'drone', 'pouso', 'chao'].includes(a.fimPor), `planador: fim por ${a.fimPor}`);
+  let soma = 0;
+  for (const sem of [1, 2, 3, 4, 5, 6]) {
+    const a = lancado(1, sem, true), b = lancado(1, sem, true);
+    voar(a, GL.piloto, 200); voar(b, GL.piloto, 200);
+    assert.strictEqual(a.fase, 'fim', `planador: o voo com obstaculos termina (semente ${sem})`);
+    assert.strictEqual(a.dist, b.dist, 'planador: mesma semente e mesmo piloto, mesmo voo');
+    assert.ok(a.dist > 150, `planador: o piloto desviando tem que passar de 150 m (semente ${sem}: ${a.dist.toFixed(0)} por ${a.fimPor})`);
+    soma += a.dist;
+  }
+  assert.ok(soma / 6 > 350, `planador: na media o piloto tem que passar de 350 m com obstaculos (${(soma / 6).toFixed(0)})`);
+  const cego = [1, 2, 3, 4, 5, 6].map(sem => { const s = lancado(1, sem, true); voar(s, gNada, 200); return s.fimPor; });
+  assert.ok(cego.some(f => f === 'torre' || f === 'laje' || f === 'portal' || f === 'drone'), `planador: sem desviar, alguma hora bate (${cego.join(', ')})`);
 }
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);
