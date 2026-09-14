@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score', planador: 'distancia' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
@@ -1983,6 +1983,108 @@ const embolo = f => s => ({ ...pNada(), carrega: s.fase === 'embolo' && s.forca 
     if (s.fase === 'vivo') presas.push(`(${x},${y})→(${s.bola.x.toFixed(0)},${s.bola.y.toFixed(0)})`);
   }
   assert.deepStrictEqual(presas, [], `pinball: a bola fica presa quando solta em: ${presas.join(' ')}`);
+}
+
+
+// ── NEON PLANADOR ──────────────────────────────────
+// O voo inteiro roda em Node: o bloco de fisica sai do fonte e um piloto voa
+// sem obstaculos, com obstaculos e de todo jeito errado. Foi assim que o trim
+// de angulo fixo apareceu dando loop no lancamento e oscilando ate o chao.
+const planador = games.planador;
+const gIni = planador.indexOf('  // ── física ──');
+const gFim = planador.indexOf('  // ── fim da física ──');
+assert.ok(gIni > 0 && gFim > gIni, 'planador: marcadores do bloco de fisica nao encontrados');
+assert.ok(!/Math\.random/.test(planador.slice(gIni, gFim)), 'planador: a fisica so pode usar o gerador com semente');
+const GL = new Function(planador.slice(gIni, gFim) + '; return { K, novoVoo, lancar, passo, piloto, gerar };')();
+const gSTEP = 1 / 120;
+const gNada = () => ({ sobe: false, desce: false });
+const grau = g => g * Math.PI / 180;
+function voar(s, controle, segundos = 120, ate) {
+  const evs = [];
+  for (let i = 0; i < segundos * 120 && s.fase !== 'fim'; i++) {
+    GL.passo(s, gSTEP, controle(s));
+    evs.push(...s.ev.map(e => e.tipo));
+    s.ev.length = 0;
+    if (ate && ate(s)) break;
+  }
+  return evs;
+}
+const lancado = (ang, forca, semente = 1, obst = false) => { const s = GL.novoVoo(semente, obst); GL.lancar(s, grau(ang), forca); return s; };
+
+// cenario: mesma semente, mesmo cenario; nada na zona segura; alturas alcancaveis
+{
+  const a = GL.novoVoo(7), b = GL.novoVoo(7), c = GL.novoVoo(8);
+  GL.gerar(a, 1500); GL.gerar(b, 1500); GL.gerar(c, 1500);
+  assert.deepStrictEqual(a.objs, b.objs, 'planador: a mesma semente tem que gerar o mesmo cenario');
+  assert.notDeepStrictEqual(a.objs, c.objs, 'planador: sementes diferentes geram cenarios diferentes');
+  assert.ok(a.objs.length > 30, `planador: 1500 m tem que ter cenario (${a.objs.length} objetos)`);
+  assert.ok(a.objs.every(o => o.x >= GL.K.SEGURO), 'planador: nada nasce na zona segura do lancamento');
+  assert.ok(a.objs.filter(o => o.tipo === 'torre').every(o => o.h < 45), 'planador: torre alta demais nao da pra passar');
+  assert.ok(a.objs.filter(o => o.tipo === 'anel').every(o => o.y >= 4 && o.y <= 50), 'planador: anel fora do alcance');
+  for (const t of ['torre', 'laje', 'anel', 'termica', 'drone']) assert.ok(a.objs.some(o => o.tipo === t), `planador: falta ${t} no cenario`);
+}
+// voo livre: o piloto voa longe e mais que sem tocar; segurar estola e mergulhar crava
+{
+  const bot = lancado(40, 1); voar(bot, GL.piloto);
+  assert.strictEqual(bot.fimPor, 'pouso', 'planador: o piloto pousa suave');
+  assert.ok(bot.dist > 450, `planador: o piloto tem que passar de 450 m (fez ${bot.dist.toFixed(0)})`);
+  const solto = lancado(40, 1); voar(solto, gNada);
+  assert.ok(solto.dist > 200, `planador: sem tocar o aviao ainda plana (fez ${solto.dist.toFixed(0)})`);
+  assert.ok(bot.dist > solto.dist * 1.3, `planador: ajudar tem que valer metros (piloto ${bot.dist.toFixed(0)} vs solto ${solto.dist.toFixed(0)})`);
+  const meio = lancado(40, 0.5); voar(meio, GL.piloto);
+  assert.ok(meio.dist < bot.dist * 0.75, `planador: meia forca no estilingue voa bem menos (${meio.dist.toFixed(0)})`);
+  const segura = lancado(30, 1);
+  const evS = voar(segura, () => ({ sobe: true, desce: false }));
+  assert.ok(evS.includes('estol'), 'planador: nariz alto o tempo todo estola');
+  assert.ok(segura.dist < 120, `planador: quem estola cai perto (${segura.dist.toFixed(0)})`);
+  const mergulha = lancado(30, 1); voar(mergulha, () => ({ sobe: false, desce: true }));
+  assert.ok(mergulha.dist < 80 && mergulha.fimPor === 'chao', 'planador: mergulhar direto crava no chao');
+  const alto = lancado(55, 1); let minVx = 99;
+  voar(alto, GL.piloto, 120, st => { minVx = Math.min(minVx, st.vx); return false; });
+  assert.ok(minVx > 0, 'planador: o aviao nunca pode dar loop e voar pra tras');
+}
+// anel: passar por dentro da um impulso
+{
+  const s = lancado(0, 0.5);
+  s.objs.push({ tipo: 'anel', x: 6, y: GL.K.H0 - 0.6, r: GL.K.ANEL_R, pego: false });
+  let antes = 0;
+  const evs = voar(s, gNada, 3, st => { if (st.x < 3) antes = st.v; return st.aneis > 0; });
+  assert.ok(evs.includes('anel'), 'planador: o anel conta quando o aviao passa por dentro');
+  assert.ok(s.v > antes + 4, `planador: o anel empurra o aviao (${antes.toFixed(1)} -> ${s.v.toFixed(1)} m/s)`);
+}
+// termica: a coluna de ar levanta o aviao
+{
+  const com = lancado(10, 0.6), sem = lancado(10, 0.6);
+  com.objs.push({ tipo: 'termica', x: 20, w: 40, forca: GL.K.TERMICA, entrou: false });
+  const ate = st => st.x >= 70;
+  const evs = voar(com, gNada, 30, ate); voar(sem, gNada, 30, ate);
+  assert.ok(evs.includes('termica'), 'planador: entrar na termica avisa');
+  assert.ok(com.y > sem.y + 3, `planador: a termica tem que levantar o aviao (${com.y.toFixed(1)} vs ${sem.y.toFixed(1)} m)`);
+}
+// torre no caminho: bate, cai rodopiando e a distancia congela na batida
+{
+  const s = lancado(0, 0.6);
+  s.objs.push({ tipo: 'torre', x: 30, w: 4, h: 40 });
+  const evs = voar(s, gNada, 30);
+  assert.ok(evs.includes('bateu'), 'planador: torre no caminho derruba o aviao');
+  assert.strictEqual(s.fimPor, 'torre', 'planador: o fim diz no que bateu');
+  assert.strictEqual(s.fase, 'fim', 'planador: depois da batida o aviao cai ate o chao e o voo acaba');
+  assert.ok(s.dist > 28 && s.dist < 31, `planador: a distancia e a da batida, nao a da queda (${s.dist.toFixed(1)})`);
+}
+// pouso: deslizar no chao ainda conta metros
+{
+  const s = lancado(0, 0.4); let toque = 0;
+  const evs = voar(s, gNada, 30, st => { if (st.fase === 'desliza' && !toque) toque = st.x; return false; });
+  assert.ok(evs.includes('pousou') && evs.includes('fim'), 'planador: o voo termina num pouso');
+  assert.ok(s.dist > toque + 2, `planador: o deslize depois do pouso soma distancia (${toque.toFixed(1)} -> ${s.dist.toFixed(1)})`);
+}
+// com obstaculos o voo acaba, e e deterministico
+{
+  const a = lancado(35, 1, 3, true), b = lancado(35, 1, 3, true);
+  voar(a, GL.piloto, 200); voar(b, GL.piloto, 200);
+  assert.strictEqual(a.fase, 'fim', 'planador: o voo com obstaculos termina');
+  assert.strictEqual(a.dist, b.dist, 'planador: mesma semente e mesmo piloto, mesmo voo');
+  assert.ok(['torre', 'laje', 'drone', 'pouso', 'chao'].includes(a.fimPor), `planador: fim por ${a.fimPor}`);
 }
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);

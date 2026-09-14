@@ -56,7 +56,9 @@ curvas de clima e a contagem de ultrapassagem do Enduro, o gerador de rio do Riv
 ilhas, ponte e respawn determinístico por semente) e a física do Salto (todo carro pousa limpo
 em toda rampa, cada habilidade vale metros e os desbloqueios por recorde são alcançáveis) e a mesa do Pinball
 (lançamento, tiro de flipper, dreno, portão de mão única e uma varredura que solta a bola parada em cada ponto
-livre da mesa pra garantir que nenhum canto prende). Boa parte desses testes nasceu de um
+livre da mesa pra garantir que nenhum canto prende) e o voo do Planador (o piloto voa mais longe do que
+sem tocar, segurar o nariz estola, anel empurra, térmica levanta, torre derruba e o cenário de uma semente é
+sempre o mesmo). Boa parte desses testes nasceu de um
 bug real, e o comentário acima de cada um diz qual.
 
 ## Estrutura
