@@ -1711,66 +1711,210 @@ for (const fps of [30, 60, 120]) {
   assert.ok(J.expedition().collected.every(v => !v), 'Jungle: reinício devolve os tesouros');
 }
 
-// Pulse: atravessa as três fases com os comandos reais, em três taxas de quadros.
+// Pulse: atravessa os dez setores com os comandos reais, em três taxas de quadros.
 const pulse = games.pulse;
-const P = new Function('H', pulse.slice(pulse.indexOf('  const FLOOR'), pulse.indexOf('  // ── fim da física')) +
-  '; return { expedition, step, damage, FLOOR, SECTORS };')(540);
+const P = new Function(pulse.slice(pulse.indexOf('  const FLOOR'), pulse.indexOf('  // ── fim da física')) +
+  '; return { expedition, step, damage, respawn, level, FLOOR, SECTORS, DEATH_TIME };')();
 assert.match(pulse, /pb = Neon\.best\.update\('pulse', run.score\)/, 'Pulse: recorde usa a chave do menu');
+assert.strictEqual(P.SECTORS.length, 10, 'Pulse: a cidade tem dez setores');
+// Piloto: corre, salta buraco e mira o pisão prevendo onde vai cair. Quando a
+// conta diz que vai raspar a lateral, usa o segundo salto ou solta o direcional.
+const PILOT_AIRTIME = 0.78, G = 1650;
+const hostil = e => e.alive && !e.stun && e.kind !== 'flyer' && e.kind !== 'bomber';
+function scrape(s, e) {
+  if (s.vy <= 0) return e.x - s.x > 0 && e.x - s.x < 80 && s.y > e.y - 26;
+  const queda = (e.y - 26) - s.y;
+  if (queda < 0) return false;
+  const t = (Math.sqrt(s.vy * s.vy + 2 * G * queda) - s.vy) / G;
+  const dx = (e.x + e.dir * e.speed * t) - (s.x + s.vx * t);
+  return dx > 27 && dx < 110;
+}
+function pilot(s) {
+  const pit = s.map.pits.some(([a, b]) => a - s.x < 84 && b > s.x && s.x < a);
+  const over = s.map.pits.some(([a, b]) => s.x > a - 12 && s.x < b + 12);
+  const air = s.map.enemies.some(e => e.alive && !e.stun && (e.kind === 'flyer' || e.kind === 'bomber') &&
+    e.x - s.x > -40 && e.x - s.x < 150 && e.y < s.y - 40);
+  let foe = false;
+  for (const e of s.map.enemies) {
+    if (!hostil(e)) continue;
+    const dx = e.x - s.x;
+    if (dx < 24 || dx > 320 || Math.abs(e.y - s.y) > 70) continue;
+    const speed = e.kind === 'charger' ? e.speed + e.rush * e.dash : e.speed;
+    const reach = (262 + (e.dir < 0 ? speed : -speed)) * PILOT_AIRTIME - (e.kind === 'spiker' ? 70 : 0);
+    if (dx <= reach) foe = true;
+  }
+  const spike = s.map.enemies.some(e => hostil(e) && e.kind === 'spiker' &&
+    e.x - s.x > -30 && e.x - s.x < 80 && e.y > s.y);
+  // Perto de buraco nada de frear: cair no vazio é pior que raspar.
+  const gap = s.map.pits.some(([a, b]) => a - s.x < 260 && b > s.x - 40);
+  const raspa = !s.grounded && !over && !gap && s.map.enemies.some(e => hostil(e) && Math.abs(e.x - s.x) < 220 && scrape(s, e));
+  const shot = s.map.shots.some(b => !b.boom && b.x - s.x > -30 && b.x - s.x < 150 && Math.abs(b.y - s.y + 17) < 44);
+  const need = pit || foe || shot;
+  const blocked = !pit && air;
+  const jump = s.grounded && need && !blocked ||
+    !s.grounded && s.jumps < 2 && (s.vy > 0 && (over || shot || spike) || raspa);
+  return { right: !(raspa && s.jumps >= 2) && !(s.grounded && need && blocked), jump, jumpHeld: true, pulse: !s.cooldown };
+}
 for (const fps of [30, 60, 120]) {
   for (let sector = 0; sector < P.SECTORS.length; sector++) {
     const s = P.expedition(sector);
-    for (let i = 0; i < fps * 60 && s.status === 'playing'; i++) {
-      const pit = s.map.pits.some(([a, b]) => a - s.x < 75 && b > s.x && s.x < a);
-      const enemy = s.map.enemies.some(e => e.alive && !e.stun && e.x > s.x && e.x - s.x < 110);
-      const jump = s.grounded && (pit || enemy) || !s.grounded && s.jumps === 1 && s.vy > 0 &&
-        s.map.pits.some(([a, b]) => s.x > a - 10 && s.x < b + 10);
-      P.step(s, 1 / fps, { right: true, jumpHeld: true, jump, pulse: !s.cooldown });
+    for (let i = 0; i < fps * 90 && (s.status === 'playing' || s.status === 'dying'); i++) {
+      P.step(s, 1 / fps, pilot(s));
       s.events.length = 0;
     }
-    assert.strictEqual(s.status, sector === 2 ? 'won' : 'cleared', `Pulse: setor ${sector + 1} atravessável a ${fps} fps`);
+    assert.strictEqual(s.status, sector === P.SECTORS.length - 1 ? 'won' : 'cleared',
+      `Pulse: setor ${sector + 1} atravessável a ${fps} fps`);
     const final = JSON.stringify(s);
     P.step(s, 1, { right: true, jump: true });
     assert.strictEqual(JSON.stringify(s), final, 'Pulse: conclusão congela a fase e seu bônus');
   }
-  // Caminho secreto: partir da plataforma anterior e saltar entre as três plataformas do pulso.
-  const s = P.expedition(); s.x = 1400; s.y = 276;
-  const targets = [1498, 1608, 1722]; let target = 0, landed = false;
-  for (let i = 0; i < fps * 4 && !s.prisms; i++) {
-    const goal = targets[target];
-    P.step(s, 1 / fps, { right: s.x < goal - 7, left: s.x > goal + 7, jumpHeld: true, jump: s.grounded, pulse: i === 0 });
-    if (s.grounded && Math.abs(s.x - goal) < 20) { target = Math.min(2, target + 1); landed = true; }
+  // Terreno sozinho: sem nenhum inimigo, a geometria da fase tem que fechar —
+  // nenhum buraco maior que o salto, nenhuma borda sem saída.
+  for (let sector = 0; sector < P.SECTORS.length; sector++) {
+    const s = P.expedition(sector);
+    s.map.enemies.length = 0;
+    for (let i = 0; i < fps * 90 && (s.status === 'playing' || s.status === 'dying'); i++) {
+      P.step(s, 1 / fps, pilot(s));
+      s.events.length = 0;
+    }
+    assert.strictEqual(s.status, sector === P.SECTORS.length - 1 ? 'won' : 'cleared',
+      `Pulse: terreno do setor ${sector + 1} vencível a ${fps} fps`);
   }
-  assert.ok(landed && s.prisms === 1 && s.pulse > 0, `Pulse: prisma alcançável antes do pulso expirar a ${fps} fps`);
+  // Caminho secreto: sair da plataforma de apoio e saltar entre as três do pulso.
+  for (const sector of [0, 5]) {
+    const s = P.expedition(sector);
+    const ghosts = s.map.platforms.filter(p => p.kind === 'ghost').sort((a, b) => a.x - b.x);
+    s.x = ghosts[0].x - 60; s.y = 276;
+    const targets = [ghosts[0].x + 38, ghosts[1].x + 38, s.map.prism.x];
+    let target = 0, landed = false;
+    for (let i = 0; i < fps * 4 && !s.prisms; i++) {
+      const goal = targets[target];
+      P.step(s, 1 / fps, { right: s.x < goal - 7, left: s.x > goal + 7, jumpHeld: true, jump: s.grounded, pulse: i === 0 });
+      if (s.grounded && Math.abs(s.x - goal) < 20) { target = Math.min(2, target + 1); landed = true; }
+    }
+    assert.ok(landed && s.prisms === 1 && s.pulse > 0, `Pulse: prisma do setor ${sector + 1} alcançável antes do pulso expirar a ${fps} fps`);
+  }
 }
 {
-  const s = P.expedition(); s.x = 258;
+  // Fases mais longas a cada setor, e nenhum salto obrigatório maior que o pulo.
+  const first = P.level(0), last = P.level(9);
+  assert.ok(last.len > first.len + 3000, 'Pulse: os setores crescem ao longo da cidade');
+  for (let i = 0; i < P.SECTORS.length; i++) {
+    const m = P.level(i);
+    assert.ok(m.pits.every(([a, b]) => b - a <= 190), `Pulse: buracos do setor ${i + 1} cabem num salto`);
+    assert.ok(m.enemies.every(e => m.pits.every(([a, b]) => e.a > b + 60 || e.b < a - 60)),
+      `Pulse: ninguém patrulha sobre o vazio no setor ${i + 1}`);
+    assert.ok(m.checkpoints.length >= 2 && m.checkpoints.every(c => m.pits.every(([a, b]) => c < a || c > b)),
+      `Pulse: checkpoints do setor ${i + 1} ficam no chão`);
+  }
+  // A variedade cresce: o primeiro setor só tem robôs andando, o último tem tudo.
+  assert.deepStrictEqual([...new Set(P.level(0).enemies.map(e => e.kind))], ['walker'], 'Pulse: o setor 1 apresenta um inimigo só');
+  const tarde = new Set(P.level(9).enemies.map(e => e.kind));
+  assert.ok(tarde.size >= 5, 'Pulse: os setores finais misturam vários inimigos');
+}
+{
+  const s = P.expedition();
+  const box = s.map.platforms.find(p => p.kind === 'box');
+  s.x = box.x + 19; s.y = P.FLOOR;
   for (let i = 0; i < 40; i++) P.step(s, 1 / 60, { jump: i === 0, jumpHeld: true });
-  assert.ok(s.map.platforms.find(p => p.x === 240).used, 'Pulse: bater por baixo abre o bloco');
-  assert.strictEqual(s.score, 150, 'Pulse: bloco pontua uma vez');
+  assert.ok(box.used, 'Pulse: bater por baixo abre o bloco');
+  const pontos = s.score;
   for (let i = 0; i < 60; i++) P.step(s, 1 / 60, { jump: i === 0, jumpHeld: true });
-  assert.strictEqual(s.score, 150, 'Pulse: bloco usado não duplica moeda');
+  assert.strictEqual(s.score, pontos, 'Pulse: bloco usado não duplica moeda');
   const e = s.map.enemies[0]; s.x = e.x; s.y = e.y - 28; s.vy = 160; s.grounded = false;
   P.step(s, 1 / 60, {});
   assert.ok(!e.alive && s.vy < 0 && s.lives === 3, 'Pulse: pisão derrota o inimigo e rebate');
-  const near = s.map.enemies[1], far = s.map.enemies[4]; s.x = near.x; s.y = P.FLOOR;
+  const near = s.map.enemies[1], far = s.map.enemies[s.map.enemies.length - 1];
+  s.x = near.x; s.y = P.FLOOR;
   P.step(s, 1 / 60, { pulse: true });
   assert.ok(near.stun > 0 && !far.stun && s.lives === 3, 'Pulse: só atordoa inimigos no alcance e protege do contato');
   const cooldown = s.cooldown;
   P.step(s, 1 / 60, { pulse: true });
   assert.ok(s.cooldown < cooldown, 'Pulse: não reativa durante a recarga');
-  s.x = 1650; s.y = P.FLOOR; s.vy = 0;
+}
+{
+  // Espinhudo: pisar machuca, a não ser depois que o pulso o desliga.
+  const s = P.expedition(9);
+  const spiker = s.map.enemies.find(e => e.kind === 'spiker');
+  assert.ok(spiker, 'Pulse: os setores finais têm inimigos espinhudos');
+  s.x = spiker.x; s.y = spiker.y - 28; s.vy = 160; s.grounded = false; s.invincible = 0;
   P.step(s, 1 / 60, {});
-  assert.strictEqual(s.checkpoint, 1650, 'Pulse: bandeira salva o retorno');
-  s.y = 650; P.step(s, 1 / 60, {});
-  assert.ok(s.x === 1650 && s.lives === 2 && s.y === P.FLOOR, 'Pulse: queda volta ao checkpoint e custa uma vida');
+  assert.ok(spiker.alive && s.status === 'dying' && s.lives === 2, 'Pulse: pisar no espinhudo custa um coração');
+  for (let i = 0; i < 120; i++) P.step(s, 1 / 60, {});
+  assert.strictEqual(s.status, 'playing', 'Pulse: a volta acontece sozinha depois do efeito');
+  spiker.x = s.x + 200;
+  s.invincible = 0;
+  P.step(s, 1 / 60, { pulse: true });
+  assert.ok(spiker.stun > 0, 'Pulse: o pulso desliga o espinhudo');
+  s.x = spiker.x; s.y = spiker.y - 28; s.vy = 160; s.grounded = false;
+  P.step(s, 1 / 60, {});
+  assert.ok(!spiker.alive && s.lives === 2, 'Pulse: espinhudo atordoado pode ser pisado');
+}
+{
+  // Torre atira, e o pulso aceso derrete o tiro antes de ele chegar.
+  const s = P.expedition(9);
+  const turret = s.map.enemies.find(e => e.kind === 'turret');
+  assert.ok(turret, 'Pulse: a cidade tem torres que atiram');
+  s.invincible = 0;
+  // Fixa Lumi no alcance da torre a cada quadro: o teste é da mira, não do chão.
+  for (let i = 0; i < 300 && !s.map.shots.length; i++) {
+    s.x = turret.x - 300; s.y = P.FLOOR; s.vy = 0;
+    P.step(s, 1 / 60, {});
+  }
+  assert.ok(s.map.shots.length, 'Pulse: a torre dispara quando Lumi se aproxima');
+  const shot = s.map.shots[0];
+  assert.ok(shot.vx < 0, 'Pulse: o tiro vai na direção de quem chegou');
+  shot.x = s.x + 120;
+  P.step(s, 1 / 60, { pulse: true });
+  assert.strictEqual(s.map.shots.length, 0, 'Pulse: o pulso limpa os tiros em volta');
+  s.pulse = 0; s.cooldown = 0;
+  s.map.shots.push({ x: s.x + 20, y: s.y - 15, vx: -210, vy: 0, kind: 'laser', t: 5, boom: 0 });
+  P.step(s, 1 / 60, {});
+  assert.ok(s.status === 'dying' && s.lives === 2, 'Pulse: tomar um tiro custa um coração');
+}
+{
+  // Bomba de drone: acerta na cabeça e, se errar, ainda estoura no chão.
+  const s = P.expedition(9);
+  s.invincible = 0;
+  s.map.shots.push({ x: s.x + 5, y: P.FLOOR - 120, vx: 0, vy: 50, kind: 'bomb', t: 5, boom: 0 });
+  let caiu = false;
+  for (let i = 0; i < 120 && !caiu; i++) { P.step(s, 1 / 60, {}); caiu = s.events.includes('hurt'); s.events.length = 0; }
+  assert.ok(caiu && s.lives === 2 && s.status === 'dying', 'Pulse: a bomba acerta quem está embaixo dela');
+  for (let i = 0; i < 120 && s.status === 'dying'; i++) { P.step(s, 1 / 60, {}); s.events.length = 0; }
+  s.invincible = 0;
+  s.map.shots.push({ x: s.x + 40, y: P.FLOOR - 120, vx: 0, vy: 50, kind: 'bomb', t: 5, boom: 0 });
+  let boom = false;
+  for (let i = 0; i < 120 && !boom; i++) { P.step(s, 1 / 60, {}); boom = s.events.includes('boom'); s.events.length = 0; }
+  assert.ok(boom && s.lives === 1, 'Pulse: o estouro no chão pega quem está perto');
+}
+{
+  // Morte com efeito: o corpo é arremessado e só depois Lumi volta ao checkpoint.
+  const s = P.expedition();
+  s.x = s.map.checkpoints[0] + 40; s.y = P.FLOOR; s.vy = 0;
+  P.step(s, 1 / 60, {});
+  assert.strictEqual(s.checkpoint, s.map.checkpoints[0], 'Pulse: bandeira salva o retorno');
+  const antes = s.x;
+  s.y = 900; P.step(s, 1 / 60, {});
+  assert.ok(s.status === 'dying' && s.lives === 2, 'Pulse: cair no vazio custa uma vida e começa o efeito');
+  P.step(s, 1 / 60, {});
+  assert.ok(Math.abs(s.x - antes) < 1 && s.status === 'dying', 'Pulse: o efeito roda antes de qualquer teletransporte');
+  for (let i = 0; i < 120 && s.status === 'dying'; i++) P.step(s, 1 / 60, {});
+  assert.ok(s.x === s.checkpoint && s.y === P.FLOOR && s.invincible > 0 && s.status === 'playing',
+    'Pulse: terminado o efeito, Lumi reaparece no checkpoint protegido');
+  assert.strictEqual(s.map.shots.length, 0, 'Pulse: a volta limpa os tiros em voo');
   P.damage(s); assert.strictEqual(s.lives, 2, 'Pulse: retorno tem invulnerabilidade');
-  s.invincible = 0; P.damage(s); s.invincible = 0; P.damage(s);
+  for (const _ of [0, 1]) {
+    s.invincible = 0; P.damage(s);
+    for (let i = 0; i < 120 && s.status === 'dying'; i++) P.step(s, 1 / 60, {});
+  }
   assert.strictEqual(s.status, 'lost', 'Pulse: terceira morte encerra a partida');
   assert.strictEqual(P.expedition().score, 0, 'Pulse: reinício zera a partida');
   const next = P.expedition(1, { score: 900, prisms: 1, lives: 1 });
   assert.ok(next.score === 900 && next.prisms === 1 && next.lives === 2, 'Pulse: próximo setor preserva coleta e recupera um coração');
   for (const active of [false, true]) {
-    const ghost = P.expedition(); ghost.x = 1490; ghost.y = 216; ghost.vy = 180; ghost.grounded = false; ghost.pulse = active ? 2 : 0;
+    const ghost = P.expedition();
+    const first = ghost.map.platforms.filter(p => p.kind === 'ghost').sort((a, b) => a.x - b.x)[0];
+    ghost.x = first.x + 30; ghost.y = first.y - 2; ghost.vy = 180; ghost.grounded = false; ghost.pulse = active ? 2 : 0;
     P.step(ghost, 1 / 60, {});
     assert.strictEqual(ghost.grounded, active, 'Pulse: plataforma secreta só sustenta com o poder ativo');
   }

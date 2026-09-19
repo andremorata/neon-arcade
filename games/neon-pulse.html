@@ -11,42 +11,48 @@
 <meta name="theme-color" content="#080d1c">
 <link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
-  .stage { --arw: 16; --arh: 9; --maxw: 1120px; }
-  .pulse-controls { position: absolute; inset: auto 14px 12px; display: flex; gap: 8px; z-index: 5; }
-  .pulse-controls button { min-width: 52px; min-height: 48px; border: 1px solid #9be7ce66; border-radius: 12px; padding: 8px 16px; background: #080d1cdc; color: #d6eee2; font: 700 12px monospace; touch-action: none; cursor: pointer; }
-  .pulse-controls [data-action="pulse"] { margin-left: auto; color: #efce95; border-color: #efce9577; }
+  /* O quadro segue o formato da tela (ver metrics() no script), entao em pe e
+     deitado o jogo ocupa tudo. O HUD mora no canvas porque o painel de fora
+     comia metade da altura no celular. */
+  .stage { --arw: 16; --arh: 9; --maxw: 3000px; }
+  /* No imersivo o quadro é a tela inteira: o tema desconta altura de HUD por
+     media query, e aqui não há HUD fora do canvas pra descontar. */
+  body.imersivo #stage { --chrome: 0px; --maxw: 3000px; }
+  .pulse-controls { position: absolute; inset: auto 14px 14px; display: flex; gap: 10px; justify-content: flex-end; z-index: 5; }
+  .pulse-controls button { min-width: 74px; min-height: 60px; border: 1px solid #9be7ce66; border-radius: 16px; padding: 8px 14px; background: #080d1cb8; color: #d6eee2; font: 700 12px monospace; touch-action: none; cursor: pointer; }
+  .pulse-controls [data-action="pulse"] { color: #efce95; border-color: #efce9577; }
   .pulse-controls button:active { background: #34565b; }
   .pulse-controls button:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
   .overlay:not(.hidden) ~ .pulse-controls { visibility: hidden; }
-  .overlay p { max-width: 510px; }
-  @media (max-width: 560px) { .pulse-controls { inset-inline: 6px; bottom: 6px; gap: 5px; } .pulse-controls button { padding: 8px 10px; min-width: 46px; } }
+  /* O painel ocupa o topo do canvas; o aviso desce pra não cobrir o setor. */
+  #toast { top: 23%; }
+  .overlay p { max-width: 540px; }
+  @media (max-width: 560px) { .pulse-controls { inset-inline: 8px; bottom: 10px; gap: 8px; } .pulse-controls button { min-width: 66px; min-height: 56px; padding: 8px 10px; } }
 </style>
 </head>
 <body>
 <div class="app">
-  <header><div class="brand"><a href="../index.html"><h1>NEON PULSE</h1></a><div class="tag">// um pequeno salto. uma cidade inteira para acender.</div></div></header>
+  <header><div class="brand"><a href="../index.html"><h1>NEON PULSE</h1></a><div class="tag">// dez setores apagados. uma cidade inteira para acender.</div></div></header>
   <div class="dashboard" style="--dash-cols:5">
     <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
     <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="pulse">0</span></div>
-    <div class="stat"><span class="lbl">Setor</span><span class="val" id="sector">1/3</span></div>
-    <div class="stat"><span class="lbl">Prismas</span><span class="val" id="prisms">0/3</span></div>
+    <div class="stat"><span class="lbl">Setor</span><span class="val" id="sector">1/10</span></div>
+    <div class="stat"><span class="lbl">Prismas</span><span class="val" id="prisms">0/10</span></div>
     <div class="stat"><span class="lbl">Vidas</span><span class="val" id="lives">♥♥♥</span></div>
   </div>
   <div class="stage" id="stage">
-    <canvas id="game" width="960" height="540" aria-label="Plataforma neon: setas ou A e D movem, espaço pula até duas vezes, X ativa o pulso e P pausa.">Use um navegador com suporte a canvas para jogar.</canvas>
+    <canvas id="game" width="960" height="540" aria-label="Plataforma neon: manche ou setas movem, toque na direita ou espaço pula até duas vezes, X ativa o pulso e P pausa.">Use um navegador com suporte a canvas para jogar.</canvas>
     <button class="sound-toggle" id="soundToggle" title="Som" aria-label="Alternar som">🔊</button>
     <button class="pause-toggle" id="pauseToggle" title="Pausa (P)" aria-label="Pausar ou continuar">⏸</button>
     <div class="toast" id="toast" role="status"></div>
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">ACENDA A CIDADE</h2>
-      <p id="overlayText">Leve Lumi aos três portais. Salte sobre os robôs, bata nos blocos dourados e use o salto duplo. Seu pulso revela plataformas por 4 segundos e atordoa inimigos próximos. Encontre um prisma secreto em cada setor!</p>
+      <p id="overlayText">Leve Lumi pelos dez setores apagados. Salte sobre robôs, drones, torres e touros de ferro, bata nos blocos dourados e use o salto duplo. Seu pulso revela plataformas, funciona como escudo contra tiros e atordoa quem estiver perto. Há um prisma secreto em cada setor.</p>
       <div class="sub" id="overlaySub"></div>
       <button class="btn" id="startBtn">VAMOS NESSA</button>
-      <div class="controls-hint"><span class="key">← → / A D anda</span><span class="key">ESPAÇO salto duplo</span><span class="key">X pulso</span><span class="key">P pausa</span></div>
+      <div class="controls-hint"><span class="key">← → / A D ou manche</span><span class="key">ESPAÇO / toque à direita salta</span><span class="key">X pulso</span><span class="key">P pausa</span></div>
     </div>
     <div class="pulse-controls" aria-label="Controles do jogo">
-      <button data-action="left" aria-label="Andar para a esquerda">◀</button>
-      <button data-action="right" aria-label="Andar para a direita">▶</button>
       <button data-action="pulse" aria-label="Ativar pulso">◎ PULSO</button>
       <button data-action="jump" aria-label="Pular">↑ PULAR</button>
     </div>
@@ -58,61 +64,193 @@
 (() => {
   'use strict';
   const Neon = window.Neon, canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  // A câmera fica mais próxima no celular; a física e a fase não mudam ao girar.
-  const W = window.innerWidth <= 560 && window.innerHeight > window.innerWidth ? 540 : 960;
-  const H = 540;
   // ── física ──
-  const FLOOR = 438, SPEED = 280, GRAVITY = 1650, JUMP = 640;
+  const FLOOR = 438, SPEED = 285, GRAVITY = 1650, JUMP = 640, VOID_Y = 640, BODY = 34;
+  const PULSE_TIME = 4, PULSE_COOL = 6, PULSE_RANGE = 250, STUN = 3, DEATH_TIME = 1.2;
+  // Cada setor acrescenta um tipo de inimigo ao sorteio; do sétimo em diante a
+  // cidade usa o catálogo inteiro, só mais rápido e mais cheio.
+  const KINDS = ['walker', 'jumper', 'flyer', 'turret', 'charger', 'spiker', 'bomber'];
   const SECTORS = [
-    { name: 'JARDINS DO SINAL', color: '#9be7ce', sky: '#0d2131', moon: '#b7eedc', pits: [[870, 1000], [1800, 1940], [2780, 2920]] },
-    { name: 'VIADUTO VIOLETA', color: '#afa3f5', sky: '#1c1834', moon: '#c9befa', pits: [[820, 1000], [1750, 1930], [2710, 2900]] },
-    { name: 'AURORA CENTRAL', color: '#efce95', sky: '#282034', moon: '#f4d7a5', pits: [[820, 1010], [1740, 1940], [2690, 2900]] },
+    { name: 'JARDINS DO SINAL', color: '#9be7ce', sky: '#0d2131', moon: '#b7eedc' },
+    { name: 'VIADUTO VIOLETA', color: '#afa3f5', sky: '#1c1834', moon: '#c9befa' },
+    { name: 'AURORA CENTRAL', color: '#efce95', sky: '#282034', moon: '#f4d7a5' },
+    { name: 'DOCAS DE VIDRO', color: '#7fd4f5', sky: '#0b2436', moon: '#a9e6fb' },
+    { name: 'FEIRA DOS ECOS', color: '#f59ec4', sky: '#2a1630', moon: '#fbc3dc' },
+    { name: 'TÚNEL CARMIM', color: '#ed887f', sky: '#2e1522', moon: '#f7b2a8' },
+    { name: 'TORRES DE SAL', color: '#c9f58a', sky: '#16271f', moon: '#dcfab4' },
+    { name: 'ORLA FANTASMA', color: '#8ad8c0', sky: '#0a2b2b', moon: '#b6eedd' },
+    { name: 'USINA DE ESTRELAS', color: '#f5d06a', sky: '#31261a', moon: '#fbe3a4' },
+    { name: 'CORAÇÃO DA CIDADE', color: '#d7c6ff', sky: '#241a3d', moon: '#ece1ff' },
   ];
+  // Sorteio com semente: a fase é montada na hora, mas o setor 5 é sempre o
+  // mesmo setor 5 — dá pra decorar o caminho e o teste roda sempre igual.
+  function rng(seed) {
+    let s = (seed >>> 0) || 1;
+    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  }
   function level(index) {
-    const config = SECTORS[index], platforms = [];
+    const cfg = SECTORS[index], r = rng(index * 9176 + 41);
+    const len = 3600 + index * 470;
+    const pits = [];
+    for (let x = 620 + r() * 180; x < len - 620;) {
+      const w = Math.round(118 + r() * (26 + index * 4));
+      pits.push([Math.round(x), Math.round(x) + w]);
+      x += w + 340 + r() * 340;
+    }
+    const solid = x => !pits.some(([a, b]) => x > a - 70 && x < b + 70);
+    const platforms = [];
     let start = 0;
-    for (const [a, b] of [...config.pits, [3420, 3420]]) {
+    for (const [a, b] of [...pits, [len + 60, len + 60]]) {
       platforms.push({ x: start, y: FLOOR, w: a - start, h: 110, kind: 'ground' }); start = b;
     }
-    for (const [x, y, w] of [[380, 330, 126], [610, 260, 112], [1110, 344, 130], [1360, 276, 100], [2050, 340, 130], [2320, 300, 125], [3030, 350, 110]])
-      platforms.push({ x, y, w, h: 20, kind: 'ledge' });
-    for (const x of [240, 282, 560, 1260, 2200, 2242, 2980])
-      platforms.push({ x, y: FLOOR - 112, w: 38, h: 38, kind: 'box', used: false });
-    for (const [x, y] of [[1460, 218], [1570, 160], [1680, 110]])
-      platforms.push({ x, y, w: 84, h: 16, kind: 'ghost' });
-    const coins = [];
-    for (const x of [150, 190, 405, 448, 652, 760, 1060, 1150, 1190, 1385, 1990, 2090, 2360, 2500, 2550, 3000, 3075, 3180]) {
-      const ledge = platforms.find(p => p.kind === 'ledge' && x >= p.x && x <= p.x + p.w);
-      coins.push({ x, y: (ledge ? ledge.y : FLOOR) - 35, taken: false });
+    for (let x = 300; x < len - 320; x += 190 + r() * 210) {
+      if (r() < .32 || !solid(x) || !solid(x + 140)) continue;
+      platforms.push({ x: Math.round(x), y: Math.round(246 + r() * 116), w: Math.round(98 + r() * 44), h: 20, kind: 'ledge' });
     }
-    const enemies = [
-      { x: 690, a: 620, b: 790 }, { x: 1170, a: 1050, b: 1300 },
-      { x: 2110, a: 1990, b: 2290 }, { x: 2530, a: 2460, b: 2640 }, { x: 3130, a: 2990, b: 3270 },
-    ].map((e, i) => ({ ...e, y: FLOOR, dir: i % 2 ? -1 : 1, alive: true, stun: 0, speed: 48 + index * 17 }));
-    return { ...config, platforms, coins, enemies, prism: { x: 1722, y: 74, taken: false } };
+    for (let x = 240; x < len - 400; x += 330 + r() * 420) {
+      if (!solid(x) || r() < .28) continue;
+      platforms.push({ x: Math.round(x), y: FLOOR - 112, w: 38, h: 38, kind: 'box', used: false });
+      if (r() < .45 && solid(x + 42)) platforms.push({ x: Math.round(x) + 42, y: FLOOR - 112, w: 38, h: 38, kind: 'box', used: false });
+    }
+    // Caminho secreto: três plataformas que só existem com o pulso ligado.
+    // Empurra o trecho até achar chão inteiro — plataforma fantasma sobre buraco
+    // vira armadilha quando o pulso acaba.
+    const clear = (a, b) => !pits.some(([p, q]) => q > a - 60 && p < b + 60);
+    let gx = Math.round(len * .42);
+    while (!clear(gx - 120, gx + 340) && gx < len - 700) gx += 60;
+    const gy = 276;
+    platforms.push({ x: gx - 100, y: gy, w: 100, h: 20, kind: 'ledge' });
+    for (let i = 0; i < 3; i++) platforms.push({ x: gx + i * 110, y: gy - 58 - i * 54, w: 84, h: 16, kind: 'ghost' });
+    const prism = { x: gx + 262, y: gy - 202, taken: false };
+    const coins = [];
+    for (let x = 140; x < len - 140; x += 66 + r() * 120) {
+      if (!solid(x)) continue;
+      const ledge = platforms.find(p => p.kind === 'ledge' && x >= p.x && x <= p.x + p.w);
+      coins.push({ x: Math.round(x), y: (ledge ? ledge.y : FLOOR) - 35, taken: false });
+    }
+    const pool = KINDS.slice(0, Math.min(KINDS.length, 1 + index));
+    const enemies = [];
+    // Trecho de chão em volta de x, pra ninguém patrulhar sobre buraco: o salto
+    // obrigatório fica sempre livre, no chão e no ar.
+    function ground(x) {
+      let lo = 0, hi = len;
+      for (const [a, b] of pits) { if (b <= x && b > lo) lo = b; if (a >= x && a < hi) hi = a; }
+      return [lo + 70, hi - 70];
+    }
+    // Rodízio embaralhado: garante que todo tipo liberado apareça no setor.
+    let turn = (r() * pool.length) | 0;
+    for (let x = 540; x < len - 260; x += 250 + r() * (260 - index * 12)) {
+      const kind = pool[turn++ % pool.length];
+      const flying = kind === 'flyer' || kind === 'bomber';
+      const range = Math.round(70 + r() * 140);
+      if (!solid(x)) continue;
+      const [lo, hi] = ground(x), px = Math.round(Math.max(lo, Math.min(hi, x)));
+      const a = Math.round(Math.max(px - range, lo)), b = Math.round(Math.min(px + range, hi));
+      if (b - a < 50) continue;
+      const e = { kind, x: px, home: px, a, b, y: FLOOR, vy: 0,
+        dir: r() < .5 ? -1 : 1, alive: true, stun: 0, rush: 0, t: r() * 3, cool: 1 + r() * 1.6,
+        rate: 1.4 + r() * .8, speed: Math.round(46 + index * 7 + r() * 34) };
+      if (flying) { e.base = Math.round(FLOOR - 128 - r() * 64); e.amp = Math.round(14 + r() * 22); e.y = e.base; }
+      if (kind === 'turret') { e.a = e.b = px; e.rate = Math.max(1.1, 2.7 - index * .14); }
+      // A arrancada do touro nunca passa a corrida de Lumi: dá pra fugir dele.
+      if (kind === 'charger') { e.speed = 40 + index * 3; e.dash = 140 + index * 6; }
+      if (kind === 'spiker') e.speed = 38 + index * 4;
+      if (kind === 'bomber') e.rate = Math.max(1.6, 3.2 - index * .12);
+      enemies.push(e);
+    }
+    const checkpoints = [];
+    for (let x = 1250; x < len - 500; x += 1180) {
+      let c = Math.round(x);
+      while (!solid(c)) c += 40;
+      checkpoints.push(c);
+    }
+    return { ...cfg, len, pits, platforms, coins, enemies, checkpoints, prism, shots: [] };
   }
   function expedition(index = 0, previous) {
     return { index, map: level(index), x: 72, y: FLOOR, vx: 0, vy: 0, facing: 1,
       grounded: true, jumps: 0, coyote: .1, buffer: 0, t: 0, pulse: 0, cooldown: 0,
-      invincible: 0, checkpoint: 72, score: previous ? previous.score : 0,
+      invincible: 0, death: 0, spawnFx: 0, checkpoint: 72, score: previous ? previous.score : 0,
       lives: previous ? Math.min(3, previous.lives + 1) : 3,
       prisms: previous ? previous.prisms : 0, status: 'playing', events: [] };
   }
+  // Morrer não teleporta: o corpo é arremessado, a tela treme e só depois Lumi
+  // reaparece no checkpoint. O respiro mora no estado 'dying'.
   function damage(s, fall = false) {
     if (s.status !== 'playing' || (!fall && s.invincible > 0)) return;
-    s.lives--; s.events.push('hurt');
-    if (!s.lives) { s.status = 'lost'; return; }
-    s.x = s.checkpoint; s.y = FLOOR; s.vx = 0; s.vy = 0; s.jumps = 0;
-    s.grounded = true; s.coyote = .1; s.buffer = 0; s.invincible = 1.8;
+    s.lives--; s.status = 'dying'; s.death = DEATH_TIME;
+    s.vx = 0; s.vy = fall ? 60 : -420; s.events.push('hurt');
+  }
+  function respawn(s) {
+    s.status = 'playing';
+    s.x = s.checkpoint; s.y = FLOOR; s.vx = 0; s.vy = 0; s.jumps = 0; s.grounded = true;
+    s.coyote = .1; s.buffer = 0; s.invincible = 2.2; s.pulse = 0; s.cooldown = 0; s.spawnFx = .7;
+    s.map.shots.length = 0;
+    for (const e of s.map.enemies) { e.stun = 0; e.rush = 0; e.vy = 0; e.cool = 1.2; e.x = e.home; if (e.base !== undefined) e.y = e.base; else e.y = FLOOR; }
+  }
+  function fire(s, e, kind) {
+    const dir = s.x < e.x ? -1 : 1;
+    if (kind === 'bomb') s.map.shots.push({ x: e.x, y: e.y + 10, vx: e.dir * 30, vy: 50, kind: 'bomb', t: 5, boom: 0 });
+    else s.map.shots.push({ x: e.x + dir * 20, y: e.y - 15, vx: dir * 210, vy: 0, kind: 'laser', t: 5, boom: 0 });
+    s.events.push('shot');
+  }
+  function patrol(e, dt) {
+    e.x += e.dir * e.speed * dt;
+    if (e.x < e.a || e.x > e.b) { e.x = Math.max(e.a, Math.min(e.b, e.x)); e.dir *= -1; }
+  }
+  function enemyStep(s, e, dt) {
+    e.stun = Math.max(0, e.stun - dt);
+    if (e.stun) return;
+    e.t += dt;
+    const dx = s.x - e.x, near = Math.abs(dx) < 520 && Math.abs(s.y - e.y) < 130;
+    if (e.kind === 'turret') {
+      e.cool -= dt;
+      if (near && e.cool <= 0) { e.cool = e.rate; fire(s, e, 'laser'); }
+      return;
+    }
+    if (e.kind === 'flyer' || e.kind === 'bomber') {
+      patrol(e, dt);
+      e.y = e.base + Math.sin(e.t * (e.kind === 'flyer' ? 2.1 : 1.5)) * e.amp;
+      if (e.kind === 'bomber') {
+        e.cool -= dt;
+        if (e.cool <= 0 && Math.abs(dx) < 55 && s.y > e.y + 40) { e.cool = e.rate; fire(s, e, 'bomb'); }
+      }
+      return;
+    }
+    if (e.kind === 'charger') {
+      const hunting = Math.abs(dx) < 340 && Math.abs(s.y - e.y) < 70;
+      e.rush = hunting ? Math.min(1, e.rush + dt * 2.2) : Math.max(0, e.rush - dt * 1.4);
+      if (hunting && Math.abs(dx) > 6) e.dir = dx < 0 ? -1 : 1;
+      e.x += e.dir * (e.speed + e.rush * e.dash) * dt;
+      if (e.x < e.a - 160 || e.x > e.b + 160) { e.x = Math.max(e.a - 160, Math.min(e.b + 160, e.x)); e.dir *= -1; }
+      return;
+    }
+    if (e.kind === 'jumper') {
+      if (e.y >= FLOOR && e.t > e.cool) { e.vy = -540; e.cool = e.t + 1.2 + e.rate; }
+      e.vy += GRAVITY * dt;
+      e.y = Math.min(FLOOR, e.y + e.vy * dt);
+      if (e.y >= FLOOR) e.vy = 0;
+    }
+    patrol(e, dt);
   }
   function step(s, dt, input) {
+    if (s.status === 'dying') {
+      s.t += dt; s.death = Math.max(0, s.death - dt);
+      s.vy += GRAVITY * .55 * dt; s.y += s.vy * dt;
+      if (!s.death) {
+        if (!s.lives) { s.status = 'lost'; return; }
+        respawn(s); s.events.push('respawn');
+      }
+      return;
+    }
     if (s.status !== 'playing') return;
     s.t += dt;
-    for (const key of ['pulse', 'cooldown', 'invincible', 'buffer']) s[key] = Math.max(0, s[key] - dt);
+    for (const key of ['pulse', 'cooldown', 'invincible', 'buffer', 'spawnFx']) s[key] = Math.max(0, s[key] - dt);
     s.coyote = s.grounded ? .1 : Math.max(0, s.coyote - dt);
     if (input.pulse && !s.cooldown) {
-      s.pulse = 4; s.cooldown = 5; s.events.push('pulse');
-      for (const e of s.map.enemies) if (Math.hypot(e.x - s.x, e.y - s.y) < 240) e.stun = 4;
+      s.pulse = PULSE_TIME; s.cooldown = PULSE_COOL; s.events.push('pulse');
+      for (const e of s.map.enemies) if (e.alive && Math.hypot(e.x - s.x, e.y - s.y) < PULSE_RANGE) e.stun = STUN;
+      // O pulso também queima o que estiver voando: tiro e bomba somem no clarão.
+      s.map.shots = s.map.shots.filter(b => b.boom || Math.hypot(b.x - s.x, b.y - s.y + 17) > PULSE_RANGE);
     }
     if (input.jump) s.buffer = .12;
     if (s.buffer && (s.coyote > 0 || s.jumps < 2)) {
@@ -126,9 +264,9 @@
     s.vx += (dir * SPEED - s.vx) * Math.min(1, dt * (s.grounded ? 18 : 10));
     const solids = s.map.platforms.filter(p => p.kind !== 'ghost' || s.pulse > 0);
     const oldX = s.x;
-    s.x = Math.max(14, Math.min(3390, s.x + s.vx * dt));
+    s.x = Math.max(14, Math.min(s.map.len - 24, s.x + s.vx * dt));
     for (const p of solids) {
-      if (p.kind === 'ledge' || p.kind === 'ghost' || s.y <= p.y + 1 || s.y - 34 >= p.y + p.h) continue;
+      if (p.kind === 'ledge' || p.kind === 'ghost' || s.y <= p.y + 1 || s.y - BODY >= p.y + p.h) continue;
       if (s.x + 13 > p.x && s.x - 13 < p.x + p.w) {
         if (oldX + 13 <= p.x) s.x = p.x - 13;
         else if (oldX - 13 >= p.x + p.w) s.x = p.x + p.w + 13;
@@ -141,41 +279,81 @@
       if (s.x + 12 <= p.x || s.x - 12 >= p.x + p.w) continue;
       if (s.vy >= 0 && oldY <= p.y + .5 && s.y >= p.y) {
         s.y = p.y; s.vy = 0; s.grounded = true; s.jumps = 0;
-      } else if (s.vy < 0 && p.kind === 'box' && oldY - 34 >= p.y + p.h && s.y - 34 <= p.y + p.h) {
-        s.y = p.y + p.h + 34; s.vy = 0;
+      } else if (s.vy < 0 && p.kind === 'box' && oldY - BODY >= p.y + p.h && s.y - BODY <= p.y + p.h) {
+        s.y = p.y + p.h + BODY; s.vy = 0;
         if (!p.used) { p.used = true; s.score += 150; s.events.push('box'); }
       }
     }
-    if (s.y > H + 60) { damage(s, true); return; }
+    if (s.y > VOID_Y) { damage(s, true); return; }
     for (const e of s.map.enemies) {
       if (!e.alive) continue;
-      e.stun = Math.max(0, e.stun - dt);
-      if (!e.stun) { e.x += e.dir * e.speed * dt; if (e.x < e.a || e.x > e.b) { e.x = Math.max(e.a, Math.min(e.b, e.x)); e.dir *= -1; } }
-      if (Math.abs(s.x - e.x) < 27 && s.y > e.y - 26 && s.y - 34 < e.y) {
-        if (s.vy > 0 && oldY <= e.y - 18) {
-          e.alive = false; s.y = e.y - 26; s.vy = -460; s.jumps = 1; s.score += 200; s.events.push('stomp');
+      enemyStep(s, e, dt);
+      if (Math.abs(s.x - e.x) < 27 && s.y > e.y - 26 && s.y - BODY < e.y) {
+        // O espinhudo só pode ser pisado depois que o pulso o desliga.
+        const soft = e.kind !== 'spiker' || e.stun > 0;
+        if (s.vy > 0 && oldY <= e.y - 12 && soft) {
+          e.alive = false; s.y = e.y - 26; s.vy = -460; s.jumps = 1;
+          s.score += e.kind === 'walker' ? 200 : 260; s.events.push('stomp');
         } else if (!e.stun && !s.invincible) { damage(s); return; }
       }
     }
+    for (const b of s.map.shots) {
+      if (b.boom) { b.t = Math.max(0, b.t - dt); continue; }
+      if (b.kind === 'bomb') b.vy += GRAVITY * .5 * dt;
+      b.x += b.vx * dt; b.y += b.vy * dt; b.t -= dt;
+      // Enquanto o pulso brilha ele é escudo: o que chega perto vira faísca.
+      if (s.pulse > 0 && Math.hypot(b.x - s.x, b.y - s.y + 17) < 132) { b.t = 0; s.events.push('burn'); continue; }
+      if (b.kind === 'bomb' && b.y >= FLOOR - 8) {
+        b.y = FLOOR - 8; b.boom = .35; b.t = .35; s.events.push('boom');
+        if (Math.hypot(s.x - b.x, s.y - 16 - b.y) < 46) { damage(s); return; }
+      } else if (b.t > 0 && Math.abs(s.x - b.x) < 17 && s.y > b.y - 12 && s.y - BODY < b.y + 12) {
+        b.t = 0; damage(s); return;
+      }
+    }
+    s.map.shots = s.map.shots.filter(b => b.t > 0 && Math.abs(b.x - s.x) < 1200);
     for (const c of s.map.coins) if (!c.taken && Math.hypot(s.x - c.x, s.y - 18 - c.y) < 28) {
       c.taken = true; s.score += 100; s.events.push('coin');
     }
     const p = s.map.prism;
-    if (!p.taken && Math.hypot(s.x - p.x, s.y - 18 - p.y) < 32) {
+    if (!p.taken && Math.hypot(s.x - p.x, s.y - 18 - p.y) < 34) {
       p.taken = true; s.prisms++; s.score += 1000; s.events.push('prism');
     }
-    if (s.x > 1600 && s.x < 1720 && s.grounded && s.y === FLOOR && s.checkpoint < 1600) {
-      s.checkpoint = 1650; s.events.push('checkpoint');
+    for (const c of s.map.checkpoints) if (s.grounded && s.x > c && s.checkpoint < c) {
+      s.checkpoint = c; s.events.push('checkpoint');
     }
-    if (s.x > 3310 && s.grounded) {
-      s.score += 1000 + s.lives * 200; s.status = s.index === SECTORS.length - 1 ? 'won' : 'cleared';
+    if (s.x > s.map.len - 110 && s.grounded) {
+      s.score += 1000 + s.lives * 200 + s.index * 150;
+      s.status = s.index === SECTORS.length - 1 ? 'won' : 'cleared';
     }
   }
   // ── fim da física ──
 
+  // O formato do quadro sai da tela: deitado fixa a altura, em pé fixa a
+  // largura. Nos dois casos o canvas tem o mesmo formato da janela, então a
+  // partida ocupa tudo sem barra preta. Girar recarrega, como nos outros jogos.
+  function metrics() {
+    const w = window.innerWidth || 960, h = window.innerHeight || 540;
+    if (h > w) { const vw = 520; return [vw, Math.round(Math.min(1200, Math.max(640, vw * h / w)))]; }
+    return [Math.round(Math.min(1240, Math.max(720, 540 * w / h))), 540];
+  }
+  const [VW, VH] = metrics();
+  // Em pé a tela é estreita e alta: aproxima um pouco (ZOOM), põe o chão a 70%
+  // da altura e deixa a estrutura da cidade preencher o rodapé, onde ficam o
+  // manche e os botões. Deitado nada disso muda — ZOOM 1 e chão no lugar velho.
+  const ZOOM = VH > VW ? Math.min(1.45, Math.max(1, VW / 400)) : 1;
+  const WVW = VW / ZOOM, WVH = VH / ZOOM;
+  const VOFF = Math.max(0, Math.round(WVH * .7) - FLOOR), DEEP = WVH - VOFF;
+  const coarse = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  if (window.matchMedia) {
+    const mq = window.matchMedia('(orientation: portrait)');
+    const flip = () => location.reload();
+    if (mq.addEventListener) mq.addEventListener('change', flip);
+    else if (mq.addListener) mq.addListener(flip);
+  }
+
   let run = expedition(), state = 'menu', lastFrame = performance.now(), camera = 0, pb = Neon.best.get('pulse');
   const held = new Set(), pointers = new Map();
-  let jumpQueued = false, pulseQueued = false;
+  let jumpQueued = false, pulseQueued = false, stick = null, touchJump = 0;
   const particles = new Neon.Particles();
   function rect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
   function text(value, x, y, size, color, align = 'left') {
@@ -190,19 +368,90 @@
     ctx.lineTo(x, y + r); ctx.lineTo(x - r * .65, y); ctx.closePath(); ctx.fill();
     line([[x, y - r + 3], [x - r * .35, y], [x, y + r - 3]], '#fff5d6', 1.5);
   }
-  function draw() {
-    const m = run.map, t = Neon.motion.reduced ? 0 : run.t;
-    const sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, '#080e20'); sky.addColorStop(1, m.sky);
-    rect(0, 0, W, H, sky);
-    for (let i = 0; i < 65; i++) {
-      const x = ((i * 137.3 - camera * .08) % (W + 40) + W + 40) % (W + 40);
-      rect(x, 55 + i * 47 % 265, i % 4 ? 1 : 2, i % 4 ? 1 : 2, i % 3 ? '#53647b' : '#b1c8d9');
+  function drawEnemy(e, t) {
+    const bob = e.stun ? 0 : Math.sin(t * 12 + e.home) * 2, x = e.x, y = e.y;
+    const dull = e.stun ? '#645e8b' : null;
+    if (e.kind === 'flyer' || e.kind === 'bomber') {
+      const wing = Math.sin(t * 16 + e.home) * 6;
+      line([[x - 10, y - 14], [x - 26, y - 20 - wing]], dull || '#7fd4f5', 3);
+      line([[x + 10, y - 14], [x + 26, y - 20 + wing]], dull || '#7fd4f5', 3);
+      rect(x - 13, y - 22, 26, 18, dull || (e.kind === 'bomber' ? '#ca766e' : '#39697f'));
+      rect(x - 9, y - 18, 18, 7, '#102131');
+      rect(x - 6 + e.dir * 2, y - 17, 5, 4, '#f9dca9'); rect(x + 2 + e.dir * 2, y - 17, 5, 4, '#f9dca9');
+      if (e.kind === 'bomber') { Neon.circle(ctx, x, y + 2, 7, dull || '#3d4a5e'); rect(x - 1, y - 7, 2, 4, '#efce95'); }
+      if (e.stun) text('✦', x, y - 34, 18, '#d7c9ff', 'center');
+      return;
     }
-    const moonX = W * .76 - camera * .025;
-    ctx.save(); ctx.globalAlpha = .13; Neon.circle(ctx, moonX, 154, 88, m.moon); ctx.restore();
+    if (e.kind === 'turret') {
+      rect(x - 19, y - 14, 38, 14, dull || '#4a5a6b');
+      rect(x - 13, y - 26, 26, 14, dull || '#efce95');
+      rect(x - 9, y - 23, 18, 8, '#102131');
+      const aim = e.dir;
+      rect(x + (aim > 0 ? 10 : -26), y - 22, 16, 6, dull || '#c9a35f');
+      if (!e.stun && e.cool < .35) Neon.circle(ctx, x + aim * 26, y - 19, 4, '#ffd9a1');
+      if (e.stun) text('✦', x, y - 38, 18, '#d7c9ff', 'center');
+      return;
+    }
+    if (e.kind === 'charger') {
+      const lean = e.rush * 4 * e.dir;
+      rect(x - 21 + lean, y - 20 + bob, 42, 20, dull || '#f59ec4');
+      rect(x - 14 + lean, y - 27 + bob, 28, 8, dull || '#c9527f');
+      rect(x - 10 + lean, y - 16 + bob, 20, 7, '#102131');
+      rect(x - 6 + lean + e.dir * 3, y - 15 + bob, 5, 4, '#fff1a8');
+      line([[x + e.dir * 21 + lean, y - 22 + bob], [x + e.dir * 31 + lean, y - 27 + bob]], dull || '#ffe6f2', 3);
+      for (const dx of [-13, 8]) rect(x + dx + lean, y - 5, 5, 5, '#aa8b97');
+      if (e.rush > .5 && !e.stun) for (let i = 1; i < 4; i++)
+        line([[x - e.dir * (24 + i * 13), y - 16], [x - e.dir * (32 + i * 13), y - 16]], '#f59ec455', 2);
+      if (e.stun) text('✦', x, y - 39, 18, '#d7c9ff', 'center');
+      return;
+    }
+    if (e.kind === 'spiker') {
+      rect(x - 18, y - 22 + bob, 36, 22, dull || '#8f9bb5');
+      for (let i = 0; i < 4; i++) {
+        const sx = x - 15 + i * 10;
+        ctx.fillStyle = e.stun ? '#5a5570' : '#e8f0ff';
+        ctx.beginPath(); ctx.moveTo(sx, y - 22 + bob); ctx.lineTo(sx + 5, y - 35 + bob); ctx.lineTo(sx + 10, y - 22 + bob); ctx.closePath(); ctx.fill();
+      }
+      rect(x - 12, y - 16 + bob, 24, 8, '#102131');
+      rect(x - 8 + e.dir * 2, y - 15 + bob, 5, 4, '#ff9d92'); rect(x + 3 + e.dir * 2, y - 15 + bob, 5, 4, '#ff9d92');
+      for (const dx of [-12, 7]) rect(x + dx, y - 5, 5, 5, '#6b7891');
+      if (e.stun) text('✦', x, y - 46, 18, '#d7c9ff', 'center');
+      return;
+    }
+    const spring = e.kind === 'jumper' ? Math.max(0, FLOOR - e.y) : 0;
+    rect(x - 17, y - 23 + bob, 34, 19, dull || (e.kind === 'jumper' ? '#8fc98f' : '#ca766e'));
+    rect(x - 12, y - 28 + bob, 24, 7, dull || (e.kind === 'jumper' ? '#c9f58a' : '#ed887f'));
+    rect(x - 11, y - 18 + bob, 22, 7, '#102131');
+    rect(x - 8 + e.dir * 2, y - 17 + bob, 5, 4, '#f9dca9'); rect(x + 3 + e.dir * 2, y - 17 + bob, 5, 4, '#f9dca9');
+    if (e.kind === 'jumper') {
+      line([[x - 7, y - 4], [x - 7, y + Math.min(6, spring * .1)]], '#c9f58a', 3);
+      line([[x + 7, y - 4], [x + 7, y + Math.min(6, spring * .1)]], '#c9f58a', 3);
+    } else for (const dx of [-11, 7]) rect(x + dx, y - 5, 5, 5, '#aa8b97');
+    if (e.stun) text('✦', x, y - 39, 18, '#d7c9ff', 'center');
+  }
+  function draw() {
+    const m = run.map, t = Neon.motion.reduced ? 0 : run.t, dying = run.status === 'dying';
+    const sky = ctx.createLinearGradient(0, 0, 0, VH); sky.addColorStop(0, '#080e20'); sky.addColorStop(1, m.sky);
+    rect(0, 0, VW, VH, sky);
+    for (let i = 0; i < 90; i++) {
+      const x = ((i * 137.3 - camera * .08) % (VW + 40) + VW + 40) % (VW + 40);
+      rect(x, 24 + (i * 329) % (VH - 140), i % 4 ? 1 : 2, i % 4 ? 1 : 2, i % 3 ? '#53647b' : '#b1c8d9');
+    }
+    ctx.save();
+    const shake = dying && !Neon.motion.reduced ? Math.sin(run.t * 70) * 4 * (run.death / DEATH_TIME) : 0;
+    ctx.scale(ZOOM, ZOOM); ctx.translate(shake, VOFF);
+    const moonX = WVW * .76 - camera * .025;
+    // Halo em degradê (antes era um disco chapado) e as faixas recortadas dentro
+    // do sol — elas vazavam do círculo e deixavam um retângulo no céu.
+    const halo = ctx.createRadialGradient(moonX, 154, 44, moonX, 154, 104);
+    halo.addColorStop(0, m.moon + '2e'); halo.addColorStop(1, m.moon + '00');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(moonX, 154, 104, 0, Math.PI * 2); ctx.fill();
     Neon.circle(ctx, moonX, 154, 55, m.moon);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(moonX, 154, 55, 0, Math.PI * 2); ctx.clip();
     for (let i = 0; i < 7; i++) rect(moonX - 60, 159 + i * 8, 120, 3 + i * .6, m.sky);
-    for (let layer = 0; layer < 2; layer++) for (let i = 0; i < 26; i++) {
+    ctx.restore();
+    for (let layer = 0; layer < 2; layer++) for (let i = 0; i < Math.ceil(WVW / 91) + 3; i++) {
       const x = i * 91 - (camera * (.12 + layer * .14)) % 91, height = 60 + (i * 67 + layer * 43) % 155;
       rect(x, FLOOR - height, 70, height, layer ? '#14283b' : '#101d30');
       if (layer) {
@@ -213,11 +462,13 @@
     }
     ctx.save(); ctx.translate(-camera, 0);
     for (const [a, b] of m.pits) {
-      for (let i = 0; i < 5; i++) line([[a, 473 + i * 12], [b, 473 + i * 12]], '#ed887f' + ['70','50','40','30','20'][i], 2);
-      text('! VAZIO', (a + b) / 2, 518, 10, '#ed887f', 'center');
+      if (b < camera || a > camera + WVW) continue;
+      const passo = Math.max(12, (DEEP - 466) / 6);
+      for (let i = 0; i < 5; i++) line([[a, 473 + i * passo], [b, 473 + i * passo]], '#ed887f' + ['70', '50', '40', '30', '20'][i], 2);
+      text('! VAZIO', (a + b) / 2, Math.min(DEEP - 10, 473 + passo * 5.5), 10, '#ed887f', 'center');
     }
     for (const p of m.platforms) {
-      if (p.x + p.w < camera || p.x > camera + W) continue;
+      if (p.x + p.w < camera || p.x > camera + WVW) continue;
       if (p.kind === 'ghost') {
         ctx.save(); ctx.globalAlpha = run.pulse ? (run.pulse < 1 ? .55 + .3 * Math.sin(t * 12) : 1) : .24;
         rect(p.x, p.y, p.w, p.h, '#afa3f530');
@@ -229,20 +480,33 @@
         rect(p.x + 3, p.y + 3, p.w - 6, p.h - 6, p.used ? '#253242' : '#efce95');
         text(p.used ? '·' : '?', p.x + 19, p.y + 27, 24, '#53432b', 'center'); continue;
       }
-      rect(p.x, p.y, p.w, p.h, '#142c39');
+      const alto = p.kind === 'ground' ? Math.max(p.h, DEEP - p.y) : p.h;
+      rect(p.x, p.y, p.w, alto, '#142c39');
+      if (p.kind === 'ground' && alto > p.h) {
+        // Subsolo: vigas e luzinhas até o rodapé, pra baixo do chão não virar laje.
+        const funda = ctx.createLinearGradient(0, p.y + 40, 0, p.y + alto);
+        funda.addColorStop(0, '#142c3900'); funda.addColorStop(1, '#070f1c');
+        ctx.fillStyle = funda; ctx.fillRect(p.x, p.y + 40, p.w, alto - 40);
+        const ini = Math.max(p.x, camera - 80), fim = Math.min(p.x + p.w, camera + WVW + 80);
+        for (let y = p.y + 96; y < p.y + alto; y += 74) {
+          line([[ini, y], [fim, y]], '#1d3346', 1);
+          for (let x = ini - (ini - p.x) % 120 + 40; x < fim; x += 120) rect(x, y - 3, 4, 4, '#2f5a5e');
+        }
+      }
       rect(p.x, p.y, p.w, 4, m.color); rect(p.x, p.y + 4, p.w, 7, '#30545a');
       if (p.kind === 'ground') {
-        for (let x = p.x + 18; x < p.x + p.w; x += 44) {
-          line([[x, p.y + 16], [x, p.y + 29], [x + 14, p.y + 43], [x + 14, H]], '#28404c', 1);
+        const from = Math.max(p.x + 18, camera - 60), to = Math.min(p.x + p.w, camera + WVW + 60);
+        for (let x = from - (from - p.x - 18) % 44; x < to; x += 44) {
+          line([[x, p.y + 16], [x, p.y + 29], [x + 14, p.y + 43], [x + 14, DEEP]], '#28404c', 1);
           rect(x - 2, p.y + 17, 4, 4, '#4a6c6e');
         }
-        for (let x = p.x + 45; x < p.x + p.w; x += 137) {
+        for (let x = Math.max(p.x + 45, camera - 140); x < to; x += 137) {
           line([[x, p.y], [x, p.y - 16], [x - 9, p.y - 25]], '#5c9e94');
           line([[x, p.y - 5], [x + 8, p.y - 15]], m.color);
         }
       } else for (let x = p.x + 10; x < p.x + p.w; x += 22) rect(x, p.y + 12, 9, 3, '#52777c');
     }
-    for (const c of m.coins) if (!c.taken) {
+    for (const c of m.coins) if (!c.taken && c.x > camera - 40 && c.x < camera + WVW + 40) {
       ctx.save(); Neon.glow(ctx, '#efce95', 12); diamond(c.x, c.y + Math.sin(t * 4 + c.x) * 3, 10, '#efce95'); ctx.restore();
     }
     const prism = m.prism;
@@ -250,26 +514,40 @@
       ctx.save(); Neon.glow(ctx, '#c4b1ff', 25); diamond(prism.x, prism.y + Math.sin(t * 3) * 5, 20, '#b5a0fa'); ctx.restore();
       text('PRISMA SECRETO', prism.x, prism.y - 33, 11, '#d2c6ff', 'center');
     }
-    for (const e of m.enemies) if (e.alive) {
-      const bob = e.stun ? 0 : Math.sin(t * 12) * 2;
-      rect(e.x - 17, e.y - 23 + bob, 34, 19, e.stun ? '#645e8b' : '#ca766e');
-      rect(e.x - 12, e.y - 28 + bob, 24, 7, e.stun ? '#afa3f5' : '#ed887f');
-      rect(e.x - 11, e.y - 18 + bob, 22, 7, '#102131');
-      rect(e.x - 8 + e.dir * 2, e.y - 17 + bob, 5, 4, '#f9dca9'); rect(e.x + 3 + e.dir * 2, e.y - 17 + bob, 5, 4, '#f9dca9');
-      for (const x of [-11, 7]) rect(e.x + x, e.y - 5, 5, 5, '#aa8b97');
-      if (e.stun) text('✦', e.x, e.y - 39, 18, '#d7c9ff', 'center');
+    for (const c of m.checkpoints) {
+      rect(c, FLOOR - 70, 3, 70, '#678b96');
+      rect(c + 3, FLOOR - 70, 31, 21, run.checkpoint >= c ? '#9be7ce' : '#3c5266');
     }
-    rect(1650, FLOOR - 70, 3, 70, '#678b96');
-    rect(1653, FLOOR - 70, 31, 21, run.checkpoint > 72 ? '#9be7ce' : '#3c5266');
-    text('CHECKPOINT', 1650, FLOOR + 33, 10, '#a3bfc5', 'center');
+    for (const e of m.enemies) if (e.alive && e.x > camera - 80 && e.x < camera + WVW + 80) drawEnemy(e, t);
+    for (const b of m.shots) {
+      if (b.boom) {
+        ctx.save(); ctx.globalAlpha = Math.max(0, b.t / .35);
+        Neon.glow(ctx, '#efce95', 30); Neon.circle(ctx, b.x, b.y, 46 * (1.4 - b.t / .35), '#ed887f88'); ctx.restore(); continue;
+      }
+      ctx.save(); Neon.glow(ctx, b.kind === 'bomb' ? '#ed887f' : '#ffd9a1', 16);
+      if (b.kind === 'bomb') { Neon.circle(ctx, b.x, b.y, 8, '#3d4a5e'); rect(b.x - 1, b.y - 12, 3, 5, '#efce95'); }
+      else { rect(b.x - 9, b.y - 3, 18, 6, '#ffd9a1'); rect(b.x - 4, b.y - 5, 8, 10, '#fff4dd'); }
+      ctx.restore();
+    }
     ctx.save(); Neon.glow(ctx, m.color, 25);
-    rect(3300, FLOOR - 116, 9, 116, m.color); rect(3370, FLOOR - 116, 9, 116, m.color); rect(3300, FLOOR - 116, 79, 9, m.color);
-    ctx.globalAlpha = .22; rect(3309, FLOOR - 107, 61, 107, m.color); ctx.restore();
-    text('PRÓXIMO SINAL →', 3339, FLOOR - 136, 12, m.color, 'center');
-    for (const [x, y, title, sub] of [[110, 255, 'O PRIMEIRO SALTO', 'ESPAÇO · duas vezes no ar'], [1435, 90, 'O INVISÍVEL É CAMINHO', 'X · materialize as plataformas']]) {
+    const goal = m.len - 120;
+    rect(goal, FLOOR - 116, 9, 116, m.color); rect(goal + 70, FLOOR - 116, 9, 116, m.color); rect(goal, FLOOR - 116, 79, 9, m.color);
+    ctx.globalAlpha = .22; rect(goal + 9, FLOOR - 107, 61, 107, m.color); ctx.restore();
+    text('PRÓXIMO SINAL →', goal + 39, FLOOR - 136, 12, m.color, 'center');
+    if (!run.index) for (const [x, y, title, sub] of [[110, 255, 'O PRIMEIRO SALTO', 'ESPAÇO · duas vezes no ar'],
+      [m.prism.x - 290, 120, 'O INVISÍVEL É CAMINHO', 'X · materialize as plataformas']]) {
       text(title, x, y, 13, '#d0e4df'); text(sub, x, y + 20, 11, '#8da8b5');
     }
-    if (!run.invincible || Math.floor(t * 12) % 2 === 0 || Neon.motion.reduced) {
+    if (dying) {
+      const k = 1 - run.death / DEATH_TIME, y = Math.min(run.y, 560);
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - k * .9);
+      ctx.translate(run.x, y - 18); ctx.rotate(k * 7 * run.facing); ctx.scale(1 - k * .35, 1 - k * .35);
+      Neon.glow(ctx, '#ed887f', 22);
+      rect(-12, -17, 24, 20, '#d6f7e9'); rect(-14, -11, 28, 9, '#ed887f'); rect(-9, -5, 18, 10, '#70bfb6');
+      ctx.restore();
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - k * 1.5); ctx.strokeStyle = '#ed887f'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(run.x, run.y - 18, 26 + k * 260, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    } else if (!run.invincible || Math.floor(t * 12) % 2 === 0 || Neon.motion.reduced) {
       const x = run.x, y = run.y, stride = run.grounded ? Math.sin(t * 20) * Math.min(4, Math.abs(run.vx) / 70) : 3;
       ctx.save(); Neon.glow(ctx, '#9be7ce', 15);
       // Lumi: capacete luminoso, visor largo e um cachecol que acompanha o salto.
@@ -279,26 +557,61 @@
       rect(x - 9, y - 15, 18, 10, '#70bfb6'); rect(x - 11, y - 5, 8, 5 + stride, '#d6f7e9'); rect(x + 3, y - 5, 8, 5 - stride, '#d6f7e9');
       ctx.restore();
     }
-    if (run.pulse > 3.4 && !Neon.motion.reduced) {
-      ctx.save(); ctx.globalAlpha = (run.pulse - 3.4) / .6; ctx.strokeStyle = '#c6b3ff'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(run.x, run.y - 20, (4 - run.pulse) * 650, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    if (run.spawnFx > 0 && !Neon.motion.reduced) {
+      ctx.save(); ctx.globalAlpha = run.spawnFx / .7; ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 3;
+      for (const k of [0, .25]) { ctx.beginPath(); ctx.arc(run.x, run.y - 18, (run.spawnFx + k) * 190, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+    }
+    if (run.pulse > PULSE_TIME - .6 && !Neon.motion.reduced) {
+      ctx.save(); ctx.globalAlpha = (run.pulse - (PULSE_TIME - .6)) / .6; ctx.strokeStyle = '#c6b3ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(run.x, run.y - 20, (PULSE_TIME - run.pulse) * 650, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     }
     particles.draw(ctx); ctx.restore();
-    rect(W / 2 - 152, 14, 304, 43, '#080d1cc9');
-    text(`${String(run.index + 1).padStart(2, '0')} / ${String(SECTORS.length).padStart(2, '0')}   ${m.name}`, W / 2, 33, 12, m.color, 'center');
-    rect(W / 2 - 135, 44, 270, 3, '#33404f'); rect(W / 2 - 135, 44, 270 * run.x / 3390, 3, m.color);
-    const pulseText = run.pulse ? `PULSO · ${run.pulse.toFixed(1)}s` : run.cooldown ? `RECARGA · ${run.cooldown.toFixed(1)}s` : '◎ PULSO PRONTO · X';
-    text(pulseText, W / 2, H - 82, 12, run.cooldown ? '#b8adcf' : '#efce95', 'center');
+    ctx.restore();
+    if (dying) { ctx.save(); ctx.globalAlpha = Math.min(.32, run.death / DEATH_TIME * .4); rect(0, 0, VW, VH, '#ed887f'); ctx.restore(); }
+    canvasHud();
+    if (coarse && state === 'playing') {
+      const base = stick ? stick.ox : VW * .17, by = stick ? stick.oy : VH - 110;
+      ctx.save(); ctx.globalAlpha = stick ? .5 : .28;
+      ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(base, by, 48, 0, Math.PI * 2); ctx.stroke();
+      Neon.circle(ctx, base + (stick ? stick.dx * 38 : 0), by, 22, '#9be7ce4d');
+      ctx.restore();
+    }
+  }
+  // O painel mora no canvas (modo imersivo), e a faixa do topo fica entre os
+  // botões do quadro: voltar à esquerda, som e pausa à direita.
+  function canvasHud() {
+    const m = run.map;
+    // Os botões do quadro (voltar, pausa, som) ocupam os cantos de cima em CSS,
+    // não em pixels do canvas: BOTOES converte os ~50px deles pra cá, e o placar
+    // começa abaixo disso. Assim nada de texto encosta em botão.
+    const escala = VH / (Neon.$('stage').getBoundingClientRect().height || VH);
+    const abaixo = Math.round(62 * escala);
+    rect(0, 0, VW, 70, '#080d1cc4');
+    text(`${String(run.index + 1).padStart(2, '0')} / ${String(SECTORS.length).padStart(2, '0')}  ${m.name}`, VW / 2, 22, 11, m.color, 'center');
+    const bw = Math.min(240, VW * .4);
+    rect(VW / 2 - bw / 2, 32, bw, 3, '#33404f');
+    rect(VW / 2 - bw / 2, 32, bw * Math.max(0, Math.min(1, run.x / m.len)), 3, m.color);
+    const pulseText = run.pulse ? `PULSO · ${run.pulse.toFixed(1)}s` : run.cooldown ? `RECARGA · ${run.cooldown.toFixed(1)}s` : '◎ PULSO PRONTO';
+    text(pulseText, VW / 2, 56, 11, run.cooldown ? '#b8adcf' : '#efce95', 'center');
+    const y1 = abaixo + 28, y2 = y1 + 20;
+    text('♥'.repeat(run.lives) || '—', 14, y1, 15, '#ed887f');
+    text(`◆ ${run.prisms}/${SECTORS.length}`, 14, y2, 11, '#c4b1ff');
+    text(String(run.score), VW - 14, y1, 16, '#efce95', 'right');
+    text(`REC ${pb}`, VW - 14, y2, 10, '#7f93a4', 'right');
   }
   function hud() {
     Neon.$('score').textContent = run.score; Neon.$('sector').textContent = `${run.index + 1}/${SECTORS.length}`;
     Neon.$('prisms').textContent = `${run.prisms}/${SECTORS.length}`; Neon.$('lives').textContent = '♥'.repeat(run.lives) || '—';
   }
-  function clearInput() { held.clear(); pointers.clear(); jumpQueued = false; pulseQueued = false; }
+  function clearInput() { held.clear(); pointers.clear(); stick = null; touchJump = 0; jumpQueued = false; pulseQueued = false; }
   function startGame() {
     Neon.audio.ensure(); clearInput(); particles.clear();
     run = state === 'cleared' ? expedition(run.index + 1, run) : expedition();
-    state = 'playing'; camera = 0; lastFrame = performance.now(); Neon.overlay.hide(); Neon.audio.music.start(); hud();
+    state = 'playing'; camera = 0; lastFrame = performance.now();
+    document.body.classList.add('imersivo');
+    Neon.overlay.hide(); Neon.audio.music.start(); hud();
   }
   function pauseGame() {
     if (state !== 'playing') return;
@@ -315,7 +628,7 @@
     const won = state === 'won', cleared = state === 'cleared';
     if (won || cleared) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
     Neon.overlay.show(won ? 'A CIDADE VOLTOU A BRILHAR!' : cleared ? 'SINAL RESTAURADO!' : 'ATÉ A LUZ TROPEÇA',
-      `${run.score} pontos · ${run.prisms}/${SECTORS.length} prismas. ${cleared ? 'Um coração recuperado. O próximo setor espera.' : won ? run.prisms === SECTORS.length ? 'Todos os prismas! Você encontrou a alma da cidade.' : 'Os caminhos secretos ainda guardam seus prismas.' : 'Respire e tente outra vez.'}`,
+      `${run.score} pontos · ${run.prisms}/${SECTORS.length} prismas. ${cleared ? `Um coração recuperado. ${SECTORS[run.index + 1].name} espera.` : won ? run.prisms === SECTORS.length ? 'Todos os prismas! Você encontrou a alma da cidade.' : 'Os caminhos secretos ainda guardam seus prismas.' : 'Respire e tente outra vez.'}`,
       cleared ? 'PRÓXIMO SETOR →' : 'JOGAR DE NOVO', won || cleared ? 'record' : 'go');
   }
   const keys = { arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', arrowup: 'jump', w: 'jump', ' ': 'jump', x: 'pulse', shift: 'pulse' };
@@ -334,7 +647,7 @@
   document.addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
   document.querySelectorAll('[data-action]').forEach(button => {
     button.addEventListener('pointerdown', e => {
-      e.preventDefault(); if (state !== 'playing') return;
+      e.preventDefault(); e.stopPropagation(); if (state !== 'playing') return;
       pointers.set(e.pointerId, button.dataset.action);
       if (button.dataset.action === 'jump') jumpQueued = true;
       if (button.dataset.action === 'pulse') pulseQueued = true;
@@ -345,34 +658,74 @@
       if (button.dataset.action === 'pulse') pulseQueued = true;
     });
   });
-  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, e => pointers.delete(e.pointerId));
+  // Manche analógico na metade esquerda: nasce onde o dedo encosta e só anda
+  // no eixo X. A metade direita inteira é o salto — segurar sobe mais alto.
+  function toFrame(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * VW, y: (e.clientY - r.top) / r.height * VH };
+  }
+  Neon.$('stage').addEventListener('pointerdown', e => {
+    if (state !== 'playing' || e.target.closest('button, a')) return;
+    e.preventDefault();
+    const p = toFrame(e);
+    if (p.x < VW * .5) { stick = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0 }; }
+    else { touchJump = e.pointerId + 1; jumpQueued = true; }
+  });
+  window.addEventListener('pointermove', e => {
+    if (!stick || stick.id !== e.pointerId) return;
+    stick.dx = Neon.clamp((toFrame(e).x - stick.ox) / 58, -1, 1);
+  });
+  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, e => {
+    pointers.delete(e.pointerId);
+    if (stick && stick.id === e.pointerId) stick = null;
+    if (touchJump === e.pointerId + 1) touchJump = 0;
+  });
   Neon.$('startBtn').addEventListener('click', () => { state === 'paused' ? resumeGame() : startGame(); Neon.$('startBtn').blur(); });
   Neon.onHide(pauseGame);
   function loop(now) {
     const dt = Math.min(.033, Math.max(0, (now - lastFrame) / 1000)); lastFrame = now;
     if (state === 'playing') {
       const actions = [...held].map(k => keys[k]).concat([...pointers.values()]);
-      step(run, dt, { left: actions.includes('left'), right: actions.includes('right'), jump: jumpQueued, jumpHeld: actions.includes('jump') || jumpQueued, pulse: pulseQueued });
+      const jumpHeld = actions.includes('jump') || jumpQueued || touchJump > 0;
+      step(run, dt, {
+        left: actions.includes('left') || (stick ? stick.dx < -.22 : false),
+        right: actions.includes('right') || (stick ? stick.dx > .22 : false),
+        jump: jumpQueued, jumpHeld, pulse: pulseQueued,
+      });
       jumpQueued = false; pulseQueued = false;
       for (const event of run.events) {
         if (event === 'jump') Neon.audio.sfx.flap();
         if (event === 'coin' || event === 'box') Neon.audio.sfx.point();
         if (event === 'stomp') Neon.audio.sfx.whack();
         if (event === 'pulse') Neon.audio.sfx.boost();
+        if (event === 'shot') Neon.audio.sfx.shoot();
+        if (event === 'burn') particles.burst(run.x + run.facing * 40, run.y - 20, '#c6b3ff', 6, 120, 3);
+        if (event === 'boom') Neon.audio.sfx.boom();
         if (event === 'prism') { Neon.audio.sfx.golden(); Neon.toast('+1.000 · PRISMA SECRETO!'); }
         if (event === 'checkpoint') { Neon.audio.sfx.goal(); Neon.toast('CHECKPOINT · se cair, você volta para cá.'); }
-        if (event === 'hurt') { clearInput(); Neon.audio.sfx.hit(); Neon.toast('Opa! Um coração a menos. Vamos de novo.'); }
+        if (event === 'hurt') {
+          // Só o que estava na fila some. Quem segue com o dedo no manche ou a
+          // tecla apertada continua andando assim que Lumi volta.
+          jumpQueued = false; pulseQueued = false;
+          Neon.audio.sfx.death();
+          particles.burst(run.x, run.y - 22, '#ed887f', 22, 210, 4);
+          particles.wave(run.x, run.y - 22, '#ed887f', 120);
+        }
+        if (event === 'respawn') { Neon.audio.sfx.goal(); Neon.toast(`Vamos de novo · ${run.lives} ${run.lives === 1 ? 'coração' : 'corações'}`); }
         if (event === 'coin' || event === 'box' || event === 'stomp' || event === 'prism') particles.burst(run.x, run.y - 25, event === 'prism' ? '#afa3f5' : '#efce95', 10);
       }
       run.events.length = 0; particles.update(dt); hud();
-      camera += (Math.max(0, Math.min(3420 - W, run.x - W * .34)) - camera) * Math.min(1, dt * 9);
+      const target = Math.max(0, Math.min(run.map.len - WVW, run.x - WVW * .38));
+      camera += (target - camera) * Math.min(1, dt * (run.status === 'dying' ? 3 : 9));
       Neon.audio.music.intensity(run.pulse ? .8 : .25);
-      if (run.status !== 'playing') finish();
+      if (run.status !== 'playing' && run.status !== 'dying') finish();
     }
     draw(); requestAnimationFrame(loop);
   }
   // O tamanho lógico é escolhido antes do core configurar o backing store.
-  canvas.width = W; Neon.$('stage').style.setProperty('--arw', W); Neon.$('stage').style.setProperty('--arh', H);
+  canvas.width = VW; canvas.height = VH;
+  Neon.$('stage').style.setProperty('--arw', String(VW)); Neon.$('stage').style.setProperty('--arh', String(VH));
+  if (coarse) document.body.classList.add('imersivo');
   hud(); requestAnimationFrame(loop);
 })();
 </script>
