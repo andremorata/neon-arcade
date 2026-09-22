@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON NÚCLEO — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  .stage { --arw: 3; --arh: 2; --maxw: 900px; }
+  .reset-link { background: none; border: 0; color: var(--neon-cyan); font: inherit; text-decoration: underline; cursor: pointer; opacity: .8; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON NÚCLEO</h1></a>
+      <div class="tag">// | Junta cristal, aquece a cidade, evolui os postos | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:5;">
+    <div class="stat"><span class="lbl">Créditos</span><span class="val" id="cred">0</span></div>
+    <div class="stat"><span class="lbl">Calor</span><span class="val" id="calor">60</span></div>
+    <div class="stat"><span class="lbl">Pessoas</span><span class="val" id="sobrev">0</span></div>
+    <div class="stat"><span class="lbl">Núcleo</span><span class="val" id="nivel">1</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="nucleo">0</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">NÚCLEO ONLINE</div>
+    <canvas id="game" width="900" height="600"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON NÚCLEO</h2>
+      <p id="overlayText">A cidade congelou e só o núcleo ainda brilha. Ande até os cristais para juntar, leve ao núcleo para aquecer e ganhar créditos. Pare em cima dos quadrados para comprar e evoluir os postos. Cuidado com a nevasca: se o núcleo apagar, as pessoas vão embora.</p>
+      <div class="sub" id="overlaySub"></div>
+      <button class="btn" id="startBtn">JOGAR</button>
+      <div class="controls-hint">
+        <span class="key">WASD / setas andam</span><span class="key">Toque e arraste no celular</span><span class="key">Coleta e entrega são automáticas</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · o progresso fica salvo · os extratores trabalham enquanto você está fora · o recorde é o maior número de pessoas na cidade</footer>
+</div>
+
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const { W, H } = Neon.world(canvas, [900, 600], [500, 800]);
+
+  // ── economia ──
+  // Tudo que decide preço, ritmo e onde as coisas ficam mora aqui, sem tocar em
+  // DOM nem canvas. O teste recorta este bloco e confere que todo posto cabe na
+  // área que o núcleo libera e que os preços só sobem.
+  const MUNDO = 1500, C = MUNDO / 2;
+  const NUCLEO_MAX = 6;
+  const CALOR_CRISTAL = 2.5;
+  // x/y relativos ao núcleo. req = nível do núcleo que libera o posto.
+  const PADS = [
+    { id: 'reator',  tipo: 'reator',   nome: 'NÚCLEO',    icone: '🔆', x: 0,    y: 110,  req: 1, base: 80,    mult: 4.5, max: NUCLEO_MAX, cor: '#ff7ad9' },
+    { id: 'mochila', tipo: 'mochila',  nome: 'MOCHILA',   icone: '🎒', x: -140, y: 130,  req: 1, base: 15,    mult: 1.75, max: 12, cor: '#efce95' },
+    { id: 'botas',   tipo: 'botas',    nome: 'BOTAS',     icone: '👟', x: 140,  y: 130,  req: 1, base: 30,    mult: 1.9, max: 8,  cor: '#a8dba0' },
+    { id: 'ext1',    tipo: 'extrator', nome: 'EXTRATOR',  icone: '⛏️', x: -300, y: -40,  req: 1, base: 20,    mult: 1.6, max: 15, cor: '#9be7ce', tier: 0 },
+    { id: 'abr1',    tipo: 'abrigo',   nome: 'ABRIGO',    icone: '🏠', x: -240, y: 180,  req: 1, base: 45,    mult: 1.7, max: 10, cor: '#afa3f5' },
+    { id: 'drone',   tipo: 'drone',    nome: 'DRONES',    icone: '🛸', x: 230,  y: 250,  req: 2, base: 150,   mult: 2.2, max: 8,  cor: '#8faef2' },
+    { id: 'ext2',    tipo: 'extrator', nome: 'EXTRATOR',  icone: '⛏️', x: 320,  y: -40,  req: 2, base: 180,   mult: 1.6, max: 15, cor: '#9be7ce', tier: 1 },
+    { id: 'ext3',    tipo: 'extrator', nome: 'EXTRATOR',  icone: '⛏️', x: 0,    y: -380, req: 3, base: 1000,  mult: 1.6, max: 15, cor: '#9be7ce', tier: 2 },
+    { id: 'abr2',    tipo: 'abrigo',   nome: 'ABRIGO',    icone: '🏠', x: 380,  y: 300,  req: 3, base: 1200,  mult: 1.7, max: 10, cor: '#afa3f5' },
+    { id: 'ext4',    tipo: 'extrator', nome: 'EXTRATOR',  icone: '⛏️', x: -470, y: 330,  req: 4, base: 5000,  mult: 1.6, max: 15, cor: '#9be7ce', tier: 3 },
+    { id: 'ext5',    tipo: 'extrator', nome: 'EXTRATOR',  icone: '⛏️', x: 480,  y: -420, req: 5, base: 22000, mult: 1.6, max: 15, cor: '#9be7ce', tier: 4 },
+    { id: 'abr3',    tipo: 'abrigo',   nome: 'ABRIGO',    icone: '🏠', x: -470, y: -400, req: 5, base: 30000, mult: 1.7, max: 10, cor: '#afa3f5' },
+  ];
+  // Veios de cristal: fonte infinita e lenta, o que o jogador cava na mão.
+  const VEIOS = [
+    { x: -190, y: -150, req: 1 }, { x: 170, y: -170, req: 1 },
+    { x: -380, y: 80, req: 2 },   { x: 380, y: 110, req: 2 },
+    { x: -160, y: -500, req: 3 }, { x: 190, y: -490, req: 3 },
+    { x: -620, y: -60, req: 4 },  { x: 620, y: -20, req: 4 },
+    { x: 60, y: 640, req: 5 },    { x: -200, y: 660, req: 5 },
+  ];
+  // O núcleo começa no nível 1, os outros postos no 0 (não comprados).
+  const custo = (p, nv) => Math.ceil(p.base * Math.pow(p.mult, p.tipo === 'reator' ? nv - 1 : nv));
+  const raioLiberado = nv => 230 + 120 * nv;
+  const valorCristal = (nv, pessoas) => (1 + 0.6 * (nv - 1)) * (1 + 0.12 * pessoas);
+  const taxaExtrator = (tier, nv) => nv ? 0.45 * (1 + 0.4 * (nv - 1)) * Math.pow(2.2, tier) : 0;
+  const capPilha = nv => 12 + 8 * nv;
+  const capMochila = nv => 6 + 3 * nv;
+  const velJogador = nv => 170 + 18 * nv;
+  const vagasAbrigo = nv => 4 * nv;
+  const cargaDrone = nv => 3 + nv;
+  const decaimento = (nv, pessoas) => (0.8 + 0.06 * pessoas) / (1 + 0.25 * (nv - 1));
+  // ── fim da economia ──
+
+  const SAVE = 'neon-nucleo-save';
+  const TEXTO_MENU = Neon.$('overlayText').textContent;
+  const VEL_DRONE = 140;
+  const els = {
+    cred: Neon.$('cred'), calor: Neon.$('calor'), sobrev: Neon.$('sobrev'),
+    nivel: Neon.$('nivel'), best: Neon.$('best'), stage: Neon.$('stage'),
+  };
+
+  const novoEstado = () => ({
+    cred: 0, calor: 60, niveis: { reator: 1 }, pago: {}, pilhas: {},
+    sobrev: 0, pico: 0, px: C, py: C + 190, carga: 0, t: Date.now(),
+  });
+  let S = novoEstado(), temSave = false, ganhoFora = 0;
+  let pb = Neon.best.get('nucleo');
+  let state = 'menu', lastFrame = performance.now(), tempo = 0;
+  const jog = { x: C, y: C + 190, ang: -Math.PI / 2, andando: 0 };
+  let acaoT = 0, padCd = 0, moedaT = 0, chegadaT = 0, saidaT = 0, saveT = 0, somT = 0, streak = 0;
+  let floatAcum = 0, floatT = 0;
+  let drones = [], pessoas = [], voos = [];
+  const nev = { prox: 80, dur: 0, avisou: false };
+  const particles = new Neon.Particles();
+  const flocos = Array.from({ length: 140 }, () => ({
+    x: Math.random() * W, y: Math.random() * H, v: Neon.rand(20, 60), r: Neon.rand(0.8, 2.2),
+  }));
+
+  const nivel = id => S.niveis[id] || 0;
+  const nucleoNv = () => nivel('reator');
+  const liberado = p => nucleoNv() >= p.req;
+  const padPos = p => ({ x: C + p.x, y: C + p.y });
+  const maqPos = p => ({ x: C + p.x, y: C + p.y - 74 });
+  const pilhaPos = p => ({ x: C + p.x + 44, y: C + p.y - 66 });
+  const extratores = () => PADS.filter(p => p.tipo === 'extrator' && nivel(p.id) > 0);
+  const vagas = () => PADS.filter(p => p.tipo === 'abrigo').reduce((s, p) => s + vagasAbrigo(nivel(p.id)), 0);
+  const valorAgora = () => valorCristal(nucleoNv(), S.sobrev);
+
+  function fmt(n) {
+    n = Math.floor(n);
+    if (n < 1000) return String(n);
+    const U = ['K', 'M', 'B', 'T', 'Q'];
+    let i = -1;
+    while (n >= 1000 && i < U.length - 1) { n /= 1000; i++; }
+    return (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(1) : String(Math.floor(n))).replace('.', ',') + U[i];
+  }
+
+  // ── salvar / carregar ─────────────────────────────
+  function salvar() {
+    S.t = Date.now(); S.px = jog.x; S.py = jog.y;
+    try { localStorage.setItem(SAVE, JSON.stringify(S)); } catch (_) { /* sem espaço: segue sem salvar */ }
+  }
+  function carregar() {
+    let dado = null;
+    try { dado = JSON.parse(localStorage.getItem(SAVE) || 'null'); } catch (_) { dado = null; }
+    if (!dado || typeof dado !== 'object') return;
+    S = Object.assign(novoEstado(), dado);
+    temSave = true;
+    jog.x = S.px; jog.y = S.py;
+    // Tempo fora: os extratores enchem a pilha e os drones levam parte ao núcleo.
+    // Metade do valor e teto de 2h, pra voltar ser bom sem substituir jogar.
+    const t = Math.min(7200, Math.max(0, (Date.now() - (S.t || Date.now())) / 1000));
+    if (t < 30) return;
+    let prod = 0;
+    for (const p of extratores()) {
+      const r = taxaExtrator(p.tier, nivel(p.id));
+      prod += r;
+      S.pilhas[p.id] = Math.min(capPilha(nivel(p.id)), (S.pilhas[p.id] || 0) + r * t);
+    }
+    const nd = nivel('drone');
+    const vazao = nd * cargaDrone(nd) / 6;
+    ganhoFora = Math.min(prod, vazao) * t * valorAgora() * 0.5;
+    S.cred += ganhoFora;
+  }
+
+  // ── núcleo ─────────────────────────────────────────
+  function queimar(n) {
+    const v = n * valorAgora();
+    if (S.calor <= 0 && state === 'playing') Neon.audio.music.start();
+    S.calor = Math.min(100, S.calor + CALOR_CRISTAL * n);
+    S.cred += v;
+    floatAcum += v;
+  }
+
+  function voar(x0, y0, x1, y1, dur, fim) {
+    const v = { x0, y0, x1, y1, t: 0, dur, fim };
+    voos.push(v);
+    return v;
+  }
+
+  function comprou(p, nv) {
+    padCd = 0.7;
+    const pp = padPos(p);
+    particles.burst(pp.x, pp.y, p.cor, 26, 220, 3.5);
+    particles.wave(pp.x, pp.y, p.cor, 120);
+    if (p.tipo === 'reator') {
+      Neon.audio.sfx.record();
+      Neon.toast(`🔆 NÚCLEO NV ${nv} · A CIDADE CRESCEU`);
+      particles.wave(C, C, '#ff7ad9', raioLiberado(nv));
+    } else {
+      Neon.audio.sfx.level();
+      const msg = {
+        extrator: nv === 1 ? '⛏️ EXTRATOR ONLINE' : `⛏️ EXTRATOR NV ${nv}`,
+        abrigo: nv === 1 ? '🏠 ABRIGO ABERTO' : `🏠 ABRIGO +${vagasAbrigo(1)} VAGAS`,
+        drone: `🛸 DRONE ${nv} NO AR`,
+        mochila: `🎒 CABEM ${capMochila(nv)} CRISTAIS`,
+        botas: `👟 BOTAS NV ${nv}`,
+      }[p.tipo];
+      Neon.toast(msg);
+    }
+    ajustarDrones();
+    atualizarHud();
+    salvar();
+  }
+
+  function pagarPad(p, dt) {
+    const nv = nivel(p.id);
+    if (nv >= p.max || padCd > 0) return;
+    const c = custo(p, nv);
+    const pago = S.pago[p.id] || 0;
+    const v = Math.min(c - pago, Math.max(10, c * 0.9) * dt, S.cred);
+    if (v <= 0) return;
+    S.cred -= v;
+    S.pago[p.id] = pago + v;
+    moedaT -= dt;
+    if (moedaT <= 0) {
+      moedaT = 0.07;
+      const pp = padPos(p);
+      voar(jog.x, jog.y - 10, pp.x + Neon.rand(-14, 14), pp.y + Neon.rand(-10, 10), 0.3, null).moeda = true;
+      if (!Neon.motion.reduced) Neon.audio.sfx.tick();
+    }
+    if (S.pago[p.id] >= c - 1e-6) {
+      S.pago[p.id] = 0;
+      S.niveis[p.id] = nv + 1;
+      comprou(p, nv + 1);
+    }
+  }
+
+  function ajustarDrones() {
+    const n = nivel('drone');
+    while (drones.length < n) {
+      const d = padPos(PADS.find(p => p.id === 'drone'));
+      drones.push({ x: d.x, y: d.y - 60, carga: 0, alvo: null, fase: Math.random() * 6 });
+    }
+    drones.length = n;
+  }
+
+  function nascerPessoa() {
+    const a = Math.random() * Math.PI * 2;
+    const r = raioLiberado(nucleoNv()) - 30;
+    pessoas.push({ x: C + Math.cos(a) * r, y: C + Math.sin(a) * r, tx: C, ty: C, espera: 0, cor: Neon.choice(['#efce95', '#afa3f5', '#9be7ce', '#ed887f']) });
+  }
+  function novoRumo(h) {
+    const a = Math.random() * Math.PI * 2, r = Neon.rand(90, Math.min(260, raioLiberado(nucleoNv()) - 60));
+    h.tx = C + Math.cos(a) * r; h.ty = C + Math.sin(a) * r;
+    h.espera = Neon.rand(0.5, 3);
+  }
+
+  function atualizarHud() {
+    els.cred.textContent = fmt(S.cred);
+    els.calor.textContent = Math.ceil(S.calor);
+    els.sobrev.textContent = `${S.sobrev}/${vagas()}`;
+    els.nivel.textContent = nucleoNv();
+    els.best.textContent = pb;
+  }
+
+  // ── update ─────────────────────────────────────────
+  function mover(dt) {
+    let vx = 0, vy = 0;
+    if (preso.has('esq')) vx--;
+    if (preso.has('dir')) vx++;
+    if (preso.has('cima')) vy--;
+    if (preso.has('baixo')) vy++;
+    if (manche) { vx += manche.dx; vy += manche.dy; }
+    const m = Math.hypot(vx, vy);
+    if (m > 1) { vx /= m; vy /= m; }
+    jog.andando = Math.min(1, m);
+    if (m > 0.05) jog.ang = Math.atan2(vy, vx);
+    const vel = velJogador(nivel('botas'));
+    jog.x += vx * vel * dt;
+    jog.y += vy * vel * dt;
+    // O gelo em volta é parede: a área cresce junto com o núcleo.
+    const dx = jog.x - C, dy = jog.y - C, d = Math.hypot(dx, dy) || 1;
+    const maxR = raioLiberado(nucleoNv()) - 20;
+    if (d > maxR) { jog.x = C + dx / d * maxR; jog.y = C + dy / d * maxR; }
+    if (d < 58) { jog.x = C + dx / d * 58; jog.y = C + dy / d * 58; }
+    jog.x = Neon.clamp(jog.x, 20, MUNDO - 20);
+    jog.y = Neon.clamp(jog.y, 20, MUNDO - 20);
+  }
+
+  function coletar(dt) {
+    const cap = capMochila(nivel('mochila'));
+    const nv = nucleoNv();
+    acaoT -= dt;
+    if (acaoT > 0) return;
+    // entrega tem prioridade: chegou perto do núcleo com carga, descarrega
+    if (S.carga > 0 && Math.hypot(jog.x - C, jog.y - C) < 100) {
+      S.carga--;
+      acaoT = Math.min(0.06, 1.2 / cap);
+      voar(jog.x, jog.y - 16, C, C, 0.32, () => queimar(1));
+      streak++;
+      if (somT <= 0) { Neon.audio.sfx.eat(streak); somT = 0.07; }
+      return;
+    }
+    if (S.carga >= cap) return;
+    for (const p of extratores()) {
+      const pp = pilhaPos(p);
+      if ((S.pilhas[p.id] || 0) >= 1 && Math.hypot(jog.x - pp.x, jog.y - pp.y) < 62) {
+        S.pilhas[p.id]--;
+        S.carga++;
+        acaoT = Math.min(0.07, 1.2 / cap);
+        voar(pp.x, pp.y, jog.x, jog.y - 16, 0.2, null);
+        if (somT <= 0) { Neon.audio.sfx.merge(4); somT = 0.08; }
+        return;
+      }
+    }
+    for (const v of VEIOS) {
+      if (v.req > nv) continue;
+      const vx = C + v.x, vy = C + v.y;
+      if (Math.hypot(jog.x - vx, jog.y - vy) < 58) {
+        S.carga++;
+        acaoT = 0.38;
+        voar(vx, vy, jog.x, jog.y - 16, 0.22, null);
+        particles.burst(vx, vy, '#8ff0ff', 5, 90, 2);
+        Neon.audio.sfx.tick();
+        return;
+      }
+    }
+    streak = 0;
+  }
+
+  function atualizarDrones(dt) {
+    const nd = nivel('drone'), carga = cargaDrone(nd);
+    for (const d of drones) {
+      d.fase += dt * 4;
+      let tx, ty;
+      if (d.carga === 0) {
+        if (!d.alvo || (S.pilhas[d.alvo] || 0) < 1) {
+          let melhor = null, mais = 0;
+          for (const p of extratores()) {
+            const q = S.pilhas[p.id] || 0;
+            if (q >= 1 && q > mais) { mais = q; melhor = p.id; }
+          }
+          d.alvo = melhor;
+        }
+        if (!d.alvo) {
+          // sem trabalho: ronda o núcleo
+          tx = C + Math.cos(d.fase * 0.2) * 110; ty = C + Math.sin(d.fase * 0.2) * 110;
+        } else {
+          const pp = pilhaPos(PADS.find(p => p.id === d.alvo));
+          tx = pp.x; ty = pp.y;
+          if (Math.hypot(d.x - tx, d.y - ty) < 10) {
+            const n = Math.min(carga, Math.floor(S.pilhas[d.alvo]));
+            S.pilhas[d.alvo] -= n;
+            d.carga = n;
+            d.alvo = null;
+          }
+        }
+      } else {
+        tx = C; ty = C;
+        if (Math.hypot(d.x - tx, d.y - ty) < 50) {
+          for (let i = 0; i < d.carga; i++) voar(d.x, d.y, C, C, 0.25 + i * 0.04, () => queimar(1));
+          d.carga = 0;
+        }
+      }
+      const dx = tx - d.x, dy = ty - d.y, dist = Math.hypot(dx, dy);
+      if (dist > 1) {
+        const s = Math.min(dist, VEL_DRONE * dt);
+        d.x += dx / dist * s; d.y += dy / dist * s;
+      }
+    }
+  }
+
+  function atualizarPessoas(dt) {
+    const cap = vagas();
+    if (S.calor >= 35 && S.sobrev < cap) {
+      chegadaT += dt;
+      if (chegadaT >= 5) {
+        chegadaT = 0;
+        S.sobrev++;
+        nascerPessoa();
+        Neon.audio.sfx.golden();
+        if (S.sobrev > S.pico) {
+          S.pico = S.sobrev;
+          const pico = S.pico;
+          pb = Neon.best.update('nucleo', pico);
+          Neon.popEl(els.best);
+        }
+        Neon.popEl(els.sobrev);
+      }
+    } else chegadaT = 0;
+    if (S.calor <= 0 && S.sobrev > 0) {
+      saidaT += dt;
+      if (saidaT >= 3) {
+        saidaT = 0;
+        S.sobrev--;
+        pessoas.pop();
+        Neon.audio.sfx.wrong();
+        Neon.toast('🥶 ALGUÉM FOI EMBORA');
+      }
+    } else saidaT = 0;
+    while (pessoas.length < S.sobrev) { nascerPessoa(); novoRumo(pessoas[pessoas.length - 1]); }
+    for (const h of pessoas) {
+      const dx = h.tx - h.x, dy = h.ty - h.y, d = Math.hypot(dx, dy);
+      if (d < 4) { h.espera -= dt; if (h.espera <= 0) novoRumo(h); continue; }
+      const s = Math.min(d, 40 * dt);
+      h.x += dx / d * s; h.y += dy / d * s;
+    }
+  }
+
+  function atualizarNevasca(dt) {
+    if (nev.dur > 0) {
+      nev.dur -= dt;
+      if (nev.dur <= 0) Neon.toast('☀️ A NEVASCA PASSOU');
+      return;
+    }
+    nev.prox -= dt;
+    if (nev.prox < 6 && !nev.avisou) {
+      nev.avisou = true;
+      Neon.audio.sfx.beep();
+      Neon.toast('❄️ NEVASCA CHEGANDO · ENCHA O NÚCLEO');
+    }
+    if (nev.prox <= 0) {
+      nev.dur = 14;
+      nev.prox = Neon.rand(75, 105);
+      nev.avisou = false;
+      Neon.audio.sfx.sizzle();
+    }
+  }
+
+  function update(dt) {
+    tempo += dt;
+    if (state !== 'playing') return;
+    if (padCd > 0) padCd -= dt;
+    if (somT > 0) somT -= dt;
+    mover(dt);
+    coletar(dt);
+
+    // postos: parado em cima, o dinheiro vai entrando
+    for (const p of PADS) {
+      if (!liberado(p)) continue;
+      const pp = padPos(p);
+      if (Math.abs(jog.x - pp.x) < 34 && Math.abs(jog.y - pp.y) < 34) pagarPad(p, dt);
+    }
+
+    for (const p of extratores()) {
+      const nv = nivel(p.id);
+      S.pilhas[p.id] = Math.min(capPilha(nv), (S.pilhas[p.id] || 0) + taxaExtrator(p.tier, nv) * dt);
+    }
+    atualizarDrones(dt);
+    atualizarNevasca(dt);
+
+    const antes = S.calor;
+    S.calor = Math.max(0, S.calor - decaimento(nucleoNv(), S.sobrev) * (nev.dur > 0 ? 3.5 : 1) * dt);
+    if (antes > 0 && S.calor <= 0) {
+      // sem fim de partida: a trilha cai com o núcleo e volta quando ele reacende
+      Neon.audio.music.down();
+      Neon.audio.sfx.death();
+      Neon.toast('⚠️ O NÚCLEO APAGOU · TRAGA CRISTAIS');
+    }
+    atualizarPessoas(dt);
+
+    for (let i = voos.length - 1; i >= 0; i--) {
+      const v = voos[i];
+      v.t += dt;
+      if (v.t >= v.dur) { if (v.fim) v.fim(); voos.splice(i, 1); }
+    }
+    floatT -= dt;
+    if (floatT <= 0 && floatAcum > 0) {
+      particles.float(C + Neon.rand(-20, 20), C - 70, `+${fmt(floatAcum)}`, '#efce95', 15);
+      floatAcum = 0; floatT = 0.3;
+    }
+
+    Neon.audio.music.intensity(nev.dur > 0 ? 0.9 : 0.25 + 0.4 * Math.min(1, S.sobrev / 30));
+    saveT += dt;
+    if (saveT > 5) { saveT = 0; salvar(); }
+    atualizarHud();
+  }
+
+  // ── render ─────────────────────────────────────────
+  function diamante(x, y, s, cor) {
+    ctx.fillStyle = cor;
+    ctx.beginPath();
+    ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.7, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.7, y);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function rotulo(txt, x, y, cor, size) {
+    ctx.font = `700 ${size || 11}px Orbitron, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = cor;
+    ctx.fillText(txt, x, y);
+  }
+
+  function desenharVeio(v) {
+    const x = C + v.x, y = C + v.y;
+    const pulso = 0.6 + 0.4 * Math.sin(tempo * 2 + v.x);
+    Neon.glow(ctx, '#8ff0ff', 18 * pulso);
+    const pontas = [[-16, 6, 14], [0, -4, 20], [15, 8, 13], [-4, 14, 10], [9, -12, 11]];
+    for (const [dx, dy, s] of pontas) diamante(x + dx, y + dy, s, dx === 0 ? '#c9fbff' : '#6fdcef');
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = '#8ff0ff';
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.arc(x, y, 58, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  function desenharPad(p) {
+    const { x, y } = padPos(p);
+    const nv = nivel(p.id), maxed = nv >= p.max;
+    const c = maxed ? 0 : custo(p, nv);
+    const k = maxed ? 1 : (S.pago[p.id] || 0) / c;
+    const em = Math.abs(jog.x - x) < 34 && Math.abs(jog.y - y) < 34;
+    const pode = S.cred + (S.pago[p.id] || 0) >= c;
+
+    // prédio do posto, atrás do quadrado
+    if (p.tipo === 'extrator' && nv > 0) desenharExtrator(p, nv);
+    if (p.tipo === 'abrigo' && nv > 0) desenharAbrigo(p, nv);
+    if (p.tipo === 'drone' && nv > 0) {
+      ctx.strokeStyle = p.cor; ctx.lineWidth = 2; ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.arc(x, y - 70, 24, 0, Math.PI * 2); ctx.stroke();
+      rotulo('H', x, y - 70, p.cor, 16);
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.globalAlpha = maxed ? 0.35 : 1;
+    ctx.fillStyle = 'rgba(10,14,30,0.75)';
+    ctx.fillRect(x - 32, y - 32, 64, 64);
+    ctx.fillStyle = p.cor;
+    ctx.globalAlpha *= 0.28;
+    ctx.fillRect(x - 32, y + 32 - 64 * k, 64, 64 * k);
+    ctx.globalAlpha = maxed ? 0.35 : 1;
+    ctx.strokeStyle = p.cor;
+    ctx.lineWidth = em ? 3 : 2;
+    if (!maxed && pode) Neon.glow(ctx, p.cor, 12 + 6 * Math.sin(tempo * 5));
+    ctx.setLineDash(nv === 0 ? [7, 5] : []);
+    ctx.strokeRect(x - 32, y - 32, 64, 64);
+    ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
+    ctx.font = `22px ${Neon.EMOJI}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.icone, x, y - 6);
+    rotulo(maxed ? 'MÁX' : `¢${fmt(c)}`, x, y + 18, maxed ? p.cor : (pode ? '#efce95' : '#ed887f'), 11);
+    const titulo = p.tipo === 'reator' ? `NÚCLEO NV ${nv}` : nv ? `${p.nome} NV ${nv}` : p.nome;
+    rotulo(titulo, x, y + 44, p.cor, 10);
+    ctx.globalAlpha = 1;
+  }
+
+  function desenharExtrator(p, nv) {
+    const m = maqPos(p), pl = pilhaPos(p);
+    ctx.fillStyle = '#152238';
+    ctx.strokeStyle = p.cor; ctx.lineWidth = 2;
+    Neon.glow(ctx, p.cor, 10);
+    ctx.fillRect(m.x - 22, m.y - 22, 44, 44);
+    ctx.strokeRect(m.x - 22, m.y - 22, 44, 44);
+    ctx.shadowBlur = 0;
+    const a = tempo * (2 + nv * 0.4) * (1 + p.tier * 0.3);
+    ctx.beginPath();
+    ctx.moveTo(m.x, m.y);
+    ctx.lineTo(m.x + Math.cos(a) * 16, m.y + Math.sin(a) * 16);
+    ctx.moveTo(m.x, m.y);
+    ctx.lineTo(m.x - Math.cos(a) * 16, m.y - Math.sin(a) * 16);
+    ctx.stroke();
+    Neon.circle(ctx, m.x, m.y, 4, p.cor);
+    // pilha: um diamante por cristal, até 14 visíveis
+    const q = Math.floor(S.pilhas[p.id] || 0), cheia = q >= capPilha(nv);
+    Neon.glow(ctx, '#8ff0ff', 8);
+    for (let i = 0; i < Math.min(q, 14); i++) diamante(pl.x + (i % 2) * 8 - 4, pl.y + 10 - i * 4, 6, i % 2 ? '#6fdcef' : '#c9fbff');
+    ctx.shadowBlur = 0;
+    rotulo(`${q}${cheia ? ' CHEIO' : ''}`, pl.x, pl.y + 26, cheia ? '#ed887f' : '#8ff0ff', 9);
+  }
+
+  function desenharAbrigo(p, nv) {
+    const m = maqPos(p);
+    ctx.fillStyle = '#1b1830';
+    ctx.strokeStyle = p.cor; ctx.lineWidth = 2;
+    Neon.glow(ctx, p.cor, 10);
+    ctx.beginPath(); ctx.arc(m.x, m.y + 14, 30, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    // janelas acesas conforme o núcleo aquece
+    const acesas = Math.min(5, Math.ceil(nv / 2));
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = i < acesas && S.calor > 0 ? '#efce95' : '#2b2945';
+      ctx.fillRect(m.x - 21 + i * 9, m.y + 2, 5, 6);
+    }
+  }
+
+  function desenharNucleo() {
+    const k = S.calor / 100, nv = nucleoNv();
+    const pulso = 1 + 0.06 * Math.sin(tempo * (3 + k * 5));
+    const cor = S.calor <= 0 ? '#3a4a66' : k > 0.6 ? '#ff7ad9' : k > 0.3 ? '#efce95' : '#8faef2';
+    Neon.glow(ctx, cor, 40 * k + 6);
+    ctx.fillStyle = '#10152a';
+    Neon.circle(ctx, C, C, 50);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = cor;
+    for (let i = 0; i < Math.min(nv, 4); i++) {
+      ctx.beginPath();
+      ctx.arc(C, C, 22 + i * 7, tempo * (1 + i * 0.5) * (i % 2 ? -1 : 1), tempo * (1 + i * 0.5) * (i % 2 ? -1 : 1) + Math.PI * 1.3);
+      ctx.stroke();
+    }
+    Neon.circle(ctx, C, C, 13 * pulso, cor);
+    ctx.shadowBlur = 0;
+    // anel de calor
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath(); ctx.arc(C, C, 60, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = cor;
+    ctx.beginPath(); ctx.arc(C, C, 60, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); ctx.stroke();
+  }
+
+  function desenharJogador() {
+    const cap = capMochila(nivel('mochila'));
+    const bob = Math.sin(tempo * 12) * 1.5 * jog.andando;
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(jog.x, jog.y + 12, 13, 5, 0, 0, Math.PI * 2); ctx.fill();
+    // pilha nas costas: cresce pra cima, como nos joguinhos do gênero
+    Neon.glow(ctx, '#8ff0ff', 6);
+    const vis = Math.min(S.carga, 22);
+    for (let i = 0; i < vis; i++) diamante(jog.x - Math.cos(jog.ang) * 6, jog.y - 18 - i * 4 + bob, 6, i % 2 ? '#6fdcef' : '#c9fbff');
+    ctx.shadowBlur = 0;
+    if (S.carga) rotulo(`${S.carga}/${cap}`, jog.x, jog.y - 30 - vis * 4, S.carga >= cap ? '#efce95' : '#c9fbff', 10);
+    Neon.glow(ctx, '#ff7ad9', 16);
+    ctx.fillStyle = '#241036';
+    ctx.strokeStyle = '#ff7ad9'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(jog.x, jog.y + bob, 13, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ff7ad9';
+    ctx.beginPath();
+    ctx.arc(jog.x + Math.cos(jog.ang) * 8, jog.y + bob + Math.sin(jog.ang) * 8, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Seta pro próximo passo: sem ela o jogador novo não sabe pra onde ir.
+  function objetivo() {
+    const cap = capMochila(nivel('mochila'));
+    if (S.carga >= cap || (S.carga > 0 && S.calor < 25)) return { x: C, y: C };
+    let melhor = null, dm = Infinity;
+    const perto = (x, y) => { const d = Math.hypot(jog.x - x, jog.y - y); if (d < dm) { dm = d; melhor = { x, y }; } };
+    for (const p of extratores()) if ((S.pilhas[p.id] || 0) >= 3) { const pp = pilhaPos(p); perto(pp.x, pp.y); }
+    for (const v of VEIOS) if (v.req <= nucleoNv()) perto(C + v.x, C + v.y);
+    return melhor;
+  }
+
+  function render() {
+    const cx = Neon.clamp(jog.x - W / 2, 0, MUNDO - W), cy = Neon.clamp(jog.y - H / 2, 0, MUNDO - H);
+    const nv = nucleoNv(), R = raioLiberado(nv);
+    ctx.fillStyle = '#070b18';
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(-cx, -cy);
+
+    // chão em grade
+    ctx.strokeStyle = 'rgba(143,174,242,0.07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = Math.floor(cx / 60) * 60; x < cx + W; x += 60) { ctx.moveTo(x, cy); ctx.lineTo(x, cy + H); }
+    for (let y = Math.floor(cy / 60) * 60; y < cy + H; y += 60) { ctx.moveTo(cx, y); ctx.lineTo(cx + W, y); }
+    ctx.stroke();
+
+    // bolha de calor em volta do núcleo
+    const k = S.calor / 100;
+    const g = ctx.createRadialGradient(C, C, 40, C, C, R * (0.35 + 0.65 * k) + 1);
+    g.addColorStop(0, `rgba(255,122,217,${0.1 + 0.18 * k})`);
+    g.addColorStop(0.6, `rgba(239,206,149,${0.05 * k})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(C - R, C - R, R * 2, R * 2);
+
+    for (const v of VEIOS) if (v.req <= nv) desenharVeio(v);
+    for (const p of PADS) if (liberado(p)) desenharPad(p);
+
+    for (const h of pessoas) {
+      ctx.fillStyle = h.cor;
+      Neon.circle(ctx, h.x, h.y - 7, 3.5);
+      ctx.fillRect(h.x - 3, h.y - 3, 6, 8);
+    }
+
+    desenharNucleo();
+
+    for (const v of voos) {
+      const t = Math.min(1, v.t / v.dur);
+      const x = v.x0 + (v.x1 - v.x0) * t, y = v.y0 + (v.y1 - v.y0) * t - Math.sin(t * Math.PI) * 30;
+      if (v.moeda) { Neon.circle(ctx, x, y, 4, '#efce95'); continue; }
+      Neon.glow(ctx, '#8ff0ff', 8);
+      diamante(x, y, 6, '#c9fbff');
+      ctx.shadowBlur = 0;
+    }
+
+    for (const d of drones) {
+      const y = d.y + Math.sin(d.fase) * 3;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.ellipse(d.x, d.y + 18, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+      Neon.glow(ctx, '#8faef2', 12);
+      ctx.strokeStyle = '#8faef2'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(d.x, y, 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(d.x - 14, y); ctx.lineTo(d.x + 14, y);
+      ctx.moveTo(d.x, y - 14); ctx.lineTo(d.x, y + 14);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      if (d.carga) diamante(d.x, y + 12, 5, '#c9fbff');
+    }
+
+    desenharJogador();
+    particles.draw(ctx);
+
+    // gelo: tudo fora do raio fica congelado e escuro
+    ctx.beginPath();
+    ctx.rect(cx - 10, cy - 10, W + 20, H + 20);
+    ctx.arc(C, C, R, 0, Math.PI * 2, true);
+    ctx.fillStyle = 'rgba(6,10,24,0.88)';
+    ctx.fill('evenodd');
+    ctx.strokeStyle = 'rgba(143,240,255,0.45)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([12, 8]);
+    ctx.lineDashOffset = -tempo * 10;
+    ctx.beginPath(); ctx.arc(C, C, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    // o que o próximo nível do núcleo libera aparece de leve atrás do gelo
+    if (nv < NUCLEO_MAX) {
+      ctx.globalAlpha = 0.45;
+      for (const p of PADS) {
+        if (p.req !== nv + 1) continue;
+        const pp = padPos(p);
+        ctx.font = `20px ${Neon.EMOJI}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('🔒', pp.x, pp.y - 8);
+        rotulo(`NÚCLEO NV ${p.req}`, pp.x, pp.y + 16, '#8faef2', 9);
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+
+    // neve na tela
+    const forte = nev.dur > 0;
+    ctx.fillStyle = 'rgba(230,240,255,0.7)';
+    for (const f of flocos) {
+      ctx.globalAlpha = forte ? 0.9 : 0.45;
+      Neon.circle(ctx, f.x, f.y, f.r);
+    }
+    ctx.globalAlpha = 1;
+    if (forte) {
+      ctx.fillStyle = 'rgba(200,225,255,0.12)';
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // seta de objetivo
+    const alvo = state === 'playing' ? objetivo() : null;
+    if (alvo) {
+      const dx = alvo.x - jog.x, dy = alvo.y - jog.y, d = Math.hypot(dx, dy);
+      if (d > 150) {
+        const a = Math.atan2(dy, dx), sx = jog.x - cx + Math.cos(a) * 42, sy = jog.y - cy + Math.sin(a) * 42;
+        ctx.save();
+        ctx.translate(sx, sy); ctx.rotate(a);
+        ctx.globalAlpha = 0.5 + 0.3 * Math.sin(tempo * 6);
+        ctx.fillStyle = alvo.x === C && alvo.y === C ? '#ff7ad9' : '#8ff0ff';
+        ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-6, -7); ctx.lineTo(-6, 7); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // barra de calor
+    const bw = Math.min(320, W - 140), bx = (W - bw) / 2, by = 16;
+    ctx.fillStyle = 'rgba(10,14,30,0.8)';
+    ctx.fillRect(bx - 2, by - 2, bw + 4, 14);
+    const corBarra = S.calor < 20 ? '#ed887f' : S.calor < 50 ? '#efce95' : '#ff7ad9';
+    ctx.fillStyle = corBarra;
+    Neon.glow(ctx, corBarra, 10);
+    ctx.fillRect(bx, by, bw * k, 10);
+    ctx.shadowBlur = 0;
+    rotulo(`🔥 ${Math.ceil(S.calor)}%`, W / 2, by + 26, corBarra, 11);
+    if (forte) rotulo(`❄️ NEVASCA ${Math.ceil(nev.dur)}s`, W / 2, by + 46, '#c9fbff', 14);
+    else if (nev.prox < 6) rotulo(`❄️ NEVASCA EM ${Math.ceil(nev.prox)}`, W / 2, by + 46, '#8faef2', 12);
+    if (S.calor <= 0 && state === 'playing') rotulo('NÚCLEO APAGADO · TRAGA CRISTAIS', W / 2, H - 30, '#ed887f', 13);
+
+    if (manche && state === 'playing') {
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(manche.ox, manche.oy, 46, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(155,231,206,0.35)';
+      Neon.circle(ctx, manche.ox + manche.dx * 40, manche.oy + manche.dy * 40, 20);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function atualizarNeve(dt) {
+    const forte = nev.dur > 0;
+    for (const f of flocos) {
+      f.y += f.v * (forte ? 4 : 1) * dt;
+      f.x += (forte ? -160 : -12) * dt * (f.r / 2);
+      if (f.y > H) { f.y = -4; f.x = Math.random() * W; }
+      if (f.x < -4) f.x = W + 4;
+    }
+  }
+
+  // ── fluxo ──────────────────────────────────────────
+  function startGame() {
+    Neon.audio.ensure();
+    state = 'playing';
+    lastFrame = performance.now();
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+    if (ganhoFora > 0) {
+      Neon.toast(`💤 ENQUANTO VOCÊ ESTAVA FORA: +¢${fmt(ganhoFora)}`);
+      ganhoFora = 0;
+    }
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    salvar();
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar. O progresso está salvo.', 'CONTINUAR');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    startGame();
+  }
+  function menu() {
+    const extra = temSave ? '<button class="reset-link" id="resetBtn">apagar progresso e começar do zero</button>' : '';
+    Neon.overlay.show('NEON NÚCLEO', TEXTO_MENU, temSave ? 'CONTINUAR' : 'JOGAR', '', extra);
+  }
+  function resetar() {
+    if (!window.confirm('Apagar todo o progresso do Núcleo? O recorde continua.')) return;
+    try { localStorage.removeItem(SAVE); } catch (_) { /* nada a apagar */ }
+    S = novoEstado();
+    jog.x = S.px; jog.y = S.py;
+    drones = []; pessoas = []; voos = [];
+    temSave = false; ganhoFora = 0;
+    particles.clear();
+    atualizarHud();
+    menu();
+  }
+
+  // ── input ──────────────────────────────────────────
+  const preso = new Set();
+  const TECLAS = { arrowleft: 'esq', a: 'esq', arrowright: 'dir', d: 'dir',
+                   arrowup: 'cima', w: 'cima', arrowdown: 'baixo', s: 'baixo' };
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
+    if (k in TECLAS) { e.preventDefault(); preso.add(TECLAS[k]); return; }
+    if (k === ' ' || k === 'enter') {
+      e.preventDefault();
+      if (state === 'menu') startGame();
+      else if (state === 'paused') resumeGame();
+    }
+  });
+  document.addEventListener('keyup', (e) => {
+    const k = e.key.toLowerCase();
+    if (k in TECLAS) preso.delete(TECLAS[k]);
+  });
+
+  // Manche flutuante: nasce onde o dedo encosta, em qualquer lugar do quadro.
+  let manche = null, mancheId = null;
+  const paraQuadro = (e) => {
+    const r = els.stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  };
+  els.stage.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay') || state !== 'playing') return;
+    e.preventDefault();
+    const p = paraQuadro(e);
+    manche = { ox: p.x, oy: p.y, dx: 0, dy: 0 };
+    mancheId = e.pointerId;
+  });
+  els.stage.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== mancheId || !manche) return;
+    const p = paraQuadro(e);
+    let dx = (p.x - manche.ox) / 40, dy = (p.y - manche.oy) / 40;
+    const m = Math.hypot(dx, dy);
+    if (m > 1) { dx /= m; dy /= m; }
+    manche.dx = dx; manche.dy = dy;
+  });
+  const soltar = (e) => { if (e.pointerId === mancheId) { manche = null; mancheId = null; } };
+  window.addEventListener('pointerup', soltar);
+  window.addEventListener('pointercancel', soltar);
+
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else startGame();
+  });
+  document.addEventListener('click', (e) => { if (e.target && e.target.id === 'resetBtn') resetar(); });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); else salvar(); });
+  window.addEventListener('pagehide', salvar);
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    update(dt);
+    particles.update(dt);
+    atualizarNeve(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  carregar();
+  ajustarDrones();
+  atualizarHud();
+  menu();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

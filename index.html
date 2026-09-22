@@ -66,11 +66,13 @@
     { key: 'salto',  emoji: '🛫', name: 'NEON SALTO',   desc: 'Salto de rampa visto de trás: nitro que esquenta, toque na crista e pouse reto. O recorde é a distância.', href: 'games/neon-salto.html', color: '#efb76f' },
     { key: 'pinball', emoji: '🪩', name: 'NEON PINBALL', desc: 'Fliperama de mesa: flippers, bumpers, banco de alvos e poço. Acenda N·E·O·N para multiplicar.', href: 'games/neon-pinball.html', color: '#efce95' },
     { key: 'planador', emoji: '✈️', name: 'NEON PLANADOR', desc: 'Aviãozinho de papel visto de trás: estilingue, desvie de torres e drones, passe por anéis e térmicas. O recorde é a distância.', href: 'games/neon-planador.html', color: '#8faef2' },
+    { key: 'nucleo', emoji: '🔆', name: 'NEON NÚCLEO', desc: 'Cidade congelada: junte cristais, aqueça o núcleo e evolua extratores, drones e abrigos. O progresso fica salvo.', href: 'games/neon-nucleo.html', color: '#ff7ad9' },
   ];
 
   const fmtBest = (key, val) => {
     if (key === 'mines') return val ? `⏱ ${(val / 60) | 0}:${String(val % 60).padStart(2, '0')}` : '';
     if (key === 'salto' || key === 'planador') return val ? `🏆 ${val} m` : '';
+    if (key === 'nucleo') return val ? `🏆 ${val} pessoas` : '';
     return val ? `🏆 ${val}` : '';
   };
 

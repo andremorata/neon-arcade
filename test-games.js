@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score', planador: 'distancia' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score', planador: 'distancia', nucleo: 'pico' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
@@ -2421,6 +2421,40 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   assert.ok(soma / 6 > 350, `planador: na media o piloto tem que passar de 350 m com obstaculos (${(soma / 6).toFixed(0)})`);
   const cego = [1, 2, 3, 4, 5, 6].map(sem => { const s = lancado(1, sem, true); voar(s, gNada, 200); return s.fimPor; });
   assert.ok(cego.some(f => f === 'torre' || f === 'laje' || f === 'portal' || f === 'drone'), `planador: sem desviar, alguma hora bate (${cego.join(', ')})`);
+}
+
+// ── NEON NÚCLEO ────────────────────────────────────
+// A economia e recortada do fonte. Posto fora da area liberada fica atras do
+// gelo e nunca da pra comprar; preco que cai quebra a curva de evolucao.
+{
+  const nucleo = games.nucleo;
+  const ini = nucleo.indexOf('  // ── economia ──');
+  const fim = nucleo.indexOf('  // ── fim da economia ──');
+  assert.ok(ini > 0 && fim > ini, 'nucleo: marcadores da economia nao encontrados');
+  const N = new Function(nucleo.slice(ini, fim)
+    + '; return { MUNDO, NUCLEO_MAX, PADS, VEIOS, custo, raioLiberado, capMochila };')();
+  const ids = new Set();
+  for (const p of N.PADS) {
+    assert.ok(!ids.has(p.id), `nucleo: id repetido ${p.id}`);
+    ids.add(p.id);
+    assert.ok(p.req >= 1 && p.req <= N.NUCLEO_MAX, `nucleo: ${p.id} pede um nucleo que nao existe`);
+    // o quadrado inteiro (e o predio 74px acima) tem que caber dentro do raio liberado
+    const longe = Math.max(Math.hypot(Math.abs(p.x) + 32, Math.abs(p.y) + 32), Math.hypot(p.x, p.y - 96));
+    assert.ok(longe < N.raioLiberado(p.req), `nucleo: ${p.id} fica atras do gelo no nucleo ${p.req}`);
+    assert.ok(Math.abs(p.x) + 32 < N.MUNDO / 2 && Math.abs(p.y) + 32 < N.MUNDO / 2, `nucleo: ${p.id} sai do mundo`);
+    const ini = p.tipo === 'reator' ? 1 : 0;
+    for (let nv = ini; nv < p.max - 1; nv++)
+      assert.ok(N.custo(p, nv + 1) > N.custo(p, nv), `nucleo: ${p.id} fica mais barato no nivel ${nv + 1}`);
+  }
+  for (const v of N.VEIOS)
+    assert.ok(Math.hypot(v.x, v.y) + 58 < N.raioLiberado(v.req), `nucleo: veio em ${v.x},${v.y} fica atras do gelo`);
+  // quadrados nao se sobrepoem: parar num nao pode pagar outro
+  for (const a of N.PADS) for (const b of N.PADS)
+    if (a !== b) assert.ok(Math.abs(a.x - b.x) >= 70 || Math.abs(a.y - b.y) >= 70, `nucleo: ${a.id} encosta em ${b.id}`);
+  // a primeira compra sai com uma ou duas viagens de mochila inicial
+  const primeiro = Math.min(...N.PADS.filter(p => p.req === 1 && p.tipo !== 'reator').map(p => N.custo(p, 0)));
+  assert.ok(primeiro <= N.capMochila(0) * 3, `nucleo: a primeira compra custa ${primeiro}, demora demais`);
+  assert.strictEqual(N.NUCLEO_MAX, N.PADS.find(p => p.id === 'reator').max, 'nucleo: o posto do nucleo vai ate o nivel maximo');
 }
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);

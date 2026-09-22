@@ -58,7 +58,7 @@ em toda rampa, cada habilidade vale metros e os desbloqueios por recorde são al
 (lançamento, tiro de flipper, dreno, portão de mão única e uma varredura que solta a bola parada em cada ponto
 livre da mesa pra garantir que nenhum canto prende) e o voo do Planador (o piloto voa mais longe do que
 sem tocar, segurar o nariz estola, anel empurra, térmica levanta, torre derruba e o cenário de uma semente é
-sempre o mesmo). Boa parte desses testes nasceu de um
+sempre o mesmo) e a economia do Núcleo (todo posto cabe na área que o núcleo libera e o preço só sobe). Boa parte desses testes nasceu de um
 bug real, e o comentário acima de cada um diz qual.
 
 ## Estrutura
