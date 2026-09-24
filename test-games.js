@@ -2455,6 +2455,27 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   const primeiro = Math.min(...N.PADS.filter(p => p.req === 1 && p.tipo !== 'reator').map(p => N.custo(p, 0)));
   assert.ok(primeiro <= N.capMochila(0) * 3, `nucleo: a primeira compra custa ${primeiro}, demora demais`);
   assert.strictEqual(N.NUCLEO_MAX, N.PADS.find(p => p.id === 'reator').max, 'nucleo: o posto do nucleo vai ate o nivel maximo');
+  assert.ok(!nucleo.includes('Neon.onHide('), 'nucleo: perder foco nao pode pausar o idle game');
+  const S = { cred: 0, pilhas: {} };
+  const acumular = new Function('S', 'extratores', 'nivel', 'taxaExtrator', 'capPilha', 'cargaDrone', 'valorAgora', 'atualizarHud',
+    `let ganhoFora = 0; ${block(nucleo, '  function acumularAusencia(t)')} return acumularAusencia;`)(
+    S, () => [{ id: 'ext1', tier: 0 }], () => 1,
+    () => 2, () => 12, () => 4, () => 10, () => {});
+  acumular(60);
+  assert.strictEqual(S.cred, 200, 'nucleo: drones rendem creditos sem a aba ativa');
+  assert.strictEqual(S.pilhas.ext1, 12, 'nucleo: extratores enchem a pilha fora da aba');
+  acumular(10800);
+  assert.strictEqual(S.cred, 24200, 'nucleo: progresso em segundo plano respeita o teto de 2h');
+  const pilhas = { ext1: 4, ext2: 4 }, d1 = { x: 0, y: 0, seed: 0, alvo: null }, d2 = { x: 0, y: 0, seed: 2, alvo: null };
+  const escolherAlvo = new Function('S', 'drones', 'extratores', 'pilhaPos', 'C',
+    `${block(nucleo, '  function escolherAlvo(d, carga)')} return escolherAlvo;`)(
+    { pilhas }, [d1, d2], () => [{ id: 'ext1', x: 0 }, { id: 'ext2', x: 100 }],
+    p => ({ x: p.x, y: 0 }), 0);
+  d1.alvo = escolherAlvo(d1, 4);
+  d2.alvo = escolherAlvo(d2, 4);
+  assert.deepStrictEqual([d1.alvo, d2.alvo], ['ext1', 'ext2'], 'nucleo: drones dividem extratores com estoque');
+  pilhas.ext1 = 8; pilhas.ext2 = 0;
+  assert.strictEqual(escolherAlvo(d2, 4), 'ext1', 'nucleo: drones compartilham pilha quando ha sobra');
 }
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);
