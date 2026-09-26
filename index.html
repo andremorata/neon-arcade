@@ -36,6 +36,7 @@
   const Neon = window.Neon;
 
   const GAMES = [
+    { key: 'torres', emoji: '🗼', name: 'NEON TORRES', desc: 'Tower defense: quatro torres para construir, evoluir e vender contra ondas infinitas com chefes. O recorde é a onda.', href: 'games/neon-torres.html', color: '#ff7ad9' },
     { key: 'brawl', emoji: '🥊', name: 'NEON BRAWL', desc: 'Briga de rua sem fim: três lutadores, combos, armas que quebram e andares montados na hora.', href: 'games/neon-brawl.html', color: '#ed887f' },
     { key: 'pulse', emoji: '✨', name: 'NEON PULSE', desc: 'Salto duplo, blocos e caminhos secretos: dez setores, sete tipos de inimigo e um pulso que vira escudo.', href: 'games/neon-pulse.html', color: '#9be7ce' },
     { key: 'jungle', emoji: '🌴', name: 'NEON JUNGLE', desc: 'Aventura do 2600: cipós, jacarés e seis tesouros perdidos na selva.', href: 'games/neon-jungle.html', color: '#a8dba0' },
@@ -73,6 +74,7 @@
     if (key === 'mines') return val ? `⏱ ${(val / 60) | 0}:${String(val % 60).padStart(2, '0')}` : '';
     if (key === 'salto' || key === 'planador') return val ? `🏆 ${val} m` : '';
     if (key === 'nucleo') return val ? `🏆 ${val} pessoas` : '';
+    if (key === 'torres') return val ? `🏆 onda ${val}` : '';
     return val ? `🏆 ${val}` : '';
   };
 

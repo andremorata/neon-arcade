@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score', planador: 'distancia', nucleo: 'pico' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score', planador: 'distancia', nucleo: 'pico', torres: 'onda' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
@@ -2476,6 +2476,77 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   assert.deepStrictEqual([d1.alvo, d2.alvo], ['ext1', 'ext2'], 'nucleo: drones dividem extratores com estoque');
   pilhas.ext1 = 8; pilhas.ext2 = 0;
   assert.strictEqual(escolherAlvo(d2, 4), 'ext1', 'nucleo: drones compartilham pilha quando ha sobra');
+}
+
+// ── NEON TORRES ────────────────────────────────────
+// As regras saem do fonte: a trilha tem que fechar nos dois formatos, os preços
+// so podem subir e as ondas so podem engrossar. Sem isso o jogo abre e o drone
+// nasce no meio do quadro ou a onda 12 vem mais fraca que a 11.
+{
+  const torres = games.torres;
+  const ini = torres.indexOf('  // ── regras ──');
+  const fim = torres.indexOf('  // ── fim das regras ──');
+  assert.ok(ini > 0 && fim > ini, 'torres: marcadores das regras nao encontrados');
+  const T = new Function(torres.slice(ini, fim)
+    + '; return { MAPAS, NV_MAX, VENDA, TORRES, ORDEM_TORRES, INIMIGOS, escalaVida, custoEvolucao, danoTorre, alcanceTorre, gerarOnda, bonusOnda, CRED_INICIAL };')();
+  assert.match(torres, /Neon\.world\(canvas, \[900, 600\], \[500, 800\]\)/, 'torres: o quadro deitado e 900x600 e o em pe 500x800');
+  for (const [nome, m, W, H] of [['deitado', T.MAPAS.deitado, 900, 600], ['emPe', T.MAPAS.emPe, 500, 800]]) {
+    assert.strictEqual(m.cols * m.cell, W, `torres: a grade ${nome} nao fecha na largura`);
+    assert.strictEqual(m.rows * m.cell, H, `torres: a grade ${nome} nao fecha na altura`);
+    const p = m.pontos;
+    assert.ok(p.length >= 4, `torres: trilha ${nome} curta demais`);
+    const fora = ([c, r]) => c < 0 || r < 0 || c >= m.cols || r >= m.rows;
+    assert.ok(fora(p[0]), `torres: a trilha ${nome} tem que comecar fora do quadro`);
+    assert.ok(fora(p[p.length - 1]), `torres: a trilha ${nome} tem que sair do quadro`);
+    const celulas = new Set();
+    for (let i = 0; i < p.length - 1; i++) {
+      const [c1, r1] = p[i], [c2, r2] = p[i + 1];
+      assert.ok(c1 === c2 || r1 === r2, `torres: trecho ${i} da trilha ${nome} nao e reto`);
+      assert.ok(c1 !== c2 || r1 !== r2, `torres: trecho ${i} da trilha ${nome} tem comprimento zero`);
+      if (i > 0) assert.ok(!fora(p[i]), `torres: canto ${i} da trilha ${nome} fica fora do quadro`);
+      for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++)
+        for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) {
+          const k = c + ',' + r;
+          // o canto entra em dois trechos; qualquer outra repeticao e a trilha se cruzando
+          if (celulas.has(k) && !(i > 0 && c === c1 && r === r1)) assert.fail(`torres: a trilha ${nome} passa duas vezes em ${k}`);
+          celulas.add(k);
+        }
+    }
+    const livres = m.cols * m.rows - [...celulas].filter(k => !fora(k.split(',').map(Number))).length;
+    assert.ok(livres >= m.cols * m.rows * 0.5, `torres: a trilha ${nome} deixa so ${livres} celulas livres`);
+  }
+  for (const tipo of T.ORDEM_TORRES) assert.ok(T.TORRES[tipo], `torres: a tecla aponta pra torre ${tipo} que nao existe`);
+  for (const [tipo, def] of Object.entries(T.TORRES)) {
+    let total = def.custo;
+    for (let nv = 1; nv < T.NV_MAX; nv++) {
+      assert.ok(T.custoEvolucao(def, nv + 1) > T.custoEvolucao(def, nv), `torres: ${tipo} fica mais barata de evoluir no nivel ${nv + 1}`);
+      assert.ok(T.danoTorre(def, nv + 1) > T.danoTorre(def, nv), `torres: ${tipo} perde dano ao evoluir pro ${nv + 1}`);
+      assert.ok(T.alcanceTorre(def, nv + 1) > T.alcanceTorre(def, nv), `torres: ${tipo} perde alcance ao evoluir pro ${nv + 1}`);
+      total += T.custoEvolucao(def, nv);
+    }
+    assert.ok(Math.floor(total * T.VENDA) < total, `torres: vender ${tipo} nao pode devolver tudo`);
+    assert.ok(def.alcance * 60 >= 60 * 0.78, `torres: ${tipo} nem alcanca a trilha do lado`);
+  }
+  assert.ok(Math.min(...Object.values(T.TORRES).map(t => t.custo)) <= T.CRED_INICIAL / 2,
+    'torres: o credito inicial tem que pagar pelo menos duas torres baratas');
+  let vidaAnterior = 0, qtdAnterior = 0, chefes = 0;
+  for (let n = 1; n <= 40; n++) {
+    const onda = T.gerarOnda(n);
+    for (const e of onda) assert.ok(T.INIMIGOS[e.tipo], `torres: a onda ${n} chama ${e.tipo}, que nao existe`);
+    const vida = T.escalaVida(n);
+    assert.ok(vida > vidaAnterior, `torres: a onda ${n} vem mais fraca que a anterior`);
+    // o chefe e um pico a cada 10 ondas; a tropa comum e que nao pode encolher
+    const tropa = onda.filter(e => e.tipo !== 'chefe').length;
+    assert.ok(tropa >= qtdAnterior, `torres: a onda ${n} traz menos inimigos que a anterior`);
+    assert.ok(T.bonusOnda(n) > 0, `torres: a onda ${n} nao paga bonus`);
+    if (onda.some(e => e.tipo === 'chefe')) chefes++;
+    vidaAnterior = vida; qtdAnterior = tropa;
+  }
+  assert.strictEqual(chefes, 4, 'torres: em 40 ondas tem que vir 4 chefes');
+  assert.ok(T.gerarOnda(1).every(e => e.tipo === 'drone'), 'torres: a primeira onda e so drone, pra aprender');
+  for (const [tipo, def] of Object.entries(T.INIMIGOS)) {
+    assert.ok(def.vidas >= 1 && def.premio > 0 && def.vel > 0, `torres: ${tipo} esta mal definido`);
+  }
 }
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);
