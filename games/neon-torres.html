@@ -91,7 +91,7 @@
   const VENDA = 0.6;
   const VIDAS = 20;
   const CRED_INICIAL = 150;
-  const JUROS = 0.05, JUROS_TETO = 60;
+  const JUROS = 0.05, JUROS_TETO = 40;
   const VIDA_A_CADA = 5;
   // cadencia em segundos entre tiros; alcance em células; dano por tiro no nível 1.
   // especial = o que muda no nível máximo.
@@ -113,22 +113,23 @@
   const ALVOS = ['primeiro', 'ultimo', 'forte'];
   // vel em células por segundo; armadura tira um pedaço fixo de cada tiro
   const INIMIGOS = {
-    drone:    { nome: 'DRONE',    vida: 30,  vel: 1.5,  premio: 5,  vidas: 1, cor: '#ed887f', r: 0.19, dica: 'o básico' },
-    veloz:    { nome: 'VELOZ',    vida: 18,  vel: 2.9,  premio: 6,  vidas: 1, cor: '#efce95', r: 0.16, dica: 'corre, mas é frágil' },
-    tanque:   { nome: 'TANQUE',   vida: 130, vel: 0.85, premio: 15, vidas: 2, cor: '#afa3f5', r: 0.26, dica: 'lento, tira 2 vidas' },
-    blindado: { nome: 'BLINDADO', vida: 70,  vel: 1.25, premio: 11, vidas: 1, cor: '#a8dba0', r: 0.21, armadura: 5, dica: 'armadura corta cada tiro' },
-    curador:  { nome: 'CURADOR',  vida: 60,  vel: 1.1,  premio: 14, vidas: 1, cor: '#9be7ce', r: 0.2, cura: 8, raioCura: 1.6, dica: 'cura quem está perto' },
-    divisor:  { nome: 'DIVISOR',  vida: 90,  vel: 1.0,  premio: 12, vidas: 2, cor: '#e9b77c', r: 0.23, solta: 'cria', qtd: 3, dica: 'vira 3 ao morrer' },
-    cria:     { nome: 'CRIA',     vida: 12,  vel: 2.2,  premio: 2,  vidas: 1, cor: '#e9b77c', r: 0.12 },
-    chefe:    { nome: 'CHEFE',    vida: 800, vel: 0.65, premio: 90, vidas: 5, cor: '#ff2b7a', r: 0.34, armadura: 4, convoca: 'drone', cada: 5, dica: 'tira 5 vidas e chama drones' },
+    drone:    { nome: 'DRONE',    vida: 38,  vel: 1.5,  premio: 5,  vidas: 1, cor: '#ed887f', r: 0.19, dica: 'o básico' },
+    veloz:    { nome: 'VELOZ',    vida: 24,  vel: 2.9,  premio: 6,  vidas: 1, cor: '#efce95', r: 0.16, dica: 'corre, mas é frágil' },
+    tanque:   { nome: 'TANQUE',   vida: 170, vel: 0.85, premio: 15, vidas: 2, cor: '#afa3f5', r: 0.26, dica: 'lento, tira 2 vidas' },
+    blindado: { nome: 'BLINDADO', vida: 90,  vel: 1.25, premio: 11, vidas: 1, cor: '#a8dba0', r: 0.21, armadura: 5, dica: 'armadura corta cada tiro' },
+    curador:  { nome: 'CURADOR',  vida: 80,  vel: 1.1,  premio: 14, vidas: 1, cor: '#9be7ce', r: 0.2, cura: 8, raioCura: 1.6, dica: 'cura quem está perto' },
+    divisor:  { nome: 'DIVISOR',  vida: 120, vel: 1.0,  premio: 12, vidas: 2, cor: '#e9b77c', r: 0.23, solta: 'cria', qtd: 3, dica: 'vira 3 ao morrer' },
+    cria:     { nome: 'CRIA',     vida: 16,  vel: 2.2,  premio: 2,  vidas: 1, cor: '#e9b77c', r: 0.12 },
+    chefe:    { nome: 'CHEFE',    vida: 1100, vel: 0.65, premio: 90, vidas: 5, cor: '#ff2b7a', r: 0.34, armadura: 4, convoca: 'drone', cada: 5, dica: 'tira 5 vidas e chama drones' },
   };
   const PODERES = {
     bomba:    { nome: 'BOMBA',    icone: '💥', tecla: 'B', cd: 45, dano: 160, raio: 1.8 },
     congelar: { nome: 'CONGELAR', icone: '🧊', tecla: 'C', cd: 60, dur: 3, lento: 0.25 },
   };
-  const escalaVida = n => 1 + 0.12 * (n - 1) + 0.012 * (n - 1) * (n - 1);
-  const escalaPremio = n => 1 + 0.04 * (n - 1);
-  const bonusOnda = n => 20 + 5 * n;
+  // sobe rapido: na onda 10 o inimigo tem 4x a vida, na 20 tem 11x
+  const escalaVida = n => 1 + 0.18 * (n - 1) + 0.02 * (n - 1) * (n - 1);
+  const escalaPremio = n => 1 + 0.03 * (n - 1);
+  const bonusOnda = n => 15 + 4 * n;
   const juros = cred => Math.min(JUROS_TETO, Math.floor(cred * JUROS));
   const custoEvolucao = (def, nv) => Math.round(def.custo * 0.9 * nv);       // do nível nv pro nv+1
   const danoTorre = (def, nv) => Math.round(def.dano * Math.pow(1.6, nv - 1));
