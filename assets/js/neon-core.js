@@ -163,6 +163,11 @@ window.Neon = (function () {
     record()      { if (!g()) return; [523, 659, 784, 1046].forEach((f, i) => tone(f, 0, i * 0.09, 0.12, 'triangle', 0.2)); },
     death()       { if (!g()) return; noise(0, 0.35, 0.3, null, 700); tone(300, 45, 0, 0.55, 'sawtooth', 0.22); },
     pause()       { if (!g()) return; tone(440, 0, 0, 0.06, 'sine', 0.1); },
+    // NEON TORRES: raio que salta, congelamento, tiro de precisao e acido
+    zap()         { if (!g()) return; noise(0, 0.08, 0.1, null, 4000); tone(1400, 300, 0, 0.12, 'sawtooth', 0.09); },
+    freeze()      { if (!g()) return; tone(1800, 600, 0, 0.25, 'sine', 0.1); tone(2400, 900, 0.05, 0.25, 'triangle', 0.05); },
+    snipe()       { if (!g()) return; noise(0, 0.14, 0.22, null, 2500); tone(170, 40, 0, 0.26, 'square', 0.16); },
+    acid()        { if (!g()) return; tone(420, 260, 0, 0.12, 'triangle', 0.09); },
   };
   const g = () => soundOn && AC;
 

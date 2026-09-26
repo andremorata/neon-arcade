@@ -2479,45 +2479,66 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
 }
 
 // ── NEON TORRES ────────────────────────────────────
-// As regras saem do fonte: a trilha tem que fechar nos dois formatos, os preços
-// so podem subir e as ondas so podem engrossar. Sem isso o jogo abre e o drone
-// nasce no meio do quadro ou a onda 12 vem mais fraca que a 11.
+// As regras saem do fonte: toda trilha tem que fechar nos dois formatos, os
+// preços so podem subir e as ondas so podem engrossar. Sem isso o jogo abre e
+// o drone nasce no meio do quadro ou a onda 12 vem mais fraca que a 11.
 {
   const torres = games.torres;
   const ini = torres.indexOf('  // ── regras ──');
   const fim = torres.indexOf('  // ── fim das regras ──');
   assert.ok(ini > 0 && fim > ini, 'torres: marcadores das regras nao encontrados');
   const T = new Function(torres.slice(ini, fim)
-    + '; return { MAPAS, NV_MAX, VENDA, TORRES, ORDEM_TORRES, INIMIGOS, escalaVida, custoEvolucao, danoTorre, alcanceTorre, gerarOnda, bonusOnda, CRED_INICIAL };')();
+    + '; return { FORMATOS, NV_MAX, VENDA, VIDAS, TORRES, ORDEM_TORRES, ALVOS, INIMIGOS, PODERES, escalaVida, custoEvolucao, danoTorre, alcanceTorre, gerarOnda, bonusOnda, juros, CRED_INICIAL, JUROS_TETO };')();
   assert.match(torres, /Neon\.world\(canvas, \[900, 600\], \[500, 800\]\)/, 'torres: o quadro deitado e 900x600 e o em pe 500x800');
-  for (const [nome, m, W, H] of [['deitado', T.MAPAS.deitado, 900, 600], ['emPe', T.MAPAS.emPe, 500, 800]]) {
-    assert.strictEqual(m.cols * m.cell, W, `torres: a grade ${nome} nao fecha na largura`);
-    assert.strictEqual(m.rows * m.cell, H, `torres: a grade ${nome} nao fecha na altura`);
-    const p = m.pontos;
-    assert.ok(p.length >= 4, `torres: trilha ${nome} curta demais`);
-    const fora = ([c, r]) => c < 0 || r < 0 || c >= m.cols || r >= m.rows;
-    assert.ok(fora(p[0]), `torres: a trilha ${nome} tem que comecar fora do quadro`);
-    assert.ok(fora(p[p.length - 1]), `torres: a trilha ${nome} tem que sair do quadro`);
-    const celulas = new Set();
-    for (let i = 0; i < p.length - 1; i++) {
-      const [c1, r1] = p[i], [c2, r2] = p[i + 1];
-      assert.ok(c1 === c2 || r1 === r2, `torres: trecho ${i} da trilha ${nome} nao e reto`);
-      assert.ok(c1 !== c2 || r1 !== r2, `torres: trecho ${i} da trilha ${nome} tem comprimento zero`);
-      if (i > 0) assert.ok(!fora(p[i]), `torres: canto ${i} da trilha ${nome} fica fora do quadro`);
-      for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++)
-        for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) {
-          const k = c + ',' + r;
-          // o canto entra em dois trechos; qualquer outra repeticao e a trilha se cruzando
-          if (celulas.has(k) && !(i > 0 && c === c1 && r === r1)) assert.fail(`torres: a trilha ${nome} passa duas vezes em ${k}`);
-          celulas.add(k);
+  for (const [nome, f, W, H] of [['deitado', T.FORMATOS.deitado, 900, 600], ['emPe', T.FORMATOS.emPe, 500, 800]]) {
+    assert.strictEqual(f.cols * f.cell, W, `torres: a grade ${nome} nao fecha na largura`);
+    assert.strictEqual(f.rows * f.cell, H, `torres: a grade ${nome} nao fecha na altura`);
+    assert.ok(f.mapas.length >= 3, `torres: ${nome} precisa de pelo menos 3 trilhas`);
+    assert.strictEqual(new Set(f.mapas.map(m => m.nome)).size, f.mapas.length, `torres: nome de trilha repetido em ${nome}`);
+    for (const m of f.mapas) {
+      const p = m.pontos, rot = `${nome}/${m.nome}`;
+      assert.ok(p.length >= 4, `torres: trilha ${rot} curta demais`);
+      const fora = ([c, r]) => c < 0 || r < 0 || c >= f.cols || r >= f.rows;
+      assert.ok(fora(p[0]), `torres: a trilha ${rot} tem que comecar fora do quadro`);
+      assert.ok(fora(p[p.length - 1]), `torres: a trilha ${rot} tem que sair do quadro`);
+      const celulas = new Set();
+      for (let i = 0; i < p.length - 1; i++) {
+        const [c1, r1] = p[i], [c2, r2] = p[i + 1];
+        assert.ok(c1 === c2 || r1 === r2, `torres: trecho ${i} da trilha ${rot} nao e reto`);
+        assert.ok(c1 !== c2 || r1 !== r2, `torres: trecho ${i} da trilha ${rot} tem comprimento zero`);
+        if (i > 0) assert.ok(!fora(p[i]), `torres: canto ${i} da trilha ${rot} fica fora do quadro`);
+        for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++)
+          for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) {
+            const k = c + ',' + r;
+            // o canto entra em dois trechos; qualquer outra repeticao e a trilha se cruzando
+            if (celulas.has(k) && !(i > 0 && c === c1 && r === r1)) assert.fail(`torres: a trilha ${rot} passa duas vezes em ${k}`);
+            celulas.add(k);
+          }
+      }
+      // trechos paralelos colados viram uma faixa larga sem lugar pra torre entre eles
+      for (const k of celulas) {
+        const [c, r] = k.split(',').map(Number);
+        for (const [dc, dr] of [[1, 0], [0, 1]]) {
+          const viz = `${c + dc},${r + dr}`;
+          if (!celulas.has(viz)) continue;
+          // vizinhos na trilha sao normais so quando estao no mesmo trecho reto;
+          // checa se ha um terceiro vizinho perpendicular formando um bloco 2x2
+          const diag = `${c + (dc ? 0 : 1)},${r + (dr ? 0 : 1)}`, diag2 = `${c + dc + (dc ? 0 : 1)},${r + dr + (dr ? 0 : 1)}`;
+          assert.ok(!(celulas.has(diag) && celulas.has(diag2)), `torres: a trilha ${rot} forma um bloco 2x2 em ${k}`);
         }
+      }
+      const dentroN = [...celulas].filter(k => !fora(k.split(',').map(Number))).length;
+      const livres = f.cols * f.rows - dentroN;
+      assert.ok(livres >= f.cols * f.rows * 0.5, `torres: a trilha ${rot} deixa so ${livres} celulas livres`);
+      assert.ok(dentroN >= 20, `torres: a trilha ${rot} e curta demais pra defender (${dentroN} celulas)`);
     }
-    const livres = m.cols * m.rows - [...celulas].filter(k => !fora(k.split(',').map(Number))).length;
-    assert.ok(livres >= m.cols * m.rows * 0.5, `torres: a trilha ${nome} deixa so ${livres} celulas livres`);
   }
+  assert.strictEqual(T.ORDEM_TORRES.length, Object.keys(T.TORRES).length, 'torres: toda torre precisa de uma tecla');
   for (const tipo of T.ORDEM_TORRES) assert.ok(T.TORRES[tipo], `torres: a tecla aponta pra torre ${tipo} que nao existe`);
+  assert.ok(T.ORDEM_TORRES.length <= 9, 'torres: as teclas 1-9 nao cabem mais torres');
   for (const [tipo, def] of Object.entries(T.TORRES)) {
     let total = def.custo;
+    assert.ok(def.desc && def.especial, `torres: ${tipo} precisa de descricao e especial no menu`);
     for (let nv = 1; nv < T.NV_MAX; nv++) {
       assert.ok(T.custoEvolucao(def, nv + 1) > T.custoEvolucao(def, nv), `torres: ${tipo} fica mais barata de evoluir no nivel ${nv + 1}`);
       assert.ok(T.danoTorre(def, nv + 1) > T.danoTorre(def, nv), `torres: ${tipo} perde dano ao evoluir pro ${nv + 1}`);
@@ -2525,14 +2546,17 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
       total += T.custoEvolucao(def, nv);
     }
     assert.ok(Math.floor(total * T.VENDA) < total, `torres: vender ${tipo} nao pode devolver tudo`);
-    assert.ok(def.alcance * 60 >= 60 * 0.78, `torres: ${tipo} nem alcanca a trilha do lado`);
+    assert.ok(def.alcance >= 0.78, `torres: ${tipo} nem alcanca a trilha do lado`);
   }
   assert.ok(Math.min(...Object.values(T.TORRES).map(t => t.custo)) <= T.CRED_INICIAL / 2,
     'torres: o credito inicial tem que pagar pelo menos duas torres baratas');
+  assert.ok(Object.values(T.TORRES).filter(t => t.custo <= T.CRED_INICIAL).length >= 3,
+    'torres: pelo menos tres torres tem que caber no credito inicial');
   let vidaAnterior = 0, qtdAnterior = 0, chefes = 0;
+  const apareceu = new Set();
   for (let n = 1; n <= 40; n++) {
     const onda = T.gerarOnda(n);
-    for (const e of onda) assert.ok(T.INIMIGOS[e.tipo], `torres: a onda ${n} chama ${e.tipo}, que nao existe`);
+    for (const e of onda) { assert.ok(T.INIMIGOS[e.tipo], `torres: a onda ${n} chama ${e.tipo}, que nao existe`); apareceu.add(e.tipo); }
     const vida = T.escalaVida(n);
     assert.ok(vida > vidaAnterior, `torres: a onda ${n} vem mais fraca que a anterior`);
     // o chefe e um pico a cada 10 ondas; a tropa comum e que nao pode encolher
@@ -2545,8 +2569,27 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   assert.strictEqual(chefes, 4, 'torres: em 40 ondas tem que vir 4 chefes');
   assert.ok(T.gerarOnda(1).every(e => e.tipo === 'drone'), 'torres: a primeira onda e so drone, pra aprender');
   for (const [tipo, def] of Object.entries(T.INIMIGOS)) {
-    assert.ok(def.vidas >= 1 && def.premio > 0 && def.vel > 0, `torres: ${tipo} esta mal definido`);
+    assert.ok(def.vidas >= 1 && def.premio > 0 && def.vel > 0 && def.vida > 0, `torres: ${tipo} esta mal definido`);
+    if (def.solta) assert.ok(T.INIMIGOS[def.solta], `torres: ${tipo} solta ${def.solta}, que nao existe`);
+    if (def.convoca) assert.ok(T.INIMIGOS[def.convoca] && def.cada > 0, `torres: ${tipo} convoca errado`);
+    if (def.cura) assert.ok(def.raioCura > 0, `torres: ${tipo} cura sem raio`);
+    // todo inimigo que a onda chama de novo tem que ter a dica do banner
+    if (apareceu.has(tipo)) assert.ok(def.dica, `torres: ${tipo} aparece nas ondas e nao tem dica`);
   }
+  for (const tipo of Object.keys(T.INIMIGOS)) {
+    const def = T.INIMIGOS[tipo];
+    // quem nao entra na onda so pode nascer de outro inimigo
+    if (!apareceu.has(tipo)) assert.ok(Object.values(T.INIMIGOS).some(o => o.solta === tipo || o.convoca === tipo),
+      `torres: ${tipo} nunca aparece em 40 ondas nem nasce de ninguem`);
+    assert.ok(def.r > 0 && def.r < 0.5, `torres: ${tipo} nao cabe na trilha`);
+  }
+  for (const [id, p] of Object.entries(T.PODERES)) {
+    assert.ok(p.cd >= 20 && p.tecla && p.icone, `torres: poder ${id} sem recarga ou tecla`);
+    assert.match(torres, new RegExp(`K === '${p.tecla}'`), `torres: a tecla ${p.tecla} do poder ${id} nao esta ligada`);
+  }
+  assert.strictEqual(T.juros(10000), T.JUROS_TETO, 'torres: os juros tem teto');
+  assert.strictEqual(T.juros(0), 0, 'torres: sem credito nao ha juros');
+  assert.ok(T.ALVOS.includes('primeiro') && T.ALVOS.length >= 2, 'torres: modos de alvo');
 }
 
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);

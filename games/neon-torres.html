@@ -12,6 +12,11 @@
 <link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   .stage { --arw: 3; --arh: 2; --maxw: 900px; }
+  .mapa-pick { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 0 0 16px; }
+  .mapa-pick .lbl { width: 100%; text-align: center; font-size: 10px; letter-spacing: 2px; opacity: .6; margin-bottom: 2px; }
+  .mapa-btn { background: rgba(17,29,44,.9); border: 1px solid rgba(142,131,200,.5); color: var(--neon-cyan); font: 700 11px Orbitron, sans-serif; letter-spacing: 1px; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+  .mapa-btn.on { border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 12px rgba(255,122,217,.35); }
+  .mapa-pick.oculto { display: none; }
 </style>
 </head>
 <body>
@@ -37,21 +42,22 @@
     <canvas id="game" width="900" height="600"></canvas>
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON TORRES</h2>
-      <p id="overlayText">Os drones seguem a trilha até o núcleo. Toque num quadrado livre para construir uma torre, toque na torre para evoluir ou vender. PULSO atira rápido, MÍSSIL explode em área, GELO congela e RAIO salta entre inimigos. Chame a próxima onda antes da hora para ganhar bônus. Um chefe aparece a cada 10 ondas.</p>
+      <p id="overlayText">Os drones seguem a trilha até o núcleo. Toque num quadrado livre para construir; toque na torre para evoluir, vender ou trocar o alvo. Seis torres, sete inimigos, dois poderes com recarga e um chefe a cada 10 ondas. Chamar a onda antes da hora rende créditos, e cada onda vencida paga juros sobre o que você guardou.</p>
       <div class="sub" id="overlaySub"></div>
       <div class="final-stats" id="finalStats" style="display:none;">
         <div class="fstat"><span>Ondas</span><b id="fsOndas">0</b></div>
         <div class="fstat"><span>Abates</span><b id="fsAbates">0</b></div>
         <div class="fstat"><span>Torres</span><b id="fsTorres">0</b></div>
       </div>
+      <div class="mapa-pick" id="mapaPick"><span class="lbl">TRILHA</span></div>
       <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
-        <span class="key">Toque / clique constrói</span><span class="key">Setas movem o cursor</span><span class="key">1-4 torre · U evolui · V vende</span><span class="key">ESPAÇO chama a onda</span><span class="key">P pausa</span>
+        <span class="key">Toque / clique constrói</span><span class="key">Setas movem o cursor</span><span class="key">1-6 torre · U evolui · V vende · T alvo</span><span class="key">B bomba · C congelar · F 2x</span><span class="key">ESPAÇO chama a onda</span><span class="key">P pausa</span>
       </div>
     </div>
   </div>
 
-  <footer>// <a href="../index.html">← arcade</a> · vender devolve 60% · chamar a onda cedo rende créditos · tanque tira 2 vidas, chefe tira 5 · o recorde é a onda mais alta vencida</footer>
+  <footer>// <a href="../index.html">← arcade</a> · vender devolve 60% · juros de 5% por onda vencida · +1 vida a cada 5 ondas · tanque tira 2 vidas, chefe tira 5 · o recorde é a onda mais alta vencida</footer>
 </div>
 
 <script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
@@ -63,41 +69,67 @@
   const { W, H, retrato } = Neon.world(canvas, [900, 600], [500, 800]);
 
   // ── regras ──
-  // Mapa, torres, inimigos e ondas: nada aqui toca DOM nem canvas. O teste
-  // recorta este bloco e confere que a trilha fecha, que os preços só sobem e
-  // que as ondas só engrossam. Alcance e velocidade ficam em células, então o
-  // mesmo número vale no quadro deitado (60px) e no em pé (50px).
-  const MAPAS = {
-    // pontos = cantos da trilha em células; o primeiro e o último ficam fora
-    // do quadro, então o inimigo entra e sai pela borda em vez de nascer no meio
-    deitado: { cols: 15, rows: 10, cell: 60,
-      pontos: [[-1, 2], [3, 2], [3, 6], [7, 6], [7, 1], [11, 1], [11, 7], [13, 7], [13, 4], [15, 4]] },
-    emPe:    { cols: 10, rows: 16, cell: 50,
-      pontos: [[2, -1], [2, 3], [7, 3], [7, 7], [2, 7], [2, 11], [7, 11], [7, 14], [4, 14], [4, 16]] },
+  // Mapa, torres, inimigos, ondas e poderes: nada aqui toca DOM nem canvas. O
+  // teste recorta este bloco e confere que toda trilha fecha sem se cruzar, que
+  // os preços só sobem e que as ondas só engrossam. Alcance, raio e velocidade
+  // ficam em células, então o mesmo número vale deitado (60px) e em pé (50px).
+  const FORMATOS = {
+    // pontos = cantos da trilha em células; o primeiro e o último ficam fora do
+    // quadro, então o inimigo entra e sai pela borda em vez de nascer no meio
+    deitado: { cols: 15, rows: 10, cell: 60, mapas: [
+      { nome: 'SERPENTE',  pontos: [[-1, 2], [3, 2], [3, 6], [7, 6], [7, 1], [11, 1], [11, 7], [13, 7], [13, 4], [15, 4]] },
+      { nome: 'CORREDOR',  pontos: [[-1, 1], [13, 1], [13, 4], [1, 4], [1, 8], [15, 8]] },
+      { nome: 'FERRADURA', pontos: [[7, -1], [7, 3], [2, 3], [2, 7], [12, 7], [12, 3], [9, 3], [9, -1]] },
+    ] },
+    emPe: { cols: 10, rows: 16, cell: 50, mapas: [
+      { nome: 'SERPENTE',  pontos: [[2, -1], [2, 3], [7, 3], [7, 7], [2, 7], [2, 11], [7, 11], [7, 14], [4, 14], [4, 16]] },
+      { nome: 'CORREDOR',  pontos: [[-1, 2], [8, 2], [8, 6], [1, 6], [1, 10], [8, 10], [8, 14], [-1, 14]] },
+      { nome: 'FERRADURA', pontos: [[3, -1], [3, 4], [1, 4], [1, 12], [8, 12], [8, 4], [6, 4], [6, -1]] },
+    ] },
   };
   const NV_MAX = 3;
   const VENDA = 0.6;
   const VIDAS = 20;
   const CRED_INICIAL = 150;
-  // cadencia em segundos entre tiros; alcance em células; dano por tiro no nível 1
+  const JUROS = 0.05, JUROS_TETO = 60;
+  const VIDA_A_CADA = 5;
+  // cadencia em segundos entre tiros; alcance em células; dano por tiro no nível 1.
+  // especial = o que muda no nível máximo.
   const TORRES = {
-    pulso:  { nome: 'PULSO',  icone: '🔫', custo: 50,  cor: '#9be7ce', alcance: 2.3, cadencia: 0.32, dano: 8,  tipo: 'tiro' },
-    missil: { nome: 'MÍSSIL', icone: '🚀', custo: 90,  cor: '#efb76f', alcance: 3.0, cadencia: 1.5,  dano: 34, tipo: 'splash', raio: 1.1 },
-    gelo:   { nome: 'GELO',   icone: '❄️', custo: 70,  cor: '#8faef2', alcance: 1.9, cadencia: 1.0,  dano: 5,  tipo: 'gelo', lento: 0.45, dur: 1.6 },
-    raio:   { nome: 'RAIO',   icone: '⚡', custo: 120, cor: '#ff7ad9', alcance: 2.6, cadencia: 1.1,  dano: 20, tipo: 'cadeia', saltos: 3, pulo: 1.6 },
+    pulso:  { nome: 'PULSO',  icone: '🔫', custo: 50,  cor: '#9be7ce', alcance: 2.3, cadencia: 0.32, dano: 8,  tipo: 'tiro',
+              desc: 'Tiro rápido de alvo único', especial: 'Rajada dupla' },
+    missil: { nome: 'MÍSSIL', icone: '🚀', custo: 90,  cor: '#efb76f', alcance: 3.0, cadencia: 1.5,  dano: 34, tipo: 'splash', raio: 1.1,
+              desc: 'Explode em área', especial: 'Explosão 50% maior' },
+    gelo:   { nome: 'GELO',   icone: '❄️', custo: 70,  cor: '#8faef2', alcance: 1.9, cadencia: 1.0,  dano: 5,  tipo: 'gelo', lento: 0.45, dur: 1.6,
+              desc: 'Congela tudo em volta', especial: 'Congela mais e por mais tempo' },
+    raio:   { nome: 'RAIO',   icone: '⚡', custo: 120, cor: '#ff7ad9', alcance: 2.6, cadencia: 1.1,  dano: 20, tipo: 'cadeia', saltos: 3, pulo: 1.6,
+              desc: 'Salta entre inimigos', especial: '+2 saltos' },
+    mira:   { nome: 'MIRA',   icone: '🎯', custo: 150, cor: '#ed887f', alcance: 4.5, cadencia: 2.2,  dano: 70, tipo: 'mira',
+              desc: 'Longo alcance, ignora armadura', especial: 'Dano dobrado em chefes' },
+    veneno: { nome: 'ÁCIDO',  icone: '🧪', custo: 80,  cor: '#a8dba0', alcance: 2.4, cadencia: 0.9,  dano: 4,  tipo: 'veneno', dps: 6, dur: 3, pilhas: 3,
+              desc: 'Corrói por 3s e acumula', especial: 'Acumula até 5 vezes' },
   };
-  const ORDEM_TORRES = ['pulso', 'missil', 'gelo', 'raio'];
+  const ORDEM_TORRES = ['pulso', 'missil', 'gelo', 'raio', 'mira', 'veneno'];
+  const ALVOS = ['primeiro', 'ultimo', 'forte'];
   // vel em células por segundo; armadura tira um pedaço fixo de cada tiro
   const INIMIGOS = {
-    drone:    { nome: 'DRONE',    vida: 30,  vel: 1.5, premio: 5,  vidas: 1, cor: '#ed887f', r: 0.19 },
-    veloz:    { nome: 'VELOZ',    vida: 18,  vel: 2.9, premio: 6,  vidas: 1, cor: '#efce95', r: 0.16 },
-    tanque:   { nome: 'TANQUE',   vida: 130, vel: 0.85, premio: 15, vidas: 2, cor: '#afa3f5', r: 0.26 },
-    blindado: { nome: 'BLINDADO', vida: 70,  vel: 1.25, premio: 11, vidas: 1, cor: '#a8dba0', r: 0.21, armadura: 5 },
-    chefe:    { nome: 'CHEFE',    vida: 800, vel: 0.65, premio: 90, vidas: 5, cor: '#ff2b7a', r: 0.34, armadura: 4 },
+    drone:    { nome: 'DRONE',    vida: 30,  vel: 1.5,  premio: 5,  vidas: 1, cor: '#ed887f', r: 0.19, dica: 'o básico' },
+    veloz:    { nome: 'VELOZ',    vida: 18,  vel: 2.9,  premio: 6,  vidas: 1, cor: '#efce95', r: 0.16, dica: 'corre, mas é frágil' },
+    tanque:   { nome: 'TANQUE',   vida: 130, vel: 0.85, premio: 15, vidas: 2, cor: '#afa3f5', r: 0.26, dica: 'lento, tira 2 vidas' },
+    blindado: { nome: 'BLINDADO', vida: 70,  vel: 1.25, premio: 11, vidas: 1, cor: '#a8dba0', r: 0.21, armadura: 5, dica: 'armadura corta cada tiro' },
+    curador:  { nome: 'CURADOR',  vida: 60,  vel: 1.1,  premio: 14, vidas: 1, cor: '#9be7ce', r: 0.2, cura: 8, raioCura: 1.6, dica: 'cura quem está perto' },
+    divisor:  { nome: 'DIVISOR',  vida: 90,  vel: 1.0,  premio: 12, vidas: 2, cor: '#e9b77c', r: 0.23, solta: 'cria', qtd: 3, dica: 'vira 3 ao morrer' },
+    cria:     { nome: 'CRIA',     vida: 12,  vel: 2.2,  premio: 2,  vidas: 1, cor: '#e9b77c', r: 0.12 },
+    chefe:    { nome: 'CHEFE',    vida: 800, vel: 0.65, premio: 90, vidas: 5, cor: '#ff2b7a', r: 0.34, armadura: 4, convoca: 'drone', cada: 5, dica: 'tira 5 vidas e chama drones' },
+  };
+  const PODERES = {
+    bomba:    { nome: 'BOMBA',    icone: '💥', tecla: 'B', cd: 45, dano: 160, raio: 1.8 },
+    congelar: { nome: 'CONGELAR', icone: '🧊', tecla: 'C', cd: 60, dur: 3, lento: 0.25 },
   };
   const escalaVida = n => 1 + 0.12 * (n - 1) + 0.012 * (n - 1) * (n - 1);
   const escalaPremio = n => 1 + 0.04 * (n - 1);
   const bonusOnda = n => 20 + 5 * n;
+  const juros = cred => Math.min(JUROS_TETO, Math.floor(cred * JUROS));
   const custoEvolucao = (def, nv) => Math.round(def.custo * 0.9 * nv);       // do nível nv pro nv+1
   const danoTorre = (def, nv) => Math.round(def.dano * Math.pow(1.6, nv - 1));
   const alcanceTorre = (def, nv) => def.alcance * (1 + 0.15 * (nv - 1));       // em células
@@ -110,41 +142,64 @@
     if (n >= 3) add('veloz', Math.floor(n * 0.8), 0.42);
     if (n >= 5) add('tanque', Math.floor(n / 3), 1.4);
     if (n >= 7) add('blindado', Math.floor(n / 2), 0.9);
+    if (n >= 9) add('curador', Math.floor((n - 6) / 3), 1.6);
+    if (n >= 12) add('divisor', Math.floor((n - 9) / 3), 1.5);
     if (n % 10 === 0) add('chefe', n / 10, 2.5);
     return lista;
   }
   // ── fim das regras ──
 
-  const MAPA = retrato ? MAPAS.emPe : MAPAS.deitado;
-  const { cols: COLS, rows: ROWS, cell: CELL } = MAPA;
-  const PONTOS = MAPA.pontos.map(([c, r]) => ({ x: (c + 0.5) * CELL, y: (r + 0.5) * CELL }));
-  const caminho = new Set();
-  for (let i = 0; i < MAPA.pontos.length - 1; i++) {
-    const [c1, r1] = MAPA.pontos[i], [c2, r2] = MAPA.pontos[i + 1];
-    for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++) {
-      for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) caminho.add(c + ',' + r);
+  const FORMATO = retrato ? FORMATOS.emPe : FORMATOS.deitado;
+  const { cols: COLS, rows: ROWS, cell: CELL } = FORMATO;
+  const SAVE_MAPA = 'neon-torres-mapa';
+  let mapaIdx = 0;
+  try { mapaIdx = Neon.clamp(+localStorage.getItem(SAVE_MAPA) || 0, 0, FORMATO.mapas.length - 1); } catch (_) { /* fica no primeiro */ }
+  let PONTOS = [], caminho = new Set();
+  function carregarMapa(i) {
+    mapaIdx = i;
+    const m = FORMATO.mapas[i];
+    PONTOS = m.pontos.map(([c, r]) => ({ x: (c + 0.5) * CELL, y: (r + 0.5) * CELL }));
+    caminho = new Set();
+    for (let k = 0; k < m.pontos.length - 1; k++) {
+      const [c1, r1] = m.pontos[k], [c2, r2] = m.pontos[k + 1];
+      for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++)
+        for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++) caminho.add(c + ',' + r);
     }
+    for (const b of document.querySelectorAll('.mapa-btn')) b.classList.toggle('on', +b.dataset.i === i);
+    try { localStorage.setItem(SAVE_MAPA, i); } catch (_) { /* sem armazenamento, segue */ }
   }
   const ehCaminho = (c, r) => caminho.has(c + ',' + r);
   const dentro = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS;
-  const ESPERA_PRIMEIRA = 30, ESPERA = 16;
+  const ESPERA_PRIMEIRA = 30, ESPERA = 16, ADIANTO_TETO = 40;
+  const bonusAdiantar = () => Math.min(ADIANTO_TETO, Math.round(contagem) * 2);
 
   const els = {
     cred: Neon.$('cred'), vidas: Neon.$('vidas'), onda: Neon.$('onda'), best: Neon.$('best'),
     fsOndas: Neon.$('fsOndas'), fsAbates: Neon.$('fsAbates'), fsTorres: Neon.$('fsTorres'),
+    mapaPick: Neon.$('mapaPick'),
   };
+  for (const [i, m] of FORMATO.mapas.entries()) {
+    const b = document.createElement('button');
+    b.className = 'mapa-btn'; b.dataset.i = i; b.textContent = m.nome;
+    b.addEventListener('click', () => { carregarMapa(i); Neon.audio.sfx.click(); render(); });
+    els.mapaPick.appendChild(b);
+  }
+  carregarMapa(mapaIdx);
 
   let state = 'menu', lastFrame = performance.now(), tempo = 0;
   let cred = CRED_INICIAL, vidas = VIDAS, onda = 0, abates = 0, construidas = 0;
   let pb = Neon.best.get('torres'), startHi = 0;
-  let emOnda = false, contagem = ESPERA_PRIMEIRA, fila = [], spawnT = 0;
-  let torres = [], inimigos = [], projeteis = [], feixes = [];
-  let sel = null, menu = null, botoes = [], btnOnda = null;
-  let shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' }, somT = 0;
+  let emOnda = false, contagem = ESPERA_PRIMEIRA, fila = [], spawnT = 0, velocidade = 1;
+  let torres = [], inimigos = [], projeteis = [], feixes = [], vistos = new Set();
+  let sel = null, menu = null, botoes = [], btnOnda = null, mirando = null, mouse = null;
+  let recarga = { bomba: 0, congelar: 0 }, congelado = 0;
+  let banner = null, shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' }, somT = 0, nucleoT = 0;
   const particles = new Neon.Particles();
+  const poeira = Array.from({ length: 40 }, () => ({ x: Math.random() * W, y: Math.random() * H, v: Neon.rand(6, 18), r: Neon.rand(0.6, 1.6), a: Math.random() * 6.28 }));
 
   const torreEm = (c, r) => torres.find(t => t.c === c && t.r === r);
   const fmtCred = v => `⟡${v}`;
+  const chefeVivo = () => inimigos.find(e => e.tipo === 'chefe' && !e.morto);
 
   function atualizarHud() {
     els.cred.textContent = cred;
@@ -155,9 +210,10 @@
 
   function novaPartida() {
     cred = CRED_INICIAL; vidas = VIDAS; onda = 0; abates = 0; construidas = 0;
-    emOnda = false; contagem = ESPERA_PRIMEIRA; fila = []; spawnT = 0;
-    torres = []; inimigos = []; projeteis = []; feixes = [];
-    sel = null; menu = null; botoes = []; tempo = 0;
+    emOnda = false; contagem = ESPERA_PRIMEIRA; fila = []; spawnT = 0; velocidade = 1;
+    torres = []; inimigos = []; projeteis = []; feixes = []; vistos = new Set();
+    sel = null; menu = null; botoes = []; mirando = null; tempo = 0; banner = null;
+    recarga = { bomba: 0, congelar: 0 }; congelado = 0;
     particles.clear();
     Neon.audio.music.intensity(0);
     atualizarHud();
@@ -170,11 +226,13 @@
     state = 'playing';
     Neon.overlay.hide();
     Neon.audio.music.start();
+    mostrarBanner(FORMATO.mapas[mapaIdx].nome, 'construa antes da primeira onda');
   }
   function pauseGame() {
     state = 'paused';
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
+    els.mapaPick.classList.add('oculto');
     Neon.overlay.show('PAUSADO', 'Aperte P para voltar à defesa.', 'CONTINUAR');
   }
   function resumeGame() {
@@ -185,6 +243,7 @@
 
   function shakeAt(power, ms) { if (!Neon.motion.reduced) shake = { t: ms, max: ms, power }; }
   function flashAt(color, ms) { if (!Neon.motion.reduced) flash = { t: ms, color }; }
+  function mostrarBanner(texto, sub, cor) { banner = { texto, sub: sub || '', cor: cor || '#9be7ce', t: 0, max: 2.6 }; }
 
   // ── ondas ─────────────────────────────────────────
   // Intercala os grupos: tanque no meio dos drones, veloz correndo na frente.
@@ -201,7 +260,7 @@
   function chamarOnda() {
     if (emOnda) return;
     if (onda > 0 && contagem > 0.5) {
-      const bonus = Math.round(contagem) * 2;
+      const bonus = bonusAdiantar();
       cred += bonus;
       particles.float(W / 2, H - 70, `+${bonus} ADIANTOU`, '#efce95', 16);
     }
@@ -209,9 +268,15 @@
     emOnda = true;
     fila = montarFila(onda);
     spawnT = 0.4;
-    sel = null; menu = null;
-    Neon.toast(onda % 10 === 0 ? `ONDA ${onda} · CHEFE!` : `ONDA ${onda}`);
-    Neon.audio.sfx.level();
+    sel = null; menu = null; mirando = null;
+    const novos = [...new Set(fila.map(f => f.tipo))].filter(t => !vistos.has(t));
+    for (const t of novos) vistos.add(t);
+    const chefe = onda % 10 === 0;
+    const novo = novos.find(t => t !== 'chefe');
+    mostrarBanner(chefe ? `ONDA ${onda} · CHEFE` : `ONDA ${onda}`,
+      chefe ? INIMIGOS.chefe.dica : (novo ? `novo: ${INIMIGOS[novo].nome} · ${INIMIGOS[novo].dica}` : ''),
+      chefe ? '#ff2b7a' : '#9be7ce');
+    if (chefe) { shakeAt(8, 500); Neon.audio.sfx.boom(); } else Neon.audio.sfx.level();
     Neon.audio.music.intensity(Math.min(1, onda / 20));
     atualizarHud();
     Neon.popEl(els.onda);
@@ -220,28 +285,33 @@
   function ondaVencida() {
     emOnda = false;
     contagem = ESPERA;
-    const bonus = bonusOnda(onda);
-    cred += bonus;
+    const bonus = bonusOnda(onda), rende = juros(cred);
+    cred += bonus + rende;
     pb = Neon.best.update('torres', onda);
-    particles.float(W / 2, H / 2, `ONDA ${onda} VENCIDA +${bonus}`, '#a8dba0', 18);
+    let extra = rende ? ` · juros +${rende}` : '';
+    if (onda % VIDA_A_CADA === 0 && vidas < VIDAS) { vidas++; extra += ' · +1 vida'; }
+    mostrarBanner(`ONDA ${onda} VENCIDA`, `+${bonus}${extra}`, '#a8dba0');
     Neon.audio.sfx.goal();
     atualizarHud();
   }
 
-  function nascer(tipo) {
+  function nascer(tipo, x, y, seg, prog) {
     const def = INIMIGOS[tipo];
     const vida = Math.round(def.vida * escalaVida(onda));
     inimigos.push({
       tipo, def, vida, vidaMax: vida, vel: def.vel, armadura: def.armadura || 0,
       premio: Math.round(def.premio * escalaPremio(onda)), custoVidas: def.vidas,
-      x: PONTOS[0].x, y: PONTOS[0].y, seg: 0, prog: 0, ang: 0, lento: 0, lentoFator: 1,
-      r: def.r * CELL, morto: false, fase: Math.random() * 6.28,
+      x: x === undefined ? PONTOS[0].x : x, y: y === undefined ? PONTOS[0].y : y,
+      seg: seg || 0, prog: prog || 0, ang: 0, lento: 0, lentoFator: 1, veneno: null,
+      r: def.r * CELL, morto: false, fase: Math.random() * 6.28, flash: 0, cd: def.cada || 0,
     });
   }
 
   // ── inimigos ──────────────────────────────────────
   function moverInimigo(e, dt) {
-    let d = e.vel * CELL * (e.lento > 0 ? e.lentoFator : 1) * dt;
+    let fator = e.lento > 0 ? e.lentoFator : 1;
+    if (congelado > 0) fator = Math.min(fator, PODERES.congelar.lento);
+    let d = e.vel * CELL * fator * dt;
     while (d > 0 && e.seg < PONTOS.length - 1) {
       const b = PONTOS[e.seg + 1];
       const dx = b.x - e.x, dy = b.y - e.y, dist = Math.hypot(dx, dy);
@@ -251,9 +321,38 @@
     if (e.seg >= PONTOS.length - 1) chegou(e);
   }
 
+  function habilidades(e, dt) {
+    if (e.def.cura) {
+      // cura os vizinhos, nunca a si mesmo: senão um curador sozinho vira parede
+      for (const o of inimigos) {
+        if (o === e || o.morto || o.vida >= o.vidaMax) continue;
+        if (Math.hypot(o.x - e.x, o.y - e.y) > e.def.raioCura * CELL) continue;
+        o.vida = Math.min(o.vidaMax, o.vida + e.def.cura * escalaVida(onda) * dt);
+        if (Math.random() < dt * 4) particles.emit(o.x + Neon.rand(-6, 6), o.y, 0, -30, '#9be7ce', 2, 0.5);
+      }
+    }
+    if (e.def.convoca) {
+      e.cd -= dt;
+      if (e.cd <= 0) {
+        e.cd = e.def.cada;
+        for (let i = 0; i < 2; i++) nascer(e.def.convoca, e.x, e.y, e.seg, e.prog);
+        particles.wave(e.x, e.y, e.def.cor, e.r * 4);
+        Neon.audio.sfx.rotate();
+      }
+    }
+    if (e.veneno) {
+      e.veneno.t -= dt;
+      e.vida -= e.veneno.dps * dt;
+      if (Math.random() < dt * 6) particles.emit(e.x + Neon.rand(-8, 8), e.y + Neon.rand(-8, 8), 0, 20, '#a8dba0', 2, 0.4);
+      if (e.veneno.t <= 0) e.veneno = null;
+      if (e.vida <= 0) matar(e);
+    }
+  }
+
   function chegou(e) {
     e.morto = true;
     vidas = Math.max(0, vidas - e.custoVidas);
+    nucleoT = 0.5;
     Neon.audio.sfx.wrong();
     shakeAt(6 + e.custoVidas * 2, 260);
     flashAt('rgba(237,136,127,', 220);
@@ -263,75 +362,101 @@
     if (vidas <= 0) fim();
   }
 
-  function ferir(e, dano) {
+  function ferir(e, dano, ignoraArmadura) {
     if (e.morto) return;
-    e.vida -= Math.max(1, dano - e.armadura);
+    e.vida -= ignoraArmadura ? dano : Math.max(1, dano - e.armadura);
+    e.flash = 0.08;
     if (e.vida <= 0) matar(e);
   }
 
   function matar(e) {
+    if (e.morto) return;
     e.morto = true;
     abates++;
     cred += e.premio;
-    particles.burst(e.x, e.y, e.def.cor, e.tipo === 'chefe' ? 40 : 12, e.tipo === 'chefe' ? 260 : 150);
-    if (e.tipo === 'chefe' || e.tipo === 'tanque') {
+    const grande = e.tipo === 'chefe' || e.tipo === 'tanque' || e.tipo === 'divisor';
+    particles.burst(e.x, e.y, e.def.cor, e.tipo === 'chefe' ? 40 : (grande ? 20 : 10), e.tipo === 'chefe' ? 260 : 150);
+    if (grande) {
       particles.wave(e.x, e.y, e.def.cor, e.r * 5);
       particles.float(e.x, e.y - 10, `+${e.premio}`, '#efce95', 15);
     }
-    if (e.tipo === 'chefe') { shakeAt(10, 400); Neon.audio.sfx.boom(); }
+    if (e.def.solta) {
+      for (let i = 0; i < e.def.qtd; i++) nascer(e.def.solta, e.x + Neon.rand(-8, 8), e.y + Neon.rand(-8, 8), e.seg, e.prog);
+    }
+    if (e.tipo === 'chefe') { shakeAt(10, 400); Neon.audio.sfx.boom(); mostrarBanner('CHEFE DERRUBADO', `+${e.premio}`, '#efce95'); }
     else if (tempo - somT > 0.06) { somT = tempo; Neon.audio.sfx.hit(); }
     atualizarHud();
   }
 
   // ── torres ────────────────────────────────────────
-  function alvoEm(x, y, alcance, ignora) {
-    let melhor = null;
+  function alvoEm(x, y, alcance, modo, ignora) {
+    let melhor = null, nota = -Infinity;
     for (const e of inimigos) {
       if (e.morto || (ignora && ignora.has(e))) continue;
       if (Math.hypot(e.x - x, e.y - y) > alcance + e.r) continue;
-      if (!melhor || e.prog > melhor.prog) melhor = e;
+      const n = modo === 'ultimo' ? -e.prog : (modo === 'forte' ? e.vida * 1000 + e.prog : e.prog);
+      if (n > nota) { nota = n; melhor = e; }
     }
     return melhor;
   }
 
   function atirar(t) {
-    const def = t.def, dano = danoTorre(def, t.nv), alcance = alcanceTorre(def, t.nv) * CELL;
+    const def = t.def, nv = t.nv, max = nv >= NV_MAX;
+    const dano = danoTorre(def, nv), alcance = alcanceTorre(def, nv) * CELL;
     if (def.tipo === 'gelo') {
       let pegou = 0;
       for (const e of inimigos) {
         if (e.morto || Math.hypot(e.x - t.x, e.y - t.y) > alcance + e.r) continue;
-        e.lento = def.dur; e.lentoFator = def.lento;
+        e.lento = def.dur * (max ? 1.6 : 1); e.lentoFator = max ? 0.35 : def.lento;
         ferir(e, dano);
         pegou++;
       }
       if (!pegou) return false;
       particles.wave(t.x, t.y, def.cor, alcance * 2);
-      Neon.audio.sfx.tick();
+      t.flash = 0.3;
+      Neon.audio.sfx.freeze();
       return true;
     }
-    const alvo = alvoEm(t.x, t.y, alcance);
+    const alvo = alvoEm(t.x, t.y, alcance, t.alvo);
     if (!alvo) return false;
     t.ang = Math.atan2(alvo.y - t.y, alvo.x - t.x);
+    t.flash = 0.1;
     if (def.tipo === 'tiro') {
-      ferir(alvo, dano);
-      feixes.push({ pts: [{ x: t.x, y: t.y }, { x: alvo.x, y: alvo.y }], cor: def.cor, t: 0.07, max: 0.07, w: 2 });
+      const rajada = max ? 2 : 1;
+      for (let i = 0; i < rajada; i++) {
+        ferir(alvo, dano);
+        feixes.push({ pts: [{ x: t.x, y: t.y }, { x: alvo.x + i * 4, y: alvo.y + i * 4 }], cor: def.cor, t: 0.07, max: 0.07, w: 2 });
+      }
       particles.emit(alvo.x, alvo.y, Neon.rand(-40, 40), Neon.rand(-40, 40), def.cor, 2, 0.25);
       Neon.audio.sfx.shoot();
     } else if (def.tipo === 'splash') {
-      projeteis.push({ x: t.x, y: t.y, alvo, ax: alvo.x, ay: alvo.y, vel: 7 * CELL, dano, raio: def.raio * CELL, cor: def.cor });
+      projeteis.push({ x: t.x, y: t.y, alvo, ax: alvo.x, ay: alvo.y, vel: 7 * CELL, dano, raio: def.raio * CELL * (max ? 1.5 : 1), cor: def.cor, tipo: 'missil' });
       Neon.audio.sfx.rotate();
     } else if (def.tipo === 'cadeia') {
-      const vistos = new Set([alvo]);
+      const vistosC = new Set([alvo]);
       let de = { x: t.x, y: t.y }, atual = alvo, d = dano;
-      for (let i = 0; i <= def.saltos && atual; i++) {
+      const saltos = def.saltos + (max ? 2 : 0);
+      for (let i = 0; i <= saltos && atual; i++) {
         ferir(atual, Math.round(d));
         feixes.push({ pts: raioEntre(de, atual), cor: def.cor, t: 0.16, max: 0.16, w: 2.5 });
         de = { x: atual.x, y: atual.y };
         d *= 0.7;
-        atual = alvoEm(atual.x, atual.y, def.pulo * CELL, vistos);
-        if (atual) vistos.add(atual);
+        atual = alvoEm(atual.x, atual.y, def.pulo * CELL, 'primeiro', vistosC);
+        if (atual) vistosC.add(atual);
       }
-      Neon.audio.sfx.sizzle();
+      Neon.audio.sfx.zap();
+    } else if (def.tipo === 'mira') {
+      const d = alvo.tipo === 'chefe' && max ? dano * 2 : dano;
+      ferir(alvo, d, true);
+      feixes.push({ pts: [{ x: t.x, y: t.y }, { x: alvo.x, y: alvo.y }], cor: '#fff', t: 0.12, max: 0.12, w: 3.5 });
+      feixes.push({ pts: [{ x: t.x, y: t.y }, { x: alvo.x, y: alvo.y }], cor: def.cor, t: 0.2, max: 0.2, w: 1.5 });
+      particles.burst(alvo.x, alvo.y, def.cor, 6, 120);
+      shakeAt(2, 80);
+      Neon.audio.sfx.snipe();
+    } else if (def.tipo === 'veneno') {
+      projeteis.push({ x: t.x, y: t.y, alvo, ax: alvo.x, ay: alvo.y, vel: 5 * CELL, dano, cor: def.cor, tipo: 'acido',
+        dps: def.dps * Math.pow(1.6, nv - 1), dur: def.dur, pilhas: def.pilhas + (max ? 2 : 0) });
+      Neon.audio.sfx.acid();
     }
     return true;
   }
@@ -358,6 +483,46 @@
     Neon.audio.sfx.boom();
   }
 
+  function envenenar(p) {
+    const e = p.alvo;
+    if (e && !e.morto) {
+      ferir(e, p.dano);
+      const pilhas = Math.min(p.pilhas, (e.veneno ? e.veneno.pilhas : 0) + 1);
+      e.veneno = { pilhas, dps: p.dps * pilhas, t: p.dur };
+    }
+    particles.burst(p.x, p.y, p.cor, 6, 90);
+  }
+
+  // ── poderes ───────────────────────────────────────
+  function usarPoder(id) {
+    if (recarga[id] > 0) { Neon.audio.sfx.wrong(); Neon.toast(`${PODERES[id].nome} EM ${Math.ceil(recarga[id])}s`); return; }
+    if (id === 'bomba') {
+      mirando = mirando === 'bomba' ? null : 'bomba';
+      sel = null; menu = null;
+      Neon.audio.sfx.click();
+      if (mirando) Neon.toast('TOQUE ONDE SOLTAR A BOMBA');
+      return;
+    }
+    if (id === 'congelar') {
+      recarga.congelar = PODERES.congelar.cd;
+      congelado = PODERES.congelar.dur;
+      flashAt('rgba(143,174,242,', 400);
+      particles.wave(W / 2, H / 2, '#8faef2', Math.max(W, H) * 1.4);
+      for (const e of inimigos) if (!e.morto) particles.emit(e.x, e.y, 0, -20, '#8faef2', 3, 0.6);
+      Neon.audio.sfx.freeze();
+      mostrarBanner('CONGELADO', `${PODERES.congelar.dur}s de gelo em tudo`, '#8faef2');
+    }
+  }
+
+  function soltarBomba(x, y) {
+    mirando = null;
+    recarga.bomba = PODERES.bomba.cd;
+    explodir({ x, y, dano: PODERES.bomba.dano, raio: PODERES.bomba.raio * CELL, cor: '#efce95' });
+    particles.burst(x, y, '#fff', 20, 260, 4);
+    shakeAt(12, 400);
+    flashAt('rgba(239,206,149,', 260);
+  }
+
   // ── construção ────────────────────────────────────
   function selecionar(c, r) {
     if (!dentro(c, r)) { sel = null; menu = null; return; }
@@ -374,7 +539,8 @@
     cred -= def.custo;
     construidas++;
     const x = (sel.c + 0.5) * CELL, y = (sel.r + 0.5) * CELL;
-    torres.push({ tipo, def, c: sel.c, r: sel.r, x, y, nv: 1, cd: 0.2, investido: def.custo, ang: -Math.PI / 2 });
+    torres.push({ tipo, def, c: sel.c, r: sel.r, x, y, nv: 1, cd: 0.2, investido: def.custo, ang: -Math.PI / 2,
+      alvo: def.tipo === 'mira' ? 'forte' : 'primeiro', flash: 0, nasceu: 0 });
     particles.wave(x, y, def.cor, CELL * 1.4);
     particles.burst(x, y, def.cor, 10, 120);
     Neon.audio.sfx.lock();
@@ -391,8 +557,9 @@
     cred -= custo;
     t.investido += custo;
     t.nv++;
+    t.nasceu = 0;
     particles.burst(t.x, t.y, '#efce95', 14, 160);
-    particles.float(t.x, t.y - CELL * 0.5, `NÍVEL ${t.nv}`, '#efce95', 14);
+    particles.float(t.x, t.y - CELL * 0.5, t.nv >= NV_MAX ? t.def.especial.toUpperCase() : `NÍVEL ${t.nv}`, '#efce95', 13);
     Neon.audio.sfx.level();
     atualizarHud();
   }
@@ -409,6 +576,13 @@
     atualizarHud();
   }
 
+  function trocarAlvo() {
+    const t = sel && torreEm(sel.c, sel.r);
+    if (!t || t.def.tipo === 'gelo') return;
+    t.alvo = ALVOS[(ALVOS.indexOf(t.alvo) + 1) % ALVOS.length];
+    Neon.audio.sfx.click();
+  }
+
   function fim() {
     state = 'gameover';
     Neon.audio.music.down();
@@ -421,25 +595,31 @@
     els.fsAbates.textContent = abates;
     els.fsTorres.textContent = construidas;
     Neon.$('finalStats').style.display = 'grid';
+    els.mapaPick.classList.remove('oculto');
     Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'NÚCLEO PERDIDO',
-      `A onda ${onda} passou. ${vencidas} ${vencidas === 1 ? 'onda vencida' : 'ondas vencidas'}, ${abates} abates.`,
+      `A onda ${onda} passou na trilha ${FORMATO.mapas[mapaIdx].nome}. ${vencidas} ${vencidas === 1 ? 'onda vencida' : 'ondas vencidas'}, ${abates} abates.`,
       'JOGAR DE NOVO', isRecord ? 'record' : 'go');
   }
 
   // ── input ─────────────────────────────────────────
   function bate(b, x, y) { return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h; }
+  function posCanvas(e) {
+    const rect = canvas.getBoundingClientRect();
+    return { x: (e.clientX - rect.left) / rect.width * W, y: (e.clientY - rect.top) / rect.height * H };
+  }
 
   canvas.addEventListener('pointerdown', (e) => {
     if (state !== 'playing') return;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width * W;
-    const y = (e.clientY - rect.top) / rect.height * H;
+    const { x, y } = posCanvas(e);
     for (const b of botoes) if (bate(b, x, y)) { b.acao(); return; }
+    if (mirando === 'bomba') { soltarBomba(x, y); return; }
     if (btnOnda && bate(btnOnda, x, y)) { chamarOnda(); return; }
     const c = Math.floor(x / CELL), r = Math.floor(y / CELL);
     if (sel && sel.c === c && sel.r === r) { sel = null; menu = null; return; }
     selecionar(c, r);
   });
+  canvas.addEventListener('pointermove', (e) => { mouse = posCanvas(e); });
+  canvas.addEventListener('pointerleave', () => { mouse = null; });
 
   document.addEventListener('keydown', (e) => {
     const k = e.key;
@@ -466,11 +646,22 @@
       selecionar(c, r);
       return;
     }
-    if (k === 'Escape') { sel = null; menu = null; return; }
-    if (k >= '1' && k <= '4') construir(ORDEM_TORRES[+k - 1]);
-    else if (k === 'u' || k === 'U') evoluir();
-    else if (k === 'v' || k === 'V') vender();
+    const K = k.toUpperCase();
+    if (k === 'Escape') { sel = null; menu = null; mirando = null; return; }
+    if (k >= '1' && k <= '6') construir(ORDEM_TORRES[+k - 1]);
+    else if (K === 'U') evoluir();
+    else if (K === 'V') vender();
+    else if (K === 'T') trocarAlvo();
+    else if (K === 'B') usarPoder('bomba');
+    else if (K === 'C') usarPoder('congelar');
+    else if (K === 'F') alternarVelocidade();
   });
+
+  function alternarVelocidade() {
+    velocidade = velocidade === 1 ? 2 : 1;
+    Neon.audio.sfx.click();
+    Neon.toast(velocidade === 2 ? 'VELOCIDADE 2×' : 'VELOCIDADE NORMAL');
+  }
 
   Neon.$('startBtn').addEventListener('click', () => {
     if (state === 'paused') resumeGame();
@@ -482,6 +673,9 @@
   function update(dt) {
     if (state !== 'playing') return;
     tempo += dt;
+    for (const id in recarga) if (recarga[id] > 0) recarga[id] -= dt;
+    if (congelado > 0) congelado -= dt;
+    if (nucleoT > 0) nucleoT -= dt;
 
     if (emOnda) {
       if (fila.length) {
@@ -496,6 +690,9 @@
     for (const e of inimigos) {
       if (e.morto) continue;
       if (e.lento > 0) e.lento -= dt;
+      if (e.flash > 0) e.flash -= dt;
+      habilidades(e, dt);
+      if (e.morto) continue;
       moverInimigo(e, dt);
       if (state !== 'playing') return;
     }
@@ -503,6 +700,8 @@
 
     for (const t of torres) {
       t.cd -= dt;
+      if (t.flash > 0) t.flash -= dt;
+      t.nasceu += dt;
       if (t.cd <= 0 && atirar(t)) t.cd = t.def.cadencia;
     }
 
@@ -511,12 +710,17 @@
       if (p.alvo && !p.alvo.morto) { p.ax = p.alvo.x; p.ay = p.alvo.y; }
       const dx = p.ax - p.x, dy = p.ay - p.y, d = Math.hypot(dx, dy), passo = p.vel * dt;
       p.ang = Math.atan2(dy, dx);
-      if (d <= passo) { p.x = p.ax; p.y = p.ay; explodir(p); projeteis.splice(i, 1); continue; }
+      if (d <= passo) {
+        p.x = p.ax; p.y = p.ay;
+        if (p.tipo === 'missil') explodir(p); else envenenar(p);
+        projeteis.splice(i, 1); continue;
+      }
       p.x += dx / d * passo; p.y += dy / d * passo;
       if (Math.random() < 0.6) particles.emit(p.x, p.y, Neon.rand(-20, 20), Neon.rand(-20, 20), p.cor, 2, 0.2);
     }
 
     for (let i = feixes.length - 1; i >= 0; i--) if ((feixes[i].t -= dt) <= 0) feixes.splice(i, 1);
+    if (banner && (banner.t += dt) > banner.max) banner = null;
 
     if (emOnda && !fila.length && !inimigos.length) ondaVencida();
   }
@@ -544,6 +748,12 @@
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
+  function botao(x, y, w, h, cor, ativo, acao) {
+    ctx.fillStyle = ativo ? 'rgba(17,29,44, 0.92)' : 'rgba(17,29,44, 0.5)';
+    arredondado(x, y, w, h, 8); ctx.fill();
+    ctx.strokeStyle = ativo ? cor : 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (acao) botoes.push({ x, y, w, h, acao });
+  }
 
   function desenharFundo() {
     ctx.fillStyle = '#080d1c';
@@ -553,9 +763,21 @@
     g.addColorStop(1, 'rgba(8,13,28, 0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
-    // pontos da grade
-    ctx.fillStyle = 'rgba(142,131,200, 0.22)';
+    // linhas da grade, bem apagadas, e pontos nos cruzamentos
+    ctx.strokeStyle = 'rgba(142,131,200, 0.07)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let c = 1; c < COLS; c++) { ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, H); }
+    for (let r = 1; r < ROWS; r++) { ctx.moveTo(0, r * CELL); ctx.lineTo(W, r * CELL); }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(142,131,200, 0.25)';
     for (let c = 0; c <= COLS; c++) for (let r = 0; r <= ROWS; r++) ctx.fillRect(c * CELL - 1, r * CELL - 1, 2, 2);
+    // poeira flutuando
+    for (const p of poeira) {
+      ctx.globalAlpha = 0.25 + 0.2 * Math.sin(tempo * 1.3 + p.a);
+      ctx.fillStyle = '#9be7ce';
+      ctx.fillRect(p.x, p.y, p.r, p.r);
+    }
+    ctx.globalAlpha = 1;
 
     // trilha: faixa escura com borda em neon e tracejado que corre pro núcleo
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -565,10 +787,8 @@
     ctx.strokeStyle = 'rgba(0,0,0, 0.55)';
     ctx.lineWidth = CELL * 0.78;
     ctx.stroke();
-    Neon.glow(ctx, '#8e83c8', 16);
-    ctx.strokeStyle = 'rgba(142,131,200, 0.55)';
-    ctx.lineWidth = CELL * 0.78;
-    ctx.setLineDash([]);
+    Neon.glow(ctx, congelado > 0 ? '#8faef2' : '#8e83c8', 16);
+    ctx.strokeStyle = congelado > 0 ? 'rgba(143,174,242, 0.6)' : 'rgba(142,131,200, 0.55)';
     ctx.globalAlpha = 0.35;
     ctx.stroke();
     ctx.globalAlpha = 1;
@@ -580,88 +800,139 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // portal de entrada e núcleo na saída
+    // portal de entrada e núcleo na saída: o anel do núcleo é a barra de vidas
     const ini = PONTOS[0], fimP = PONTOS[PONTOS.length - 1];
     const pulso = 0.85 + 0.15 * Math.sin(tempo * 4);
     Neon.glow(ctx, '#ed887f', 24);
     ctx.strokeStyle = '#ed887f'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(ini.x, ini.y, CELL * 0.36 * pulso, 0, Math.PI * 2); ctx.stroke();
-    Neon.glow(ctx, '#ff7ad9', 30);
-    ctx.fillStyle = 'rgba(255,122,217, 0.25)';
-    Neon.circle(ctx, fimP.x, fimP.y, CELL * 0.42);
-    ctx.strokeStyle = '#ff7ad9'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(fimP.x, fimP.y, CELL * 0.42 * pulso, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(ini.x, ini.y, CELL * 0.2 * (1 - pulso + 0.85), 0, Math.PI * 2); ctx.stroke();
+    const corN = vidas <= 5 ? '#ed887f' : '#ff7ad9';
+    const bate_ = nucleoT > 0 ? 1 + nucleoT * 0.5 : 1;
+    Neon.glow(ctx, corN, 30);
+    ctx.fillStyle = 'rgba(255,122,217, 0.22)';
+    Neon.circle(ctx, fimP.x, fimP.y, CELL * 0.42 * bate_);
+    ctx.strokeStyle = 'rgba(255,255,255, 0.15)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(fimP.x, fimP.y, CELL * 0.42, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = corN;
+    ctx.beginPath(); ctx.arc(fimP.x, fimP.y, CELL * 0.42, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (vidas / VIDAS)); ctx.stroke();
     ctx.shadowBlur = 0;
-    emoji('🔆', fimP.x, fimP.y, CELL * 0.4);
+    emoji('🔆', fimP.x, fimP.y, CELL * 0.38 * bate_);
   }
 
   function desenharTorre(t) {
     const s = CELL * 0.36, sel_ = sel && sel.c === t.c && sel.r === t.r;
+    const cresce = Math.min(1, t.nasceu * 4), esc = 1 + (1 - cresce) * 0.4;
     if (sel_) {
       const alc = alcanceTorre(t.def, t.nv) * CELL;
       ctx.fillStyle = 'rgba(255,255,255, 0.05)';
       ctx.beginPath(); ctx.arc(t.x, t.y, alc, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = t.def.cor; ctx.globalAlpha = 0.6; ctx.lineWidth = 1.5;
-      ctx.setLineDash([6, 6]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.setLineDash([6, 6]); ctx.lineDashOffset = -tempo * 20; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
-    Neon.glow(ctx, t.def.cor, sel_ ? 26 : 14);
-    ctx.fillStyle = 'rgba(17,29,44, 0.95)';
-    arredondado(t.x - s, t.y - s, s * 2, s * 2, 6); ctx.fill();
-    ctx.strokeStyle = t.def.cor; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save();
+    ctx.translate(t.x, t.y); ctx.scale(esc, esc);
+    Neon.glow(ctx, t.def.cor, sel_ || t.flash > 0 ? 28 : 14);
+    ctx.fillStyle = t.nv >= NV_MAX ? 'rgba(40,34,70, 0.95)' : 'rgba(17,29,44, 0.95)';
+    arredondado(-s, -s, s * 2, s * 2, 6); ctx.fill();
+    ctx.strokeStyle = t.def.cor; ctx.lineWidth = t.nv >= NV_MAX ? 3 : 2; ctx.stroke();
     ctx.shadowBlur = 0;
-    // cano aponta pro último alvo
-    if (t.def.tipo === 'tiro' || t.def.tipo === 'splash') {
-      ctx.strokeStyle = t.def.cor; ctx.lineWidth = 4; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(t.x, t.y);
-      ctx.lineTo(t.x + Math.cos(t.ang) * s * 1.15, t.y + Math.sin(t.ang) * s * 1.15); ctx.stroke();
+    if (t.nv >= NV_MAX) {
+      // moldura girando marca a torre no nível máximo
+      ctx.strokeStyle = '#efce95'; ctx.lineWidth = 1; ctx.globalAlpha = 0.7;
+      ctx.rotate(tempo * 0.8);
+      ctx.strokeRect(-s * 1.1, -s * 1.1, s * 2.2, s * 2.2);
+      ctx.rotate(-tempo * 0.8); ctx.globalAlpha = 1;
     }
-    emoji(t.def.icone, t.x, t.y, CELL * 0.36);
-    // pinos de nível
+    // cano aponta pro último alvo; mira tem cano longo
+    if (t.def.tipo === 'tiro' || t.def.tipo === 'splash' || t.def.tipo === 'mira' || t.def.tipo === 'veneno') {
+      const comp = t.def.tipo === 'mira' ? 1.5 : 1.15, recuo = t.flash > 0 ? -4 : 0;
+      ctx.strokeStyle = t.def.cor; ctx.lineWidth = t.def.tipo === 'mira' ? 3 : 4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(Math.cos(t.ang) * recuo, Math.sin(t.ang) * recuo);
+      ctx.lineTo(Math.cos(t.ang) * s * comp, Math.sin(t.ang) * s * comp); ctx.stroke();
+      if (t.flash > 0) {
+        Neon.glow(ctx, '#fff', 20); ctx.fillStyle = '#fff';
+        Neon.circle(ctx, Math.cos(t.ang) * s * comp, Math.sin(t.ang) * s * comp, 4 * (t.flash / 0.1));
+        ctx.shadowBlur = 0;
+      }
+    }
+    if (t.def.tipo === 'cadeia') {
+      // arco elétrico girando em volta
+      ctx.strokeStyle = t.def.cor; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.6;
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.85, tempo * 5, tempo * 5 + 1.2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.85, tempo * 5 + Math.PI, tempo * 5 + Math.PI + 1.2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (t.def.tipo === 'gelo') {
+      ctx.strokeStyle = t.def.cor; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5 + (t.flash > 0 ? 0.5 : 0);
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.9 + Math.sin(tempo * 3) * 2, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    emoji(t.def.icone, 0, 0, CELL * 0.36);
     for (let i = 0; i < t.nv; i++) {
       ctx.fillStyle = '#efce95';
-      Neon.circle(ctx, t.x - s + 6 + i * 7, t.y + s - 5, 2.4);
+      Neon.circle(ctx, -s + 6 + i * 7, s - 5, 2.4);
     }
+    ctx.restore();
   }
 
   function desenharInimigo(e) {
-    const cor = e.lento > 0 ? '#8faef2' : e.def.cor;
+    const gelo = e.lento > 0 || congelado > 0;
+    const cor = e.flash > 0 ? '#ffffff' : (gelo ? '#8faef2' : e.def.cor);
     ctx.save();
     ctx.translate(e.x, e.y);
     Neon.glow(ctx, cor, 16);
     ctx.fillStyle = cor;
     ctx.strokeStyle = cor;
     ctx.lineWidth = 2;
-    const r = e.r;
+    const r = e.r, escuro = 'rgba(17,29,44, 0.9)';
     if (e.tipo === 'veloz') {
       ctx.rotate(e.ang);
       ctx.beginPath(); ctx.moveTo(r * 1.2, 0); ctx.lineTo(-r * 0.8, r * 0.8); ctx.lineTo(-r * 0.4, 0); ctx.lineTo(-r * 0.8, -r * 0.8); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.moveTo(-r * 0.6, 0); ctx.lineTo(-r * 2.4, 0); ctx.lineWidth = r * 0.6; ctx.stroke(); ctx.globalAlpha = 1;
     } else if (e.tipo === 'tanque') {
       ctx.rotate(e.ang);
-      ctx.fillStyle = 'rgba(17,29,44, 0.9)';
+      ctx.fillStyle = escuro;
       arredondado(-r, -r * 0.75, r * 2, r * 1.5, 4); ctx.fill(); ctx.stroke();
       ctx.fillStyle = cor; ctx.fillRect(-r * 0.35, -r * 0.35, r * 0.7, r * 0.7);
+      ctx.fillRect(-r, -r * 0.95, r * 2, r * 0.2); ctx.fillRect(-r, r * 0.75, r * 2, r * 0.2);
     } else if (e.tipo === 'blindado') {
       ctx.rotate(tempo * 1.5 + e.fase);
-      ctx.fillStyle = 'rgba(17,29,44, 0.9)';
+      ctx.fillStyle = escuro;
       ctx.beginPath();
       for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
       ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = cor; Neon.circle(ctx, 0, 0, r * 0.35);
+    } else if (e.tipo === 'curador') {
+      ctx.fillStyle = escuro;
+      Neon.circle(ctx, 0, 0, r); ctx.stroke();
+      ctx.fillStyle = cor;
+      ctx.fillRect(-r * 0.15, -r * 0.55, r * 0.3, r * 1.1); ctx.fillRect(-r * 0.55, -r * 0.15, r * 1.1, r * 0.3);
+      ctx.globalAlpha = 0.25 + 0.1 * Math.sin(tempo * 6);
+      ctx.beginPath(); ctx.arc(0, 0, e.def.raioCura * CELL, 0, Math.PI * 2); ctx.lineWidth = 1; ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (e.tipo === 'divisor') {
+      ctx.rotate(e.ang);
+      ctx.fillStyle = escuro;
+      Neon.circle(ctx, 0, 0, r); ctx.stroke();
+      ctx.fillStyle = cor;
+      for (let i = 0; i < 3; i++) { const a = i * Math.PI * 2 / 3 + tempo * 2; Neon.circle(ctx, Math.cos(a) * r * 0.45, Math.sin(a) * r * 0.45, r * 0.22); }
     } else if (e.tipo === 'chefe') {
       ctx.rotate(-tempo * 0.8);
-      ctx.fillStyle = 'rgba(17,29,44, 0.9)';
+      ctx.fillStyle = escuro;
       Neon.circle(ctx, 0, 0, r); ctx.stroke();
       ctx.beginPath(); ctx.arc(0, 0, r * 0.65, 0, Math.PI * 2); ctx.stroke();
       for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; ctx.fillStyle = cor; Neon.circle(ctx, Math.cos(a) * r * 0.65, Math.sin(a) * r * 0.65, r * 0.16); }
       ctx.fillStyle = cor; Neon.circle(ctx, 0, 0, r * 0.28);
     } else {
-      ctx.fillStyle = 'rgba(17,29,44, 0.9)';
+      ctx.fillStyle = escuro;
       Neon.circle(ctx, 0, 0, r); ctx.stroke();
       ctx.fillStyle = cor; Neon.circle(ctx, 0, 0, r * 0.45);
     }
     ctx.shadowBlur = 0;
     ctx.restore();
-    if (e.lento > 0) emoji('❄️', e.x, e.y - e.r - 9, 10);
+    if (e.lento > 0 && congelado <= 0) emoji('❄️', e.x, e.y - e.r - 9, 10);
+    if (e.veneno) emoji('🧪', e.x + e.r + 4, e.y - e.r - 6, 9);
     // barra de vida só depois do primeiro dano
     if (e.vida < e.vidaMax) {
       const w = Math.max(18, e.r * 2.2), k = Math.max(0, e.vida / e.vidaMax);
@@ -673,17 +944,17 @@
   }
 
   function desenharMenu() {
-    botoes = [];
     if (!sel || !menu) return;
     const cx = (sel.c + 0.5) * CELL, cy = sel.r * CELL;
     const pad = 8;
-    let w, h, itens;
+    let w, h, porLinha = 0, bw = 0, bh = 0;
     if (menu === 'construir') {
-      const bw = Math.min(104, (W - 24) / 4 - 6), bh = 70;
-      w = bw * 4 + pad * 5; h = bh + pad * 2;
-      itens = ORDEM_TORRES.map((tipo, i) => ({ tipo, def: TORRES[tipo], i, bw, bh }));
+      porLinha = W >= 800 ? 6 : 3;
+      bw = Math.min(104, (W - 24 - pad * (porLinha + 1)) / porLinha); bh = 70;
+      const linhas = Math.ceil(ORDEM_TORRES.length / porLinha);
+      w = bw * porLinha + pad * (porLinha + 1); h = bh * linhas + pad * (linhas + 1);
     } else {
-      w = Math.min(340, W - 12); h = 96;
+      w = Math.min(360, W - 12); h = 138;
     }
     let px = Neon.clamp(cx - w / 2, 6, W - w - 6);
     let py = cy + CELL + 6;
@@ -697,45 +968,55 @@
     ctx.strokeStyle = 'rgba(142,131,200, 0.7)'; ctx.lineWidth = 1.5; ctx.stroke();
 
     if (menu === 'construir') {
-      for (const it of itens) {
-        const bx = px + pad + it.i * (it.bw + pad), by = py + pad;
-        const ok = cred >= it.def.custo;
-        ctx.fillStyle = ok ? 'rgba(17,29,44, 0.9)' : 'rgba(17,29,44, 0.5)';
-        arredondado(bx, by, it.bw, it.bh, 8); ctx.fill();
-        ctx.strokeStyle = ok ? it.def.cor : 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ORDEM_TORRES.forEach((tipo, i) => {
+        const def = TORRES[tipo];
+        const bx = px + pad + (i % porLinha) * (bw + pad), by = py + pad + Math.floor(i / porLinha) * (bh + pad);
+        const ok = cred >= def.custo;
+        const sobre = mouse && bate({ x: bx, y: by, w: bw, h: bh }, mouse.x, mouse.y);
+        botao(bx, by, bw, bh, def.cor, ok, () => construir(tipo));
         ctx.globalAlpha = ok ? 1 : 0.45;
-        emoji(it.def.icone, bx + it.bw / 2, by + 20, 22);
-        texto(it.def.nome, bx + it.bw / 2, by + 42, 9, it.def.cor);
-        texto(fmtCred(it.def.custo), bx + it.bw / 2, by + 57, 11, ok ? '#efce95' : '#ed887f');
+        emoji(def.icone, bx + bw / 2, by + 20, 22);
+        texto(def.nome, bx + bw / 2, by + 42, 9, def.cor);
+        texto(fmtCred(def.custo), bx + bw / 2, by + 57, 11, ok ? '#efce95' : '#ed887f');
         ctx.globalAlpha = 1;
-        botoes.push({ x: bx, y: by, w: it.bw, h: it.bh, acao: () => construir(it.tipo) });
-      }
+        texto(String(i + 1), bx + 9, by + 9, 8, 'rgba(230,230,255,0.45)', 400);
+        // passar o mouse mostra o alcance que a torre teria ali
+        if (sobre) {
+          ctx.strokeStyle = def.cor; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+          ctx.beginPath(); ctx.arc(cx, cy + CELL / 2, def.alcance * CELL, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]); ctx.globalAlpha = 1;
+        }
+      });
     } else {
       const t = torreEm(sel.c, sel.r);
       if (!t) { menu = 'construir'; return; }
-      const dano = danoTorre(t.def, t.nv), alc = alcanceTorre(t.def, t.nv).toFixed(1);
-      texto(`${t.def.nome} · NÍVEL ${t.nv}/${NV_MAX}`, px + w / 2, py + 16, 11, t.def.cor);
-      texto(`dano ${dano} · alcance ${alc} · cada ${t.def.cadencia}s`, px + w / 2, py + 33, 9, 'rgba(230,230,255,0.7)', 400);
-      const bw = (w - pad * 3) / 2, bh = 40, by = py + 46;
-      const max = t.nv >= NV_MAX, custo = max ? 0 : custoEvolucao(t.def, t.nv), ok = !max && cred >= custo;
-      const bx1 = px + pad, bx2 = px + pad * 2 + bw;
-      ctx.fillStyle = 'rgba(17,29,44, 0.9)';
-      arredondado(bx1, by, bw, bh, 8); ctx.fill();
-      ctx.strokeStyle = ok ? '#efce95' : 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1.5; ctx.stroke();
+      const dano = danoTorre(t.def, t.nv), alc = alcanceTorre(t.def, t.nv).toFixed(1), max = t.nv >= NV_MAX;
+      texto(`${t.def.nome} · NÍVEL ${t.nv}/${NV_MAX}`, px + w / 2, py + 15, 11, t.def.cor);
+      texto(`dano ${dano} · alcance ${alc} · cada ${t.def.cadencia}s`, px + w / 2, py + 31, 9, 'rgba(230,230,255,0.7)', 400);
+      texto(max ? `★ ${t.def.especial}` : `${t.def.desc} · nv ${NV_MAX}: ${t.def.especial}`, px + w / 2, py + 46, 8.5, max ? '#efce95' : 'rgba(230,230,255,0.55)', 400);
+      const bw2 = (w - pad * 3) / 2, bh2 = 34, by = py + 58;
+      const custo = max ? 0 : custoEvolucao(t.def, t.nv), ok = !max && cred >= custo;
+      const bx1 = px + pad, bx2 = px + pad * 2 + bw2;
+      botao(bx1, by, bw2, bh2, '#efce95', ok, max ? null : evoluir);
       ctx.globalAlpha = ok ? 1 : 0.45;
-      texto(max ? '▲ MÁXIMO' : `▲ EVOLUIR ${fmtCred(custo)}`, bx1 + bw / 2, by + bh / 2, 11, '#efce95');
+      texto(max ? '▲ MÁXIMO' : `▲ EVOLUIR ${fmtCred(custo)}`, bx1 + bw2 / 2, by + bh2 / 2, 11, '#efce95');
       ctx.globalAlpha = 1;
-      ctx.fillStyle = 'rgba(17,29,44, 0.9)';
-      arredondado(bx2, by, bw, bh, 8); ctx.fill();
-      ctx.strokeStyle = '#ed887f'; ctx.stroke();
-      texto(`✕ VENDER ${fmtCred(Math.floor(t.investido * VENDA))}`, bx2 + bw / 2, by + bh / 2, 11, '#ed887f');
-      if (!max) botoes.push({ x: bx1, y: by, w: bw, h: bh, acao: evoluir });
-      botoes.push({ x: bx2, y: by, w: bw, h: bh, acao: vender });
+      botao(bx2, by, bw2, bh2, '#ed887f', true, vender);
+      texto(`✕ VENDER ${fmtCred(Math.floor(t.investido * VENDA))}`, bx2 + bw2 / 2, by + bh2 / 2, 11, '#ed887f');
+      const by3 = by + bh2 + pad, bh3 = 28;
+      if (t.def.tipo === 'gelo') {
+        texto('atinge tudo no alcance', px + w / 2, by3 + bh3 / 2, 9, 'rgba(230,230,255,0.5)', 400);
+      } else {
+        botao(px + pad, by3, w - pad * 2, bh3, '#9be7ce', true, trocarAlvo);
+        const nome = { primeiro: 'PRIMEIRO DA FILA', ultimo: 'ÚLTIMO DA FILA', forte: 'MAIS FORTE' }[t.alvo];
+        texto(`◎ ALVO: ${nome}  (T)`, px + w / 2, by3 + bh3 / 2, 10, '#9be7ce');
+      }
     }
   }
 
-  function desenharOnda() {
+  function desenharControles() {
     btnOnda = null;
+    // pílula da onda
     const w = Math.min(W - 24, 380), h = 34, x = (W - w) / 2, y = H - h - 10;
     Neon.glow(ctx, emOnda ? '#ed887f' : '#9be7ce', 16);
     ctx.fillStyle = 'rgba(8,13,28, 0.9)';
@@ -747,9 +1028,82 @@
       texto(`ONDA ${onda} · ${rest} ${rest === 1 ? 'INIMIGO' : 'INIMIGOS'}`, W / 2, y + h / 2, 11, '#ed887f');
     } else {
       const s = Math.ceil(contagem);
-      texto(`ONDA ${onda + 1} EM ${s}s · TOQUE PARA CHAMAR (+${s * 2})`, W / 2, y + h / 2, retrato ? 9.5 : 11, '#9be7ce');
+      // barra de tempo por baixo do texto
+      ctx.fillStyle = 'rgba(155,231,206, 0.12)';
+      arredondado(x + 2, y + 2, (w - 4) * Neon.clamp(contagem / (onda ? ESPERA : ESPERA_PRIMEIRA), 0, 1), h - 4, 15); ctx.fill();
+      texto(`ONDA ${onda + 1} EM ${s}s · TOQUE PARA CHAMAR${onda ? ` (+${bonusAdiantar()})` : ''}`, W / 2, y + h / 2, retrato ? 9.5 : 11, '#9be7ce');
       btnOnda = { x, y, w, h };
     }
+
+    // poderes à direita, velocidade à esquerda, acima da pílula
+    const R = 22, yb = H - h - 10 - R - 14;
+    const ids = Object.keys(PODERES);
+    ids.forEach((id, i) => {
+      const cx = W - 16 - R - i * (R * 2 + 10), def = PODERES[id];
+      const pronto = recarga[id] <= 0, ativo = mirando === id;
+      Neon.glow(ctx, ativo ? '#fff' : (pronto ? '#efce95' : '#3a3f5c'), pronto ? 18 : 0);
+      ctx.fillStyle = 'rgba(8,13,28, 0.92)';
+      Neon.circle(ctx, cx, yb, R);
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = ativo ? '#fff' : (pronto ? '#efce95' : 'rgba(255,255,255,0.2)'); ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, yb, R, 0, Math.PI * 2); ctx.stroke();
+      if (!pronto) {
+        ctx.strokeStyle = '#efce95'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(cx, yb, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - recarga[id] / def.cd)); ctx.stroke();
+      }
+      ctx.globalAlpha = pronto ? 1 : 0.45;
+      emoji(def.icone, cx, yb, 20);
+      ctx.globalAlpha = 1;
+      texto(pronto ? def.tecla : `${Math.ceil(recarga[id])}s`, cx, yb + R + 8, 8, pronto ? '#efce95' : 'rgba(230,230,255,0.5)');
+      botoes.push({ x: cx - R, y: yb - R, w: R * 2, h: R * 2, acao: () => usarPoder(id) });
+    });
+    const cxv = 16 + R;
+    Neon.glow(ctx, velocidade === 2 ? '#ff7ad9' : '#3a3f5c', velocidade === 2 ? 18 : 0);
+    ctx.fillStyle = 'rgba(8,13,28, 0.92)';
+    Neon.circle(ctx, cxv, yb, R);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = velocidade === 2 ? '#ff7ad9' : 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cxv, yb, R, 0, Math.PI * 2); ctx.stroke();
+    texto(velocidade === 2 ? '2×' : '1×', cxv, yb, 13, velocidade === 2 ? '#ff7ad9' : 'rgba(230,230,255,0.7)');
+    texto('F', cxv, yb + R + 8, 8, 'rgba(230,230,255,0.5)');
+    botoes.push({ x: cxv - R, y: yb - R, w: R * 2, h: R * 2, acao: alternarVelocidade });
+
+    // mira da bomba segue o dedo/mouse
+    if (mirando === 'bomba') {
+      const m = mouse || { x: W / 2, y: H / 2 };
+      ctx.strokeStyle = '#efce95'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -tempo * 30;
+      ctx.beginPath(); ctx.arc(m.x, m.y, PODERES.bomba.raio * CELL, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      texto('TOQUE PARA SOLTAR', m.x, m.y - PODERES.bomba.raio * CELL - 10, 9, '#efce95');
+    }
+
+    // barra do chefe no topo
+    const chefe = chefeVivo();
+    if (chefe) {
+      const bw = Math.min(W - 40, 420), bx = (W - bw) / 2, by = 14;
+      ctx.fillStyle = 'rgba(0,0,0, 0.6)';
+      arredondado(bx, by, bw, 12, 6); ctx.fill();
+      Neon.glow(ctx, '#ff2b7a', 14);
+      ctx.fillStyle = '#ff2b7a';
+      arredondado(bx, by, bw * Math.max(0.01, chefe.vida / chefe.vidaMax), 12, 6); ctx.fill();
+      ctx.shadowBlur = 0;
+      texto('CHEFE', W / 2, by + 6, 8, '#fff');
+    }
+  }
+
+  function desenharBanner() {
+    if (!banner) return;
+    const k = banner.t / banner.max;
+    const a = k < 0.1 ? k / 0.1 : (k > 0.75 ? (1 - k) / 0.25 : 1);
+    ctx.globalAlpha = a;
+    const y = H * 0.38;
+    ctx.fillStyle = 'rgba(8,13,28, 0.7)';
+    ctx.fillRect(0, y - 34, W, banner.sub ? 74 : 56);
+    Neon.glow(ctx, banner.cor, 24);
+    texto(banner.texto, W / 2, y - 6, retrato ? 24 : 30, banner.cor, 900);
+    ctx.shadowBlur = 0;
+    if (banner.sub) texto(banner.sub, W / 2, y + 24, retrato ? 9.5 : 11, 'rgba(230,230,255,0.85)', 400);
+    ctx.globalAlpha = 1;
   }
 
   function render() {
@@ -758,9 +1112,9 @@
       const k = shake.t / shake.max;
       ctx.translate((Math.random() - 0.5) * shake.power * k * 2, (Math.random() - 0.5) * shake.power * k * 2);
     }
+    botoes = [];
     desenharFundo();
 
-    // célula selecionada
     if (sel) {
       const livre = !ehCaminho(sel.c, sel.r);
       ctx.strokeStyle = livre ? '#9be7ce' : '#ed887f';
@@ -768,6 +1122,12 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(sel.c * CELL + 3, sel.r * CELL + 3, CELL - 6, CELL - 6);
       ctx.shadowBlur = 0;
+    } else if (mouse && state === 'playing' && !mirando) {
+      const c = Math.floor(mouse.x / CELL), r = Math.floor(mouse.y / CELL);
+      if (dentro(c, r) && !ehCaminho(c, r)) {
+        ctx.strokeStyle = 'rgba(155,231,206, 0.3)'; ctx.lineWidth = 1.5;
+        ctx.strokeRect(c * CELL + 3, r * CELL + 3, CELL - 6, CELL - 6);
+      }
     }
 
     for (const t of torres) desenharTorre(t);
@@ -778,7 +1138,8 @@
       ctx.translate(p.x, p.y); ctx.rotate(p.ang);
       Neon.glow(ctx, p.cor, 14);
       ctx.fillStyle = p.cor;
-      ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, 4); ctx.lineTo(-6, -4); ctx.closePath(); ctx.fill();
+      if (p.tipo === 'missil') { ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, 4); ctx.lineTo(-6, -4); ctx.closePath(); ctx.fill(); }
+      else Neon.circle(ctx, 0, 0, 4);
       ctx.restore();
     }
     for (const f of feixes) {
@@ -794,7 +1155,20 @@
     }
 
     particles.draw(ctx);
-    if (state === 'playing' || state === 'paused') { desenharOnda(); desenharMenu(); }
+
+    // vinheta vermelha pulsando quando o núcleo está por um fio
+    if (vidas <= 5 && state === 'playing') {
+      const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+      g.addColorStop(0, 'rgba(237,136,127, 0)');
+      g.addColorStop(1, `rgba(237,136,127, ${0.18 + 0.12 * Math.sin(tempo * 5)})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    if (congelado > 0) {
+      ctx.fillStyle = `rgba(143,174,242, ${0.08 * Math.min(1, congelado)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    if (state === 'playing' || state === 'paused') { desenharBanner(); desenharControles(); desenharMenu(); }
 
     if (flash.t > 0) {
       ctx.fillStyle = `${flash.color} ${Math.min(0.4, flash.t / 220)})`;
@@ -806,8 +1180,10 @@
   function loop(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000);
     lastFrame = now;
-    update(dt);
+    // 2x roda dois passos em vez de esticar o dt: projétil e colisão continuam iguais
+    for (let i = 0; i < (state === 'playing' ? velocidade : 1); i++) update(dt);
     if (state === 'playing' || state === 'gameover') particles.update(dt);
+    for (const p of poeira) { p.y -= p.v * dt; if (p.y < -2) { p.y = H + 2; p.x = Math.random() * W; } }
     if (shake.t > 0) shake.t -= dt * 1000;
     if (flash.t > 0) flash.t -= dt * 1000;
     render();
