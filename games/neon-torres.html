@@ -127,15 +127,15 @@
   const ALVOS = ['primeiro', 'ultimo', 'forte'];
   // vel em células por segundo; armadura tira um pedaço fixo de cada tiro
   const INIMIGOS = {
-    drone:    { nome: 'DRONE',    vida: 38,  vel: 1.5,  premio: 5,  vidas: 1, cor: '#ed887f', r: 0.19, dica: 'o básico' },
-    veloz:    { nome: 'VELOZ',    vida: 24,  vel: 2.9,  premio: 6,  vidas: 1, cor: '#efce95', r: 0.16, dica: 'corre, mas é frágil' },
-    tanque:   { nome: 'TANQUE',   vida: 170, vel: 0.85, premio: 15, vidas: 2, cor: '#afa3f5', r: 0.26, dica: 'lento, tira 2 vidas' },
-    blindado: { nome: 'BLINDADO', vida: 90,  vel: 1.25, premio: 11, vidas: 1, cor: '#a8dba0', r: 0.21, armadura: 5, dica: 'armadura corta cada tiro' },
-    curador:  { nome: 'CURADOR',  vida: 80,  vel: 1.1,  premio: 14, vidas: 1, cor: '#9be7ce', r: 0.2, cura: 8, raioCura: 1.6, dica: 'cura quem está perto' },
-    divisor:  { nome: 'DIVISOR',  vida: 120, vel: 1.0,  premio: 12, vidas: 2, cor: '#e9b77c', r: 0.23, solta: 'cria', qtd: 3, dica: 'vira 3 ao morrer' },
-    cria:     { nome: 'CRIA',     vida: 16,  vel: 2.2,  premio: 2,  vidas: 1, cor: '#e9b77c', r: 0.12 },
-    escudado: { nome: 'ESCUDADO', vida: 70,  vel: 1.2,  premio: 13, vidas: 1, cor: '#8faef2', r: 0.21, escudo: 70, dica: 'escudo que volta se ficar sem levar tiro' },
-    chefe:    { nome: 'CHEFE',    vida: 1100, vel: 0.65, premio: 90, vidas: 5, cor: '#ff2b7a', r: 0.34, armadura: 4, convoca: 'drone', cada: 5, dica: 'tira 5 vidas e chama drones' },
+    drone:    { nome: 'DRONE',    vida: 57,  vel: 1.5,  premio: 5,  vidas: 1, cor: '#ed887f', r: 0.19, dica: 'o básico' },
+    veloz:    { nome: 'VELOZ',    vida: 36,  vel: 2.9,  premio: 6,  vidas: 1, cor: '#efce95', r: 0.16, dica: 'corre, mas é frágil' },
+    tanque:   { nome: 'TANQUE',   vida: 255, vel: 0.85, premio: 15, vidas: 2, cor: '#afa3f5', r: 0.26, dica: 'lento, tira 2 vidas' },
+    blindado: { nome: 'BLINDADO', vida: 135,  vel: 1.25, premio: 11, vidas: 1, cor: '#a8dba0', r: 0.21, armadura: 5, dica: 'armadura corta cada tiro' },
+    curador:  { nome: 'CURADOR',  vida: 120,  vel: 1.1,  premio: 14, vidas: 1, cor: '#9be7ce', r: 0.2, cura: 8, raioCura: 1.6, dica: 'cura quem está perto' },
+    divisor:  { nome: 'DIVISOR',  vida: 180, vel: 1.0,  premio: 12, vidas: 2, cor: '#e9b77c', r: 0.23, solta: 'cria', qtd: 3, dica: 'vira 3 ao morrer' },
+    cria:     { nome: 'CRIA',     vida: 24,  vel: 2.2,  premio: 2,  vidas: 1, cor: '#e9b77c', r: 0.12 },
+    escudado: { nome: 'ESCUDADO', vida: 105,  vel: 1.2,  premio: 13, vidas: 1, cor: '#8faef2', r: 0.21, escudo: 70, dica: 'escudo que volta se ficar sem levar tiro' },
+    chefe:    { nome: 'CHEFE',    vida: 2200, vel: 0.65, premio: 90, vidas: 5, cor: '#ff2b7a', r: 0.34, armadura: 4, convoca: 'drone', cada: 5, dica: 'tira 5 vidas e chama drones' },
   };
   const PODERES = {
     bomba:    { nome: 'BOMBA',    icone: '💥', tecla: 'B', cd: 45, dano: 160, raio: 1.8 },
