@@ -2488,7 +2488,7 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   const fim = torres.indexOf('  // ── fim das regras ──');
   assert.ok(ini > 0 && fim > ini, 'torres: marcadores das regras nao encontrados');
   const T = new Function(torres.slice(ini, fim)
-    + '; return { FORMATOS, NV_MAX, VENDA, VIDAS, TORRES, ORDEM_TORRES, ALVOS, INIMIGOS, PODERES, escalaVida, custoEvolucao, danoTorre, alcanceTorre, gerarOnda, bonusOnda, juros, CRED_INICIAL, JUROS_TETO };')();
+    + '; return { FORMATOS, NV_MAX, VENDA, VIDAS, TORRES, ORDEM_TORRES, ALVOS, INIMIGOS, PODERES, MUTACOES, mutacaoOnda, escalaVida, custoEvolucao, danoTorre, alcanceTorre, gerarOnda, bonusOnda, juros, rendaCofre, buffAmpli, CRED_INICIAL, JUROS_TETO };')();
   assert.match(torres, /Neon\.world\(canvas, \[900, 600\], \[500, 800\]\)/, 'torres: o quadro deitado e 900x600 e o em pe 500x800');
   for (const [nome, f, W, H] of [['deitado', T.FORMATOS.deitado, 900, 600], ['emPe', T.FORMATOS.emPe, 500, 800]]) {
     assert.strictEqual(f.cols * f.cell, W, `torres: a grade ${nome} nao fecha na largura`);
@@ -2541,13 +2541,18 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
     assert.ok(def.desc && def.especial, `torres: ${tipo} precisa de descricao e especial no menu`);
     for (let nv = 1; nv < T.NV_MAX; nv++) {
       assert.ok(T.custoEvolucao(def, nv + 1) > T.custoEvolucao(def, nv), `torres: ${tipo} fica mais barata de evoluir no nivel ${nv + 1}`);
-      assert.ok(T.danoTorre(def, nv + 1) > T.danoTorre(def, nv), `torres: ${tipo} perde dano ao evoluir pro ${nv + 1}`);
+      if (def.dano > 0) assert.ok(T.danoTorre(def, nv + 1) > T.danoTorre(def, nv), `torres: ${tipo} perde dano ao evoluir pro ${nv + 1}`);
+      if (def.tipo === 'renda') assert.ok(T.rendaCofre(def, nv + 1) > T.rendaCofre(def, nv), `torres: ${tipo} rende menos ao evoluir pro ${nv + 1}`);
+      if (def.tipo === 'apoio') assert.ok(T.buffAmpli(def, nv + 1).dano > T.buffAmpli(def, nv).dano, `torres: ${tipo} fortalece menos ao evoluir pro ${nv + 1}`);
       assert.ok(T.alcanceTorre(def, nv + 1) > T.alcanceTorre(def, nv), `torres: ${tipo} perde alcance ao evoluir pro ${nv + 1}`);
       total += T.custoEvolucao(def, nv);
     }
     assert.ok(Math.floor(total * T.VENDA) < total, `torres: vender ${tipo} nao pode devolver tudo`);
     assert.ok(def.alcance >= 0.78, `torres: ${tipo} nem alcanca a trilha do lado`);
+    // torre que nao atira precisa dizer isso pro jogador, ou ele acha que quebrou
+    if (def.dano === 0) assert.ok(def.tipo === 'apoio' || def.tipo === 'renda', `torres: ${tipo} tem dano 0 e nao e de apoio`);
   }
+  assert.ok(Object.values(T.TORRES).some(t => t.tipo === 'apoio') && Object.values(T.TORRES).some(t => t.tipo === 'renda'), 'torres: precisa de torre de apoio e de renda');
   assert.ok(Math.min(...Object.values(T.TORRES).map(t => t.custo)) <= T.CRED_INICIAL / 2,
     'torres: o credito inicial tem que pagar pelo menos duas torres baratas');
   assert.ok(Object.values(T.TORRES).filter(t => t.custo <= T.CRED_INICIAL).length >= 3,
@@ -2587,6 +2592,19 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
     assert.ok(p.cd >= 20 && p.tecla && p.icone, `torres: poder ${id} sem recarga ou tecla`);
     assert.match(torres, new RegExp(`K === '${p.tecla}'`), `torres: a tecla ${p.tecla} do poder ${id} nao esta ligada`);
   }
+  assert.ok(Object.keys(T.PODERES).length >= 4, 'torres: pelo menos quatro poderes');
+  assert.strictEqual(new Set(Object.values(T.PODERES).map(p => p.tecla)).size, Object.keys(T.PODERES).length, 'torres: tecla de poder repetida');
+  for (const p of Object.values(T.PODERES)) assert.ok(!/[1-9UVTFP]/.test(p.tecla) && !'AWSD'.includes(p.tecla), `torres: a tecla ${p.tecla} ja tem dono`);
+  // mutacoes: nunca na onda de chefe, nunca antes da 6, e todas aparecem em 40 ondas
+  const vistas = new Set();
+  for (let n = 1; n <= 40; n++) {
+    const m = T.mutacaoOnda(n);
+    if (n < 6 || n % 10 === 0) assert.strictEqual(m, null, `torres: a onda ${n} nao pode ter mutacao`);
+    if (m) { assert.ok(m.id && m.nome && m.dica, `torres: mutacao da onda ${n} incompleta`); vistas.add(m.id); }
+  }
+  assert.strictEqual(vistas.size, T.MUTACOES.length, 'torres: toda mutacao tem que aparecer ate a onda 40');
+  assert.ok(T.MUTACOES.some(m => m.alcance < 0) && T.MUTACOES.some(m => m.vel > 1), 'torres: precisa de mutacao contra as torres e a favor da tropa');
+  assert.ok(T.INIMIGOS.escudado.escudo > 0, 'torres: o escudado precisa de escudo');
   assert.strictEqual(T.juros(10000), T.JUROS_TETO, 'torres: os juros tem teto');
   assert.strictEqual(T.juros(0), 0, 'torres: sem credito nao ha juros');
   assert.ok(T.ALVOS.includes('primeiro') && T.ALVOS.length >= 2, 'torres: modos de alvo');

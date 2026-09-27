@@ -42,7 +42,7 @@
     <canvas id="game" width="900" height="600"></canvas>
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON TORRES</h2>
-      <p id="overlayText">Os drones seguem a trilha até o núcleo. Toque num quadrado livre para construir; toque na torre para evoluir, vender ou trocar o alvo. Seis torres, sete inimigos, dois poderes com recarga e um chefe a cada 10 ondas. Chamar a onda antes da hora rende créditos, e cada onda vencida paga juros sobre o que você guardou.</p>
+      <p id="overlayText">Os drones seguem a trilha até o núcleo. Toque num quadrado livre para construir; toque na torre para evoluir, vender ou trocar o alvo. Nove torres (três de apoio: AMPLI fortalece vizinhas, EMP cala inimigos, COFRE rende), oito inimigos, quatro poderes com recarga, ondas mutantes a cada três e um chefe a cada 10. Chamar a onda antes da hora rende créditos, e cada onda vencida paga juros sobre o que você guardou.</p>
       <div class="sub" id="overlaySub"></div>
       <div class="final-stats" id="finalStats" style="display:none;">
         <div class="fstat"><span>Ondas</span><b id="fsOndas">0</b></div>
@@ -52,12 +52,12 @@
       <div class="mapa-pick" id="mapaPick"><span class="lbl">TRILHA</span></div>
       <button class="btn" id="startBtn">JOGAR</button>
       <div class="controls-hint">
-        <span class="key">Toque / clique constrói</span><span class="key">Setas movem o cursor</span><span class="key">1-6 torre · U evolui · V vende · T alvo</span><span class="key">B bomba · C congelar · F 2x</span><span class="key">ESPAÇO chama a onda</span><span class="key">P pausa</span>
+        <span class="key">Toque / clique constrói</span><span class="key">Setas movem o cursor</span><span class="key">1-9 torre · U evolui · V vende · T alvo</span><span class="key">B bomba · C congelar · X turbo · R reparo · F 2x</span><span class="key">ESPAÇO chama a onda</span><span class="key">P pausa</span>
       </div>
     </div>
   </div>
 
-  <footer>// <a href="../index.html">← arcade</a> · vender devolve 60% · juros de 5% por onda vencida · +1 vida a cada 5 ondas · tanque tira 2 vidas, chefe tira 5 · o recorde é a onda mais alta vencida</footer>
+  <footer>// <a href="../index.html">← arcade</a> · vender devolve 60% · juros de 5% por onda vencida · cofres pagam no fim da onda · +1 vida a cada 5 ondas · mutação a cada 3 ondas · tanque tira 2 vidas, chefe tira 5 · o recorde é a onda mais alta vencida</footer>
 </div>
 
 <script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
@@ -108,8 +108,19 @@
               desc: 'Longo alcance, ignora armadura', especial: 'Dano dobrado em chefes' },
     veneno: { nome: 'ÁCIDO',  icone: '🧪', custo: 80,  cor: '#a8dba0', alcance: 2.4, cadencia: 0.9,  dano: 4,  tipo: 'veneno', dps: 6, dur: 3, pilhas: 3,
               desc: 'Corrói por 3s e acumula', especial: 'Acumula até 5 vezes' },
+    // apoio: não atira. Torres dentro do alcance ganham dano e alcance; só o
+    // melhor amplificador vale, então empilhar dois no mesmo canto não dobra.
+    ampli:  { nome: 'AMPLI',  icone: '📡', custo: 110, cor: '#e6e6ff', alcance: 1.6, cadencia: 0,   dano: 0,  tipo: 'apoio', buffDano: 0.25, buffAlc: 0.15,
+              desc: 'Torres perto ganham +25% dano e +15% alcance', especial: 'Também +30% de cadência' },
+    emp:    { nome: 'EMP',    icone: '🧲', custo: 100, cor: '#8e83c8', alcance: 2.0, cadencia: 2.5, dano: 6,  tipo: 'emp', dur: 3,
+              desc: 'Cala habilidades, tira armadura e escudo', especial: 'Também atordoa por 0,6s' },
+    cofre:  { nome: 'COFRE',  icone: '🏦', custo: 120, cor: '#efce95', alcance: 1.0, cadencia: 0,   dano: 0,  tipo: 'renda', renda: 10,
+              desc: 'Rende ⟡10 × nível por onda vencida', especial: 'Rende o dobro' },
   };
-  const ORDEM_TORRES = ['pulso', 'missil', 'gelo', 'raio', 'mira', 'veneno'];
+  const ORDEM_TORRES = ['pulso', 'missil', 'gelo', 'raio', 'mira', 'veneno', 'ampli', 'emp', 'cofre'];
+  const rendaCofre = (def, nv) => def.renda * nv * (nv >= NV_MAX ? 2 : 1);
+  // buff do amplificador cresce com o nível dele
+  const buffAmpli = (def, nv) => ({ dano: def.buffDano * (1 + 0.5 * (nv - 1)), alcance: def.buffAlc * (1 + 0.5 * (nv - 1)), cadencia: nv >= NV_MAX ? 0.3 : 0 });
   const ALVOS = ['primeiro', 'ultimo', 'forte'];
   // vel em células por segundo; armadura tira um pedaço fixo de cada tiro
   const INIMIGOS = {
@@ -120,12 +131,25 @@
     curador:  { nome: 'CURADOR',  vida: 80,  vel: 1.1,  premio: 14, vidas: 1, cor: '#9be7ce', r: 0.2, cura: 8, raioCura: 1.6, dica: 'cura quem está perto' },
     divisor:  { nome: 'DIVISOR',  vida: 120, vel: 1.0,  premio: 12, vidas: 2, cor: '#e9b77c', r: 0.23, solta: 'cria', qtd: 3, dica: 'vira 3 ao morrer' },
     cria:     { nome: 'CRIA',     vida: 16,  vel: 2.2,  premio: 2,  vidas: 1, cor: '#e9b77c', r: 0.12 },
+    escudado: { nome: 'ESCUDADO', vida: 70,  vel: 1.2,  premio: 13, vidas: 1, cor: '#8faef2', r: 0.21, escudo: 70, dica: 'escudo que volta se ficar sem levar tiro' },
     chefe:    { nome: 'CHEFE',    vida: 1100, vel: 0.65, premio: 90, vidas: 5, cor: '#ff2b7a', r: 0.34, armadura: 4, convoca: 'drone', cada: 5, dica: 'tira 5 vidas e chama drones' },
   };
   const PODERES = {
     bomba:    { nome: 'BOMBA',    icone: '💥', tecla: 'B', cd: 45, dano: 160, raio: 1.8 },
     congelar: { nome: 'CONGELAR', icone: '🧊', tecla: 'C', cd: 60, dur: 3, lento: 0.25 },
+    turbo:    { nome: 'TURBO',    icone: '⚡', tecla: 'X', cd: 50, dur: 6 },
+    reparo:   { nome: 'REPARO',   icone: '💚', tecla: 'R', cd: 90, vidas: 3 },
   };
+  // Mutações: a cada três ondas (fora as de chefe) a tropa vem com um bônus,
+  // ou as torres com um ônus. Determinístico pela onda, então dá pra planejar.
+  const MUTACOES = [
+    { id: 'velozes',      nome: 'VELOZES',      dica: 'inimigos 30% mais rápidos', vel: 1.3 },
+    { id: 'blindados',    nome: 'BLINDADOS',    dica: '+3 de armadura em todos', armadura: 3 },
+    { id: 'regenerantes', nome: 'REGENERANTES', dica: 'recuperam 2% de vida por segundo', regen: 0.02 },
+    { id: 'nevoa',        nome: 'NÉVOA',        dica: 'torres com 20% menos alcance', alcance: -0.2 },
+    { id: 'enxame',       nome: 'ENXAME',       dica: '50% mais inimigos, cada um com 70% da vida', qtd: 1.5, vida: 0.7 },
+  ];
+  const mutacaoOnda = n => (n >= 6 && n % 3 === 0 && n % 10 !== 0) ? MUTACOES[(n / 3) % MUTACOES.length] : null;
   // sobe rapido: na onda 10 o inimigo tem 4x a vida, na 20 tem 11x
   const escalaVida = n => 1 + 0.18 * (n - 1) + 0.02 * (n - 1) * (n - 1);
   const escalaPremio = n => 1 + 0.03 * (n - 1);
@@ -145,6 +169,7 @@
     if (n >= 7) add('blindado', Math.floor(n / 2), 0.9);
     if (n >= 9) add('curador', Math.floor((n - 6) / 3), 1.6);
     if (n >= 12) add('divisor', Math.floor((n - 9) / 3), 1.5);
+    if (n >= 14) add('escudado', Math.floor((n - 11) / 3), 1.2);
     if (n % 10 === 0) add('chefe', n / 10, 2.5);
     return lista;
   }
@@ -193,7 +218,7 @@
   let emOnda = false, contagem = ESPERA_PRIMEIRA, fila = [], spawnT = 0, velocidade = 1;
   let torres = [], inimigos = [], projeteis = [], feixes = [], vistos = new Set();
   let sel = null, menu = null, botoes = [], btnOnda = null, mirando = null, mouse = null;
-  let recarga = { bomba: 0, congelar: 0 }, congelado = 0;
+  let recarga = { bomba: 0, congelar: 0, turbo: 0, reparo: 0 }, congelado = 0, turbo = 0, mutacao = null;
   let banner = null, shake = { t: 0, max: 1, power: 0 }, flash = { t: 0, color: '' }, somT = 0, nucleoT = 0;
   const particles = new Neon.Particles();
   const poeira = Array.from({ length: 40 }, () => ({ x: Math.random() * W, y: Math.random() * H, v: Neon.rand(6, 18), r: Neon.rand(0.6, 1.6), a: Math.random() * 6.28 }));
@@ -214,7 +239,7 @@
     emOnda = false; contagem = ESPERA_PRIMEIRA; fila = []; spawnT = 0; velocidade = 1;
     torres = []; inimigos = []; projeteis = []; feixes = []; vistos = new Set();
     sel = null; menu = null; botoes = []; mirando = null; tempo = 0; banner = null;
-    recarga = { bomba: 0, congelar: 0 }; congelado = 0;
+    recarga = { bomba: 0, congelar: 0, turbo: 0, reparo: 0 }; congelado = 0; turbo = 0; mutacao = null;
     particles.clear();
     Neon.audio.music.intensity(0);
     atualizarHud();
@@ -255,6 +280,11 @@
     while (listas.some(l => l.length)) {
       for (const l of listas) if (l.length) saida.push(l.shift());
     }
+    const m = mutacaoOnda(n);
+    if (m && m.qtd) {
+      const comuns = saida.filter(e => e.tipo !== 'chefe'), extra = Math.round(comuns.length * (m.qtd - 1));
+      for (let i = 0; i < extra; i++) saida.splice(Neon.rand(0, saida.length) | 0, 0, comuns[i % comuns.length]);
+    }
     return saida;
   }
 
@@ -267,6 +297,7 @@
     }
     onda++;
     emOnda = true;
+    mutacao = mutacaoOnda(onda);
     fila = montarFila(onda);
     spawnT = 0.4;
     sel = null; menu = null; mirando = null;
@@ -274,9 +305,9 @@
     for (const t of novos) vistos.add(t);
     const chefe = onda % 10 === 0;
     const novo = novos.find(t => t !== 'chefe');
-    mostrarBanner(chefe ? `ONDA ${onda} · CHEFE` : `ONDA ${onda}`,
-      chefe ? INIMIGOS.chefe.dica : (novo ? `novo: ${INIMIGOS[novo].nome} · ${INIMIGOS[novo].dica}` : ''),
-      chefe ? '#ff2b7a' : '#9be7ce');
+    mostrarBanner(chefe ? `ONDA ${onda} · CHEFE` : (mutacao ? `ONDA ${onda} · ${mutacao.nome}` : `ONDA ${onda}`),
+      chefe ? INIMIGOS.chefe.dica : (mutacao ? mutacao.dica : (novo ? `novo: ${INIMIGOS[novo].nome} · ${INIMIGOS[novo].dica}` : '')),
+      chefe ? '#ff2b7a' : (mutacao ? '#afa3f5' : '#9be7ce'));
     if (chefe) { shakeAt(8, 500); Neon.audio.sfx.boom(); } else Neon.audio.sfx.level();
     Neon.audio.music.intensity(Math.min(1, onda / 20));
     atualizarHud();
@@ -287,9 +318,18 @@
     emOnda = false;
     contagem = ESPERA;
     const bonus = bonusOnda(onda), rende = juros(cred);
-    cred += bonus + rende;
+    let cofres = 0;
+    for (const t of torres) {
+      if (t.def.tipo !== 'renda') continue;
+      const r = rendaCofre(t.def, t.nv);
+      cofres += r;
+      particles.float(t.x, t.y - CELL * 0.4, `+${r}`, '#efce95', 13);
+    }
+    cred += bonus + rende + cofres;
+    mutacao = null;
     pb = Neon.best.update('torres', onda);
     let extra = rende ? ` · juros +${rende}` : '';
+    if (cofres) extra += ` · cofres +${cofres}`;
     if (onda % VIDA_A_CADA === 0 && vidas < VIDAS) { vidas++; extra += ' · +1 vida'; }
     mostrarBanner(`ONDA ${onda} VENCIDA`, `+${bonus}${extra}`, '#a8dba0');
     Neon.audio.sfx.goal();
@@ -297,10 +337,12 @@
   }
 
   function nascer(tipo, x, y, seg, prog) {
-    const def = INIMIGOS[tipo];
-    const vida = Math.round(def.vida * escalaVida(onda));
+    const def = INIMIGOS[tipo], m = mutacao || {};
+    const vida = Math.round(def.vida * escalaVida(onda) * (m.vida || 1));
     inimigos.push({
-      tipo, def, vida, vidaMax: vida, vel: def.vel, armadura: def.armadura || 0,
+      tipo, def, vida, vidaMax: vida, vel: def.vel * (m.vel || 1), armadura: (def.armadura || 0) + (m.armadura || 0),
+      escudo: def.escudo ? { atual: def.escudo * escalaVida(onda), max: def.escudo * escalaVida(onda), regenT: 0 } : null,
+      marcado: 0, silenciado: 0, atordoado: 0,
       premio: Math.round(def.premio * escalaPremio(onda)), custoVidas: def.vidas,
       x: x === undefined ? PONTOS[0].x : x, y: y === undefined ? PONTOS[0].y : y,
       seg: seg || 0, prog: prog || 0, ang: 0, lento: 0, lentoFator: 1, veneno: null,
@@ -312,6 +354,7 @@
   function moverInimigo(e, dt) {
     let fator = e.lento > 0 ? e.lentoFator : 1;
     if (congelado > 0) fator = Math.min(fator, PODERES.congelar.lento);
+    if (e.atordoado > 0) fator = 0;
     let d = e.vel * CELL * fator * dt;
     while (d > 0 && e.seg < PONTOS.length - 1) {
       const b = PONTOS[e.seg + 1];
@@ -323,7 +366,16 @@
   }
 
   function habilidades(e, dt) {
-    if (e.def.cura) {
+    if (e.marcado > 0) e.marcado -= dt;
+    if (e.silenciado > 0) e.silenciado -= dt;
+    if (e.atordoado > 0) e.atordoado -= dt;
+    const calado = e.silenciado > 0;
+    if (mutacao && mutacao.regen && !calado && e.vida < e.vidaMax) e.vida = Math.min(e.vidaMax, e.vida + e.vidaMax * mutacao.regen * dt);
+    if (e.escudo) {
+      if (e.escudo.regenT > 0) e.escudo.regenT -= dt;
+      else if (!calado && e.escudo.atual < e.escudo.max) e.escudo.atual = Math.min(e.escudo.max, e.escudo.atual + e.escudo.max * dt / 2);
+    }
+    if (e.def.cura && !calado) {
       // cura os vizinhos, nunca a si mesmo: senão um curador sozinho vira parede
       for (const o of inimigos) {
         if (o === e || o.morto || o.vida >= o.vidaMax) continue;
@@ -332,7 +384,7 @@
         if (Math.random() < dt * 4) particles.emit(o.x + Neon.rand(-6, 6), o.y, 0, -30, '#9be7ce', 2, 0.5);
       }
     }
-    if (e.def.convoca) {
+    if (e.def.convoca && !calado) {
       e.cd -= dt;
       if (e.cd <= 0) {
         e.cd = e.def.cada;
@@ -365,7 +417,16 @@
 
   function ferir(e, dano, ignoraArmadura) {
     if (e.morto) return;
-    e.vida -= ignoraArmadura ? dano : Math.max(1, dano - e.armadura);
+    const calado = e.silenciado > 0;
+    let d = ignoraArmadura || calado ? dano : Math.max(1, dano - e.armadura);
+    if (e.marcado > 0) d *= 1.25;
+    if (e.escudo && e.escudo.atual > 0 && !calado) {
+      const abs = Math.min(e.escudo.atual, d);
+      e.escudo.atual -= abs; d -= abs;
+      e.escudo.regenT = 3;
+      particles.wave(e.x, e.y, '#8faef2', e.r * 3);
+    }
+    e.vida -= d;
     e.flash = 0.08;
     if (e.vida <= 0) matar(e);
   }
@@ -401,9 +462,48 @@
     return melhor;
   }
 
+  // Números finais da torre: nível, amplificador mais forte por perto, turbo e
+  // névoa. Quem desenha alcance e quem atira lê daqui, então o que o menu
+  // mostra é o que a torre faz.
+  function statsTorre(t) {
+    const def = t.def;
+    let bd = 0, ba = 0, bc = 0, apoio = null;
+    for (const a of torres) {
+      if (a === t || a.def.tipo !== 'apoio') continue;
+      if (Math.hypot(a.x - t.x, a.y - t.y) > alcanceTorre(a.def, a.nv) * CELL) continue;
+      const b = buffAmpli(a.def, a.nv);
+      if (b.dano > bd) { bd = b.dano; ba = b.alcance; bc = b.cadencia; apoio = a; }
+    }
+    if (turbo > 0) bc += 1;
+    if (mutacao && mutacao.alcance) ba += mutacao.alcance;
+    return {
+      dano: Math.round(danoTorre(def, t.nv) * (1 + bd)),
+      alcance: alcanceTorre(def, t.nv) * (1 + ba) * CELL,
+      cadencia: def.cadencia / (1 + bc),
+      apoio, buffado: bd > 0, nevoa: !!(mutacao && mutacao.alcance),
+    };
+  }
+
   function atirar(t) {
     const def = t.def, nv = t.nv, max = nv >= NV_MAX;
-    const dano = danoTorre(def, nv), alcance = alcanceTorre(def, nv) * CELL;
+    if (def.tipo === 'apoio' || def.tipo === 'renda') return false;
+    const st = statsTorre(t), dano = st.dano, alcance = st.alcance;
+    if (def.tipo === 'emp') {
+      let pegou = 0;
+      for (const e of inimigos) {
+        if (e.morto || Math.hypot(e.x - t.x, e.y - t.y) > alcance + e.r) continue;
+        e.silenciado = def.dur;
+        if (e.escudo) { e.escudo.atual = 0; e.escudo.regenT = def.dur; }
+        if (max) e.atordoado = Math.max(e.atordoado, 0.6);
+        ferir(e, dano, true);
+        pegou++;
+      }
+      if (!pegou) return false;
+      particles.wave(t.x, t.y, def.cor, alcance * 2);
+      t.flash = 0.3;
+      Neon.audio.sfx.zap();
+      return true;
+    }
     if (def.tipo === 'gelo') {
       let pegou = 0;
       for (const e of inimigos) {
@@ -448,6 +548,7 @@
       Neon.audio.sfx.zap();
     } else if (def.tipo === 'mira') {
       const d = alvo.tipo === 'chefe' && max ? dano * 2 : dano;
+      alvo.marcado = 4;   // marcado leva 25% a mais de tudo por 4s
       ferir(alvo, d, true);
       feixes.push({ pts: [{ x: t.x, y: t.y }, { x: alvo.x, y: alvo.y }], cor: '#fff', t: 0.12, max: 0.12, w: 3.5 });
       feixes.push({ pts: [{ x: t.x, y: t.y }, { x: alvo.x, y: alvo.y }], cor: def.cor, t: 0.2, max: 0.2, w: 1.5 });
@@ -504,6 +605,26 @@
       if (mirando) Neon.toast('TOQUE ONDE SOLTAR A BOMBA');
       return;
     }
+    if (id === 'turbo') {
+      recarga.turbo = PODERES.turbo.cd;
+      turbo = PODERES.turbo.dur;
+      for (const t of torres) particles.burst(t.x, t.y, '#efce95', 6, 90);
+      Neon.audio.sfx.boost();
+      mostrarBanner('TURBO', `torres atiram 2× mais rápido por ${PODERES.turbo.dur}s`, '#efce95');
+      return;
+    }
+    if (id === 'reparo') {
+      if (vidas >= VIDAS) { Neon.toast('NÚCLEO JÁ ESTÁ INTEIRO'); return; }
+      recarga.reparo = PODERES.reparo.cd;
+      vidas = Math.min(VIDAS, vidas + PODERES.reparo.vidas);
+      const n = PONTOS[PONTOS.length - 1];
+      particles.wave(n.x, n.y, '#a8dba0', CELL * 3);
+      particles.float(n.x, n.y - CELL * 0.6, `+${PODERES.reparo.vidas} VIDAS`, '#a8dba0', 15);
+      Neon.audio.sfx.golden();
+      atualizarHud();
+      Neon.popEl(els.vidas);
+      return;
+    }
     if (id === 'congelar') {
       recarga.congelar = PODERES.congelar.cd;
       congelado = PODERES.congelar.dur;
@@ -519,6 +640,7 @@
     mirando = null;
     recarga.bomba = PODERES.bomba.cd;
     explodir({ x, y, dano: PODERES.bomba.dano, raio: PODERES.bomba.raio * CELL, cor: '#efce95' });
+    for (const e of inimigos) if (!e.morto && Math.hypot(e.x - x, e.y - y) <= PODERES.bomba.raio * CELL + e.r) e.atordoado = Math.max(e.atordoado, 1);
     particles.burst(x, y, '#fff', 20, 260, 4);
     shakeAt(12, 400);
     flashAt('rgba(239,206,149,', 260);
@@ -577,9 +699,10 @@
     atualizarHud();
   }
 
+  const temAlvo = def => !['gelo', 'emp', 'apoio', 'renda'].includes(def.tipo);
   function trocarAlvo() {
     const t = sel && torreEm(sel.c, sel.r);
-    if (!t || t.def.tipo === 'gelo') return;
+    if (!t || !temAlvo(t.def)) return;
     t.alvo = ALVOS[(ALVOS.indexOf(t.alvo) + 1) % ALVOS.length];
     Neon.audio.sfx.click();
   }
@@ -649,12 +772,14 @@
     }
     const K = k.toUpperCase();
     if (k === 'Escape') { sel = null; menu = null; mirando = null; return; }
-    if (k >= '1' && k <= '6') construir(ORDEM_TORRES[+k - 1]);
+    if (k >= '1' && k <= '9') construir(ORDEM_TORRES[+k - 1]);
     else if (K === 'U') evoluir();
     else if (K === 'V') vender();
     else if (K === 'T') trocarAlvo();
     else if (K === 'B') usarPoder('bomba');
     else if (K === 'C') usarPoder('congelar');
+    else if (K === 'X') usarPoder('turbo');
+    else if (K === 'R') usarPoder('reparo');
     else if (K === 'F') alternarVelocidade();
   });
 
@@ -676,6 +801,7 @@
     tempo += dt;
     for (const id in recarga) if (recarga[id] > 0) recarga[id] -= dt;
     if (congelado > 0) congelado -= dt;
+    if (turbo > 0) turbo -= dt;
     if (nucleoT > 0) nucleoT -= dt;
 
     if (emOnda) {
@@ -703,7 +829,7 @@
       t.cd -= dt;
       if (t.flash > 0) t.flash -= dt;
       t.nasceu += dt;
-      if (t.cd <= 0 && atirar(t)) t.cd = t.def.cadencia;
+      if (t.cd <= 0 && atirar(t)) t.cd = statsTorre(t).cadencia;
     }
 
     for (let i = projeteis.length - 1; i >= 0; i--) {
@@ -824,16 +950,24 @@
   function desenharTorre(t) {
     const s = CELL * 0.36, sel_ = sel && sel.c === t.c && sel.r === t.r;
     const cresce = Math.min(1, t.nasceu * 4), esc = 1 + (1 - cresce) * 0.4;
-    if (sel_) {
-      const alc = alcanceTorre(t.def, t.nv) * CELL;
-      ctx.fillStyle = 'rgba(255,255,255, 0.05)';
+    const st = statsTorre(t);
+    if (sel_ && t.def.tipo !== 'renda') {
+      const alc = st.alcance;
+      ctx.fillStyle = t.def.tipo === 'apoio' ? 'rgba(230,230,255, 0.07)' : 'rgba(255,255,255, 0.05)';
       ctx.beginPath(); ctx.arc(t.x, t.y, alc, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = t.def.cor; ctx.globalAlpha = 0.6; ctx.lineWidth = 1.5;
       ctx.setLineDash([6, 6]); ctx.lineDashOffset = -tempo * 20; ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
     }
+    if (sel_ && t.def.tipo === 'apoio') {
+      // linhas até quem recebe o buff
+      for (const o of torres) if (o !== t && statsTorre(o).apoio === t) {
+        ctx.strokeStyle = 'rgba(230,230,255, 0.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 6]); ctx.lineDashOffset = -tempo * 24;
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(o.x, o.y); ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
     ctx.save();
     ctx.translate(t.x, t.y); ctx.scale(esc, esc);
-    Neon.glow(ctx, t.def.cor, sel_ || t.flash > 0 ? 28 : 14);
+    Neon.glow(ctx, turbo > 0 ? '#efce95' : t.def.cor, sel_ || t.flash > 0 || turbo > 0 ? 28 : 14);
     ctx.fillStyle = t.nv >= NV_MAX ? 'rgba(40,34,70, 0.95)' : 'rgba(17,29,44, 0.95)';
     arredondado(-s, -s, s * 2, s * 2, 6); ctx.fill();
     ctx.strokeStyle = t.def.cor; ctx.lineWidth = t.nv >= NV_MAX ? 3 : 2; ctx.stroke();
@@ -869,7 +1003,18 @@
       ctx.beginPath(); ctx.arc(0, 0, s * 0.9 + Math.sin(tempo * 3) * 2, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
+    if (t.def.tipo === 'apoio') {
+      ctx.strokeStyle = t.def.cor; ctx.lineWidth = 1; ctx.globalAlpha = 0.35 + 0.15 * Math.sin(tempo * 4);
+      ctx.beginPath(); ctx.arc(0, 0, s * (1.1 + 0.2 * ((tempo * 0.7) % 1)), 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (t.def.tipo === 'emp') {
+      ctx.strokeStyle = t.def.cor; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5 + (t.flash > 0 ? 0.5 : 0);
+      ctx.beginPath(); ctx.arc(0, 0, s * 0.9, tempo * 3, tempo * 3 + 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     emoji(t.def.icone, 0, 0, CELL * 0.36);
+    if (st.buffado) texto('▲', s - 5, -s + 6, 8, '#e6e6ff');
     for (let i = 0; i < t.nv; i++) {
       ctx.fillStyle = '#efce95';
       Neon.circle(ctx, -s + 6 + i * 7, s - 5, 2.4);
@@ -932,8 +1077,19 @@
     }
     ctx.shadowBlur = 0;
     ctx.restore();
-    if (e.lento > 0 && congelado <= 0) emoji('❄️', e.x, e.y - e.r - 9, 10);
-    if (e.veneno) emoji('🧪', e.x + e.r + 4, e.y - e.r - 6, 9);
+    if (e.escudo && e.escudo.atual > 0) {
+      Neon.glow(ctx, '#8faef2', 12);
+      ctx.strokeStyle = '#8faef2'; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5 + 0.5 * e.escudo.atual / e.escudo.max;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (e.escudo.atual / e.escudo.max)); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+    }
+    const icones = [];
+    if (e.lento > 0 && congelado <= 0) icones.push('❄️');
+    if (e.veneno) icones.push('🧪');
+    if (e.marcado > 0) icones.push('🎯');
+    if (e.silenciado > 0) icones.push('🔇');
+    if (e.atordoado > 0) icones.push('💫');
+    icones.forEach((ic, i) => emoji(ic, e.x + (i - (icones.length - 1) / 2) * 11, e.y - e.r - 9, 9));
     // barra de vida só depois do primeiro dano
     if (e.vida < e.vidaMax) {
       const w = Math.max(18, e.r * 2.2), k = Math.max(0, e.vida / e.vidaMax);
@@ -950,7 +1106,7 @@
     const pad = 8;
     let w, h, porLinha = 0, bw = 0, bh = 0;
     if (menu === 'construir') {
-      porLinha = W >= 800 ? 6 : 3;
+      porLinha = W >= 800 ? 5 : 3;
       bw = Math.min(104, (W - 24 - pad * (porLinha + 1)) / porLinha); bh = 70;
       const linhas = Math.ceil(ORDEM_TORRES.length / porLinha);
       w = bw * porLinha + pad * (porLinha + 1); h = bh * linhas + pad * (linhas + 1);
@@ -991,9 +1147,13 @@
     } else {
       const t = torreEm(sel.c, sel.r);
       if (!t) { menu = 'construir'; return; }
-      const dano = danoTorre(t.def, t.nv), alc = alcanceTorre(t.def, t.nv).toFixed(1), max = t.nv >= NV_MAX;
+      const st = statsTorre(t), alc = (st.alcance / CELL).toFixed(1), max = t.nv >= NV_MAX;
       texto(`${t.def.nome} · NÍVEL ${t.nv}/${NV_MAX}`, px + w / 2, py + 15, 11, t.def.cor);
-      texto(`dano ${dano} · alcance ${alc} · cada ${t.def.cadencia}s`, px + w / 2, py + 31, 9, 'rgba(230,230,255,0.7)', 400);
+      let linha;
+      if (t.def.tipo === 'apoio') { const b = buffAmpli(t.def, t.nv); linha = `+${Math.round(b.dano * 100)}% dano · +${Math.round(b.alcance * 100)}% alcance${b.cadencia ? ` · +${Math.round(b.cadencia * 100)}% cadência` : ''} · raio ${alc}`; }
+      else if (t.def.tipo === 'renda') linha = `rende ⟡${rendaCofre(t.def, t.nv)} por onda vencida`;
+      else linha = `dano ${st.dano}${st.buffado ? '▲' : ''} · alcance ${alc}${st.nevoa ? '▼' : ''} · cada ${st.cadencia.toFixed(2)}s`;
+      texto(linha, px + w / 2, py + 31, 9, 'rgba(230,230,255,0.7)', 400);
       texto(max ? `★ ${t.def.especial}` : `${t.def.desc} · nv ${NV_MAX}: ${t.def.especial}`, px + w / 2, py + 46, 8.5, max ? '#efce95' : 'rgba(230,230,255,0.55)', 400);
       const bw2 = (w - pad * 3) / 2, bh2 = 34, by = py + 58;
       const custo = max ? 0 : custoEvolucao(t.def, t.nv), ok = !max && cred >= custo;
@@ -1005,8 +1165,9 @@
       botao(bx2, by, bw2, bh2, '#ed887f', true, vender);
       texto(`✕ VENDER ${fmtCred(Math.floor(t.investido * VENDA))}`, bx2 + bw2 / 2, by + bh2 / 2, 11, '#ed887f');
       const by3 = by + bh2 + pad, bh3 = 28;
-      if (t.def.tipo === 'gelo') {
-        texto('atinge tudo no alcance', px + w / 2, by3 + bh3 / 2, 9, 'rgba(230,230,255,0.5)', 400);
+      if (!temAlvo(t.def)) {
+        texto(t.def.tipo === 'renda' ? 'não atira: paga no fim da onda' : (t.def.tipo === 'apoio' ? 'não atira: fortalece as torres em volta' : 'atinge tudo no alcance'),
+          px + w / 2, by3 + bh3 / 2, 9, 'rgba(230,230,255,0.5)', 400);
       } else {
         botao(px + pad, by3, w - pad * 2, bh3, '#9be7ce', true, trocarAlvo);
         const nome = { primeiro: 'PRIMEIRO DA FILA', ultimo: 'ÚLTIMO DA FILA', forte: 'MAIS FORTE' }[t.alvo];
@@ -1026,7 +1187,7 @@
     ctx.strokeStyle = emOnda ? 'rgba(237,136,127,0.8)' : 'rgba(155,231,206,0.8)'; ctx.lineWidth = 1.5; ctx.stroke();
     if (emOnda) {
       const rest = inimigos.length + fila.length;
-      texto(`ONDA ${onda} · ${rest} ${rest === 1 ? 'INIMIGO' : 'INIMIGOS'}`, W / 2, y + h / 2, 11, '#ed887f');
+      texto(`ONDA ${onda}${mutacao ? ` · ${mutacao.nome}` : ''} · ${rest} ${rest === 1 ? 'INIMIGO' : 'INIMIGOS'}`, W / 2, y + h / 2, retrato && mutacao ? 9.5 : 11, mutacao ? '#afa3f5' : '#ed887f');
     } else {
       const s = Math.ceil(contagem);
       // barra de tempo por baixo do texto
@@ -1041,7 +1202,7 @@
     const ids = Object.keys(PODERES);
     ids.forEach((id, i) => {
       const cx = W - 16 - R - i * (R * 2 + 10), def = PODERES[id];
-      const pronto = recarga[id] <= 0, ativo = mirando === id;
+      const pronto = recarga[id] <= 0, ativo = mirando === id || (id === 'turbo' && turbo > 0);
       Neon.glow(ctx, ativo ? '#fff' : (pronto ? '#efce95' : '#3a3f5c'), pronto ? 18 : 0);
       ctx.fillStyle = 'rgba(8,13,28, 0.92)';
       Neon.circle(ctx, cx, yb, R);
@@ -1166,6 +1327,10 @@
     }
     if (congelado > 0) {
       ctx.fillStyle = `rgba(143,174,242, ${0.08 * Math.min(1, congelado)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    if (turbo > 0) {
+      ctx.fillStyle = `rgba(239,206,149, ${0.05 * Math.min(1, turbo)})`;
       ctx.fillRect(0, 0, W, H);
     }
 
