@@ -69,7 +69,27 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  const { W, H, retrato } = Neon.world(canvas, [900, 600], [500, 800]);
+  // Torres moram numa grade, e a grade deitada e a em pé são outras. Então o
+  // formato é decidido uma vez por partida: se há partida salva, abre no
+  // formato dela, seja como for que o aparelho esteja agora; e girar no meio
+  // do jogo não recarrega nada, o quadro só encolhe pra caber.
+  const SAVE = 'neon-torres-save';
+  function lerSaveBruto() {
+    try { return JSON.parse(localStorage.getItem(SAVE) || 'null'); } catch (_) { return null; }
+  }
+  const saveInicial = lerSaveBruto();
+  const formatoSalvo = saveInicial && (saveInicial.formato === 'emPe' || saveInicial.formato === 'deitado') ? saveInicial.formato : null;
+  let retratoTela = false;
+  function girou(retratoAgora) {
+    retratoTela = retratoAgora;
+    // sem partida nem save, recarrega e pega o formato certo pra tela
+    if ((state === 'menu' || state === 'gameover') && !lerSave()) { location.reload(); return; }
+    if (state === 'playing' || state === 'paused') Neon.toast('QUADRO TRAVADO NO FORMATO DA PARTIDA');
+  }
+  const { W, H, retrato } = Neon.world(canvas, [900, 600], [500, 800], {
+    retrato: formatoSalvo ? formatoSalvo === 'emPe' : undefined, aoGirar: girou,
+  });
+  retratoTela = window.matchMedia ? window.matchMedia('(max-width: 560px) and (orientation: portrait)').matches : false;
 
   // ── regras ──
   // Mapa, torres, inimigos, ondas e poderes: nada aqui toca DOM nem canvas. O
@@ -251,9 +271,8 @@
   // ── partida salva ──
   // Checkpoint a cada onda vencida, a cada construção e ao pausar/sair da aba.
   // Se fechar no meio de uma onda, volta pro começo dela com as torres e os
-  // créditos do momento em que saiu. Torres moram numa grade, então o save só
-  // vale no mesmo formato (deitado/em pé) em que foi feito.
-  const SAVE = 'neon-torres-save';
+  // créditos do momento em que saiu. A página abre no formato do save, então
+  // ele sempre vale.
   const NOME_FORMATO = retrato ? 'emPe' : 'deitado';
   const TEXTO_MENU = Neon.$('overlayText').textContent;
   const els2 = { novoJogo: Neon.$('novoJogo'), novoBtn: Neon.$('novoBtn'), overlayText: Neon.$('overlayText') };
@@ -275,24 +294,22 @@
     try { localStorage.removeItem(SAVE); } catch (_) { /* nada a apagar */ }
   }
   function lerSave() {
-    try {
-      const d = JSON.parse(localStorage.getItem(SAVE) || 'null');
-      if (!d || d.v !== 1 || !Array.isArray(d.torres) || !(d.onda >= 0) || !(d.vidas > 0)) return null;
-      if (!FORMATO.mapas[d.mapa]) return null;
-      return d;
-    } catch (_) { return null; }
+    const d = lerSaveBruto();
+    if (!d || d.v !== 1 || !Array.isArray(d.torres) || !(d.onda >= 0) || !(d.vidas > 0)) return null;
+    if (d.formato !== NOME_FORMATO || !FORMATO.mapas[d.mapa]) return null;
+    return d;
   }
   function mostrarMenuInicial() {
     save = lerSave();
     const startBtn = Neon.$('startBtn');
-    if (save && save.formato === NOME_FORMATO) {
+    if (save) {
       const m = FORMATO.mapas[save.mapa].nome;
       els2.overlayText.textContent = `Partida salva: onda ${save.onda + 1} na trilha ${m}, ${save.vidas} ${save.vidas === 1 ? 'vida' : 'vidas'}, ⟡${save.cred} e ${save.torres.length} ${save.torres.length === 1 ? 'torre' : 'torres'}. Continue de onde parou ou comece do zero.`;
       startBtn.textContent = 'CONTINUAR';
       els2.novoJogo.classList.remove('oculto');
       els.mapaPick.classList.add('oculto');
     } else {
-      els2.overlayText.textContent = save ? `Há uma partida salva no outro formato de tela (${save.formato === 'emPe' ? 'em pé' : 'deitado'}). Gire o aparelho para continuar, ou comece do zero aqui.` : TEXTO_MENU;
+      els2.overlayText.textContent = TEXTO_MENU;
       startBtn.textContent = 'JOGAR';
       els2.novoJogo.classList.add('oculto');
       els.mapaPick.classList.remove('oculto');
@@ -324,9 +341,12 @@
   }
 
   function startGame() {
+    apagarSave();
+    // o quadro estava preso ao formato da partida antiga; se a tela agora pede
+    // o outro, recarrega pra começar a nova no formato certo
+    if (retrato !== retratoTela) { location.reload(); return; }
     Neon.audio.ensure();
     startHi = pb;
-    apagarSave();
     novaPartida();
     state = 'playing';
     Neon.overlay.hide();
@@ -837,7 +857,7 @@
     const k = e.key;
     if (k === ' ' || k === 'Enter') {
       e.preventDefault();
-      if (state === 'menu' && save && save.formato === NOME_FORMATO) continuar();
+      if (state === 'menu' && save) continuar();
       else if (state === 'menu' || state === 'gameover') startGame();
       else if (state === 'paused') resumeGame();
       else if (state === 'playing') chamarOnda();
@@ -880,7 +900,7 @@
 
   Neon.$('startBtn').addEventListener('click', () => {
     if (state === 'paused') resumeGame();
-    else if (state === 'menu' && save && save.formato === NOME_FORMATO) continuar();
+    else if (state === 'menu' && save) continuar();
     else startGame();
   });
   els2.novoBtn.addEventListener('click', () => { if (state === 'menu') startGame(); });

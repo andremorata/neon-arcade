@@ -474,11 +474,21 @@ window.Neon = (function () {
   // repetido no <style> de cada jogo.
   // Girar o aparelho troca o formato do mundo. Recarrega em vez de esticar o
   // quadro: partida distorcida e pior do que partida perdida.
+  // opcoes (todas opcionais, nenhum jogo antigo precisa mexer):
+  //   retrato: true/false forca o formato em vez de ler a tela. Jogo com
+  //            partida salva numa grade abre no formato em que ela foi feita.
+  //   aoGirar(retratoAgora): chamado no lugar do reload. Quem tem partida em
+  //            andamento decide se recarrega ou se segura o quadro.
   const RETRATO = '(max-width: 560px) and (orientation: portrait)';
-  function world(canvas, deitado, emPe) {
+  function world(canvas, deitado, emPe, opcoes) {
+    opcoes = opcoes || {};
     const mq = window.matchMedia ? window.matchMedia(RETRATO) : { matches: false };
-    if (mq.addEventListener) mq.addEventListener('change', () => location.reload());
-    const [W, H] = mq.matches ? emPe : deitado;
+    if (mq.addEventListener) mq.addEventListener('change', () => {
+      if (typeof opcoes.aoGirar === 'function') opcoes.aoGirar(!!mq.matches);
+      else location.reload();
+    });
+    const retrato = typeof opcoes.retrato === 'boolean' ? opcoes.retrato : !!mq.matches;
+    const [W, H] = retrato ? emPe : deitado;
     canvas.width = W;
     canvas.height = H;
     const stage = canvas.closest('.stage');
@@ -486,7 +496,7 @@ window.Neon = (function () {
       stage.style.setProperty('--arw', String(W));   // setProperty pede string
       stage.style.setProperty('--arh', String(H));
     }
-    return { W, H, retrato: !!mq.matches };
+    return { W, H, retrato };
   }
 
   // ── dica de girar o telefone ───────────────────────

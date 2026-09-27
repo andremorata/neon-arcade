@@ -1297,15 +1297,18 @@ for (const [nome, W, H, speed] of [
 
 // Neon.world escolhe o formato do mundo e escreve --arw/--arh, que é o que o
 // CSS usa pro aspect-ratio do quadro. Se os dois discordarem, o canvas estica.
-const worldSrc = block(core, '  function world(canvas, deitado, emPe)');
-function chamaWorld(retrato) {
+const worldSrc = block(core, '  function world(canvas, deitado, emPe, opcoes)');
+function chamaWorld(retrato, opcoes, girar) {
   const props = {};
   const stage = { style: { setProperty: (k, v) => { props[k] = v; } } };
   const canvas = { width: 0, height: 0, closest: () => stage };
-  const world = new Function('window', 'RETRATO', `${worldSrc}; return world;`)(
-    { matchMedia: () => ({ matches: retrato }) }, 'mq');
-  const r = world(canvas, [900, 600], [450, 800]);
-  return { r, canvas: [canvas.width, canvas.height], props };
+  const mq = { matches: retrato, addEventListener: (_, fn) => { mq.girar = fn; } };
+  const loc = { reloads: 0, reload() { this.reloads++; } };
+  const world = new Function('window', 'RETRATO', 'location', `${worldSrc}; return world;`)(
+    { matchMedia: () => mq }, 'mq', loc);
+  const r = world(canvas, [900, 600], [450, 800], opcoes);
+  if (girar) { mq.matches = !retrato; mq.girar(); }
+  return { r, canvas: [canvas.width, canvas.height], props, reloads: loc.reloads };
 }
 const deitado = chamaWorld(false), emPe = chamaWorld(true);
 assert.deepStrictEqual(deitado.canvas, [900, 600], 'Deitado o mundo é 900x600');
@@ -1316,6 +1319,17 @@ for (const [nome, w] of [['deitado', deitado], ['em pé', emPe]]) {
   assert.strictEqual(+w.props['--arw'] / +w.props['--arh'], w.canvas[0] / w.canvas[1],
     `${nome}: --arw/--arh tem que bater com o canvas, senão o quadro estica`);
 }
+// girar recarrega por padrao; quem passa aoGirar decide sozinho, e retrato
+// forcado vence a tela: jogo com partida salva numa grade abre no formato dela
+assert.strictEqual(chamaWorld(false, undefined, true).reloads, 1, 'Girar sem opcoes recarrega a pagina');
+let girouPara = null;
+const custom = chamaWorld(false, { aoGirar: r => { girouPara = r; } }, true);
+assert.strictEqual(custom.reloads, 0, 'Com aoGirar o world nao recarrega');
+assert.strictEqual(girouPara, true, 'aoGirar recebe se a tela agora esta em pe');
+const forcado = chamaWorld(false, { retrato: true });
+assert.deepStrictEqual(forcado.canvas, [450, 800], 'retrato: true forca o mundo em pe mesmo com a tela deitada');
+assert.strictEqual(forcado.r.retrato, true, 'retrato forcado volta no resultado');
+assert.deepStrictEqual(chamaWorld(true, { retrato: false }).canvas, [900, 600], 'retrato: false forca o mundo deitado');
 
 // Hoops: o que decide se dá pra passar é o corredor livre entre as pontas do
 // rim, não o vão inteiro. Duas coisas têm que bater nos dois formatos: o tempo
@@ -2489,7 +2503,13 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   assert.ok(ini > 0 && fim > ini, 'torres: marcadores das regras nao encontrados');
   const T = new Function(torres.slice(ini, fim)
     + '; return { FORMATOS, NV_MAX, VENDA, VIDAS, TORRES, ORDEM_TORRES, ALVOS, INIMIGOS, PODERES, MUTACOES, mutacaoOnda, escalaVida, custoEvolucao, danoTorre, alcanceTorre, gerarOnda, bonusOnda, juros, rendaCofre, buffAmpli, CRED_INICIAL, JUROS_TETO };')();
-  assert.match(torres, /Neon\.world\(canvas, \[900, 600\], \[500, 800\]\)/, 'torres: o quadro deitado e 900x600 e o em pe 500x800');
+  assert.match(torres, /Neon\.world\(canvas, \[900, 600\], \[500, 800\], \{/, 'torres: o quadro deitado e 900x600 e o em pe 500x800');
+  // girar no meio da partida nao pode recarregar: a grade e outra e o save iria embora
+  assert.match(torres, /aoGirar: girou/, 'torres: precisa segurar o quadro ao girar');
+  assert.match(torres, /retrato: formatoSalvo \? formatoSalvo === 'emPe' : undefined/, 'torres: abre no formato da partida salva');
+  const girouSrc = block(torres, '  function girou(retratoAgora)');
+  assert.match(girouSrc, /state === 'playing' \|\| state === 'paused'/, 'torres: girou precisa tratar partida em andamento sem recarregar');
+  assert.ok(!/if \(state === 'playing'[^\n]*reload/.test(girouSrc), 'torres: jogando, girar nunca recarrega');
   for (const [nome, f, W, H] of [['deitado', T.FORMATOS.deitado, 900, 600], ['emPe', T.FORMATOS.emPe, 500, 800]]) {
     assert.strictEqual(f.cols * f.cell, W, `torres: a grade ${nome} nao fecha na largura`);
     assert.strictEqual(f.rows * f.cell, H, `torres: a grade ${nome} nao fecha na altura`);
