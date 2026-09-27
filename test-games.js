@@ -2605,6 +2605,14 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   assert.strictEqual(vistas.size, T.MUTACOES.length, 'torres: toda mutacao tem que aparecer ate a onda 40');
   assert.ok(T.MUTACOES.some(m => m.alcance < 0) && T.MUTACOES.some(m => m.vel > 1), 'torres: precisa de mutacao contra as torres e a favor da tropa');
   assert.ok(T.INIMIGOS.escudado.escudo > 0, 'torres: o escudado precisa de escudo');
+  // partida salva: grava entre ondas, some quando o nucleo cai, e a onda salva
+  // e a ultima vencida (fechar no meio de uma onda volta pro comeco dela)
+  assert.match(torres, /localStorage\.setItem\(SAVE, JSON\.stringify/, 'torres: precisa gravar a partida');
+  assert.match(torres, /onda: emOnda \? onda - 1 : onda/, 'torres: no meio da onda o save volta pro comeco dela');
+  assert.ok(block(torres, '  function fim()').includes('apagarSave()'), 'torres: perder tem que apagar o save');
+  assert.ok(block(torres, '  function startGame()').includes('apagarSave()'), 'torres: jogo novo tem que apagar o save');
+  assert.ok(block(torres, '  function ondaVencida()').includes('salvar()'), 'torres: vencer a onda tem que salvar');
+  assert.ok(torres.includes("addEventListener('pagehide', salvar)"), 'torres: fechar a aba tem que salvar');
   assert.strictEqual(T.juros(10000), T.JUROS_TETO, 'torres: os juros tem teto');
   assert.strictEqual(T.juros(0), 0, 'torres: sem credito nao ha juros');
   assert.ok(T.ALVOS.includes('primeiro') && T.ALVOS.length >= 2, 'torres: modos de alvo');

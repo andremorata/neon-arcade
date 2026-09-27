@@ -17,6 +17,8 @@
   .mapa-btn { background: rgba(17,29,44,.9); border: 1px solid rgba(142,131,200,.5); color: var(--neon-cyan); font: 700 11px Orbitron, sans-serif; letter-spacing: 1px; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
   .mapa-btn.on { border-color: var(--neon-pink); color: var(--neon-pink); box-shadow: 0 0 12px rgba(255,122,217,.35); }
   .mapa-pick.oculto { display: none; }
+  .novo-jogo { margin: 10px 0 0; }
+  .novo-jogo.oculto { display: none; }
 </style>
 </head>
 <body>
@@ -51,13 +53,14 @@
       </div>
       <div class="mapa-pick" id="mapaPick"><span class="lbl">TRILHA</span></div>
       <button class="btn" id="startBtn">JOGAR</button>
+      <div class="novo-jogo oculto" id="novoJogo"><button class="mapa-btn" id="novoBtn">NOVO JOGO</button></div>
       <div class="controls-hint">
         <span class="key">Toque / clique constrói</span><span class="key">Setas movem o cursor</span><span class="key">1-9 torre · U evolui · V vende · T alvo</span><span class="key">B bomba · C congelar · X turbo · R reparo · F 2x</span><span class="key">ESPAÇO chama a onda</span><span class="key">P pausa</span>
       </div>
     </div>
   </div>
 
-  <footer>// <a href="../index.html">← arcade</a> · vender devolve 60% · juros de 5% por onda vencida · cofres pagam no fim da onda · +1 vida a cada 5 ondas · mutação a cada 3 ondas · tanque tira 2 vidas, chefe tira 5 · o recorde é a onda mais alta vencida</footer>
+  <footer>// <a href="../index.html">← arcade</a> · vender devolve 60% · a partida fica salva entre ondas · juros de 5% por onda vencida · cofres pagam no fim da onda · +1 vida a cada 5 ondas · mutação a cada 3 ondas · tanque tira 2 vidas, chefe tira 5 · o recorde é a onda mais alta vencida</footer>
 </div>
 
 <script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
@@ -245,9 +248,85 @@
     atualizarHud();
   }
 
+  // ── partida salva ──
+  // Checkpoint a cada onda vencida, a cada construção e ao pausar/sair da aba.
+  // Se fechar no meio de uma onda, volta pro começo dela com as torres e os
+  // créditos do momento em que saiu. Torres moram numa grade, então o save só
+  // vale no mesmo formato (deitado/em pé) em que foi feito.
+  const SAVE = 'neon-torres-save';
+  const NOME_FORMATO = retrato ? 'emPe' : 'deitado';
+  const TEXTO_MENU = Neon.$('overlayText').textContent;
+  const els2 = { novoJogo: Neon.$('novoJogo'), novoBtn: Neon.$('novoBtn'), overlayText: Neon.$('overlayText') };
+  let save = null;
+  function salvar() {
+    if (state !== 'playing' && state !== 'paused') return;
+    // partida sem onda vencida e sem torre nao tem o que continuar
+    if (onda === 0 && !torres.length) { apagarSave(); return; }
+    const dados = {
+      v: 1, formato: NOME_FORMATO, mapa: mapaIdx, t: Date.now(),
+      onda: emOnda ? onda - 1 : onda, cred, vidas, abates, construidas, startHi,
+      torres: torres.map(t => ({ tipo: t.tipo, c: t.c, r: t.r, nv: t.nv, investido: t.investido, alvo: t.alvo })),
+      recarga: { ...recarga }, vistos: [...vistos],
+    };
+    try { localStorage.setItem(SAVE, JSON.stringify(dados)); } catch (_) { /* sem armazenamento, o jogo segue sem salvar */ }
+  }
+  function apagarSave() {
+    save = null;
+    try { localStorage.removeItem(SAVE); } catch (_) { /* nada a apagar */ }
+  }
+  function lerSave() {
+    try {
+      const d = JSON.parse(localStorage.getItem(SAVE) || 'null');
+      if (!d || d.v !== 1 || !Array.isArray(d.torres) || !(d.onda >= 0) || !(d.vidas > 0)) return null;
+      if (!FORMATO.mapas[d.mapa]) return null;
+      return d;
+    } catch (_) { return null; }
+  }
+  function mostrarMenuInicial() {
+    save = lerSave();
+    const startBtn = Neon.$('startBtn');
+    if (save && save.formato === NOME_FORMATO) {
+      const m = FORMATO.mapas[save.mapa].nome;
+      els2.overlayText.textContent = `Partida salva: onda ${save.onda + 1} na trilha ${m}, ${save.vidas} ${save.vidas === 1 ? 'vida' : 'vidas'}, ⟡${save.cred} e ${save.torres.length} ${save.torres.length === 1 ? 'torre' : 'torres'}. Continue de onde parou ou comece do zero.`;
+      startBtn.textContent = 'CONTINUAR';
+      els2.novoJogo.classList.remove('oculto');
+      els.mapaPick.classList.add('oculto');
+    } else {
+      els2.overlayText.textContent = save ? `Há uma partida salva no outro formato de tela (${save.formato === 'emPe' ? 'em pé' : 'deitado'}). Gire o aparelho para continuar, ou comece do zero aqui.` : TEXTO_MENU;
+      startBtn.textContent = 'JOGAR';
+      els2.novoJogo.classList.add('oculto');
+      els.mapaPick.classList.remove('oculto');
+    }
+  }
+  function continuar() {
+    const d = save;
+    Neon.audio.ensure();
+    novaPartida();
+    carregarMapa(d.mapa);
+    onda = d.onda; cred = d.cred; vidas = d.vidas; abates = d.abates || 0; construidas = d.construidas || 0;
+    startHi = d.startHi || pb;
+    recarga = { ...recarga, ...(d.recarga || {}) };
+    vistos = new Set(d.vistos || []);
+    for (const t of d.torres) {
+      const def = TORRES[t.tipo];
+      if (!def || !dentro(t.c, t.r) || ehCaminho(t.c, t.r) || torreEm(t.c, t.r)) continue;
+      torres.push({ tipo: t.tipo, def, c: t.c, r: t.r, x: (t.c + 0.5) * CELL, y: (t.r + 0.5) * CELL,
+        nv: Neon.clamp(t.nv | 0, 1, NV_MAX), cd: 0.2, investido: t.investido || def.custo, ang: -Math.PI / 2,
+        alvo: ALVOS.includes(t.alvo) ? t.alvo : 'primeiro', flash: 0, nasceu: 1 });
+    }
+    contagem = onda ? ESPERA : ESPERA_PRIMEIRA;
+    Neon.audio.music.intensity(Math.min(1, onda / 20));
+    atualizarHud();
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+    mostrarBanner('PARTIDA RETOMADA', `onda ${onda + 1} vem em ${Math.ceil(contagem)}s`, '#a8dba0');
+  }
+
   function startGame() {
     Neon.audio.ensure();
     startHi = pb;
+    apagarSave();
     novaPartida();
     state = 'playing';
     Neon.overlay.hide();
@@ -256,9 +335,11 @@
   }
   function pauseGame() {
     state = 'paused';
+    salvar();
     Neon.audio.sfx.pause();
     Neon.audio.music.stop();
     els.mapaPick.classList.add('oculto');
+    els2.novoJogo.classList.add('oculto');
     Neon.overlay.show('PAUSADO', 'Aperte P para voltar à defesa.', 'CONTINUAR');
   }
   function resumeGame() {
@@ -334,6 +415,7 @@
     mostrarBanner(`ONDA ${onda} VENCIDA`, `+${bonus}${extra}`, '#a8dba0');
     Neon.audio.sfx.goal();
     atualizarHud();
+    salvar();
   }
 
   function nascer(tipo, x, y, seg, prog) {
@@ -670,6 +752,7 @@
     menu = 'torre';
     atualizarHud();
     Neon.popEl(els.cred);
+    salvar();
   }
 
   function evoluir() {
@@ -685,6 +768,7 @@
     particles.float(t.x, t.y - CELL * 0.5, t.nv >= NV_MAX ? t.def.especial.toUpperCase() : `NÍVEL ${t.nv}`, '#efce95', 13);
     Neon.audio.sfx.level();
     atualizarHud();
+    salvar();
   }
 
   function vender() {
@@ -697,6 +781,7 @@
     Neon.audio.sfx.drop();
     menu = 'construir';
     atualizarHud();
+    salvar();
   }
 
   const temAlvo = def => !['gelo', 'emp', 'apoio', 'renda'].includes(def.tipo);
@@ -705,10 +790,12 @@
     if (!t || !temAlvo(t.def)) return;
     t.alvo = ALVOS[(ALVOS.indexOf(t.alvo) + 1) % ALVOS.length];
     Neon.audio.sfx.click();
+    salvar();
   }
 
   function fim() {
     state = 'gameover';
+    apagarSave();
     Neon.audio.music.down();
     const vencidas = Math.max(0, onda - 1);
     pb = Neon.best.update('torres', vencidas);
@@ -720,6 +807,7 @@
     els.fsTorres.textContent = construidas;
     Neon.$('finalStats').style.display = 'grid';
     els.mapaPick.classList.remove('oculto');
+    els2.novoJogo.classList.add('oculto');
     Neon.overlay.show(isRecord ? 'NOVO RECORDE!' : 'NÚCLEO PERDIDO',
       `A onda ${onda} passou na trilha ${FORMATO.mapas[mapaIdx].nome}. ${vencidas} ${vencidas === 1 ? 'onda vencida' : 'ondas vencidas'}, ${abates} abates.`,
       'JOGAR DE NOVO', isRecord ? 'record' : 'go');
@@ -749,7 +837,8 @@
     const k = e.key;
     if (k === ' ' || k === 'Enter') {
       e.preventDefault();
-      if (state === 'menu' || state === 'gameover') startGame();
+      if (state === 'menu' && save && save.formato === NOME_FORMATO) continuar();
+      else if (state === 'menu' || state === 'gameover') startGame();
       else if (state === 'paused') resumeGame();
       else if (state === 'playing') chamarOnda();
       return;
@@ -791,9 +880,13 @@
 
   Neon.$('startBtn').addEventListener('click', () => {
     if (state === 'paused') resumeGame();
+    else if (state === 'menu' && save && save.formato === NOME_FORMATO) continuar();
     else startGame();
   });
+  els2.novoBtn.addEventListener('click', () => { if (state === 'menu') startGame(); });
   Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+  // fechar a aba no meio da onda tambem guarda o checkpoint
+  window.addEventListener('pagehide', salvar);
 
   // ── update ────────────────────────────────────────
   function update(dt) {
@@ -1357,6 +1450,7 @@
   }
 
   novaPartida();
+  mostrarMenuInicial();
   render();
   requestAnimationFrame(loop);
 })();
