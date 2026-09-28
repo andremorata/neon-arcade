@@ -461,11 +461,11 @@ window.Neon = (function () {
   }
 
   // ── pausa ao trocar de aba ─────────────────────────
-  // Pausa ao esconder a aba E ao perder o foco da janela. So o visibilitychange
-  // deixava o jogo rodando quando voce clicava em outra janela por cima.
+  // Pausa ao esconder a aba. No toque pausa tambem ao perder o foco da janela.
+  // No desktop nao: clicar em outra janela por cima deixa o jogo rodando.
   function onHide(fn) {
     document.addEventListener('visibilitychange', () => { if (document.hidden) fn(); });
-    window.addEventListener('blur', fn);
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) window.addEventListener('blur', fn);
   }
 
   // ── formato do mundo por orientacao ────────────────
