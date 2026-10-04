@@ -1054,7 +1054,8 @@
         save.carro = i; gravar(); montarHub(); garagem.children[i].focus();
       });
       garagem.appendChild(b);
-      const c = preview.getContext('2d'); c.translate(130, 80); c.scale(2.65, 2.65);
+      const c = preview.getContext('2d'), kp = ajustesDe(i), ep = Math.min(2.6, 127 / (kp.altura + kp.raio + 33));
+      c.translate(130, 131 - (kp.altura + kp.raio) * ep); c.scale(ep, ep);
       desenharCarro({ ...novoCarro({ y0: 0 }, i), x: 0, y: 0 }, c, true);
     });
   }
@@ -1310,7 +1311,7 @@
   const correndo = () => state === 'playing' || state === 'morto' || state === 'chegou';
   document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
-    if (e.target.closest('button, a') && (k === 'enter' || k === ' ')) return;
+    if (e.target.closest?.('button, a') && (k === 'enter' || k === ' ')) return;
     if (k === 'escape') { if (state !== 'menu') abrirHub(); return; }
     if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
     if (k === 'r') { if (correndo() || state === 'resultado') reiniciar(); return; }
@@ -1334,7 +1335,7 @@
     return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
   };
   els.stage.addEventListener('pointerdown', e => {
-    if (e.target.closest('.sound-toggle, .pause-toggle, .overlay, .back-btn, .hub')) return;
+    if (e.target.closest?.('.sound-toggle, .pause-toggle, .overlay, .back-btn, .hub')) return;
     e.preventDefault();
     if (e.pointerType !== 'mouse') dedo = true;
     if (state !== 'playing' && state !== 'morto' && state !== 'chegou') return;
@@ -1375,160 +1376,358 @@
   }
 
   // ── carro ─────────────────────────────────────────
-  // As três carrocerias usam os eixos e o teto da colisão. A suspensão move
-  // as rodas de verdade; a pintura não muda o tamanho físico do carro.
-  const PERFIS = [
-    [[-42, -3], [-40, -13], [-27, -15], [-10, -25], [8, -25], [20, -15], [36, -12], [43, -5]],
-    [[-41, -3], [-40, -16], [-23, -16], [-10, -25], [8, -25], [17, -15], [35, -15], [41, -7]],
-    [[-44, -2], [-42, -12], [-23, -12], [-10, -25], [8, -25], [22, -12], [40, -8], [46, -2]],
-    // picape monstro: cabine alta e caçamba
-    [[-46, -4], [-46, -17], [-16, -17], [-12, -27], [10, -27], [17, -18], [42, -16], [48, -7]],
-    // kart: chassi rente ao chão, o piloto vai aberto por cima
-    [[-30, -2], [-29, -8], [-16, -9], [-12, -12], [8, -12], [12, -8], [27, -7], [32, -2]],
-    // jato: bico longo e cauda com turbina
-    [[-46, -3], [-45, -12], [-22, -13], [-9, -24], [6, -24], [24, -11], [45, -6], [52, -1]],
-  ];
+  // Carrocerias desenhadas à mão em caminhos SVG (Path2D), com curvas em vez
+  // de polígonos. Tudo em coordenadas do chassi: x pra frente, y pra baixo,
+  // centro de massa na origem, rodas em (±eixo/2, altura). A pintura respeita
+  // o teto da colisão; o que passa dele (asa, santantônio) fica fora dos dois
+  // pontos que a física testa.
   const traco = (pts, fechar, contexto = ctx) => {
     contexto.beginPath(); contexto.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) contexto.lineTo(pts[i][0], pts[i][1]);
     if (fechar) contexto.closePath();
   };
+  const _paths = new Map();
+  const P = d => { let p = _paths.get(d); if (!p) { p = new Path2D(d); _paths.set(d, p); } return p; };
+  const pinta = (c, d, fill, stroke, lw) => {
+    const p = P(d);
+    if (fill) { c.fillStyle = fill; c.fill(p); }
+    if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || 0.6; c.stroke(p); }
+  };
+  const linha = (c, d, cor, lw) => { c.strokeStyle = cor; c.lineWidth = lw; c.stroke(P(d)); };
+  const vgrad = (c, y0, y1, stops) => {
+    const g = c.createLinearGradient(0, y0, 0, y1);
+    for (const [t, cor] of stops) g.addColorStop(t, cor);
+    return g;
+  };
+  // lataria: cor com luz de cima, linha de cintura escura (o chão refletido)
+  // e um brilho especular comprido recortado pelo próprio corpo
+  function lataria(c, d, m, topo, base, brilho) {
+    pinta(c, d, vgrad(c, topo, base, [[0, m.claro], [0.22, m.cor], [0.55, m.cor], [0.56, m.escuro], [0.7, m.cor], [1, m.escuro]]));
+    c.save(); c.clip(P(d));
+    if (brilho) {
+      const g = c.createLinearGradient(0, topo, 0, topo + 6);
+      g.addColorStop(0, '#ffffffaa'); g.addColorStop(1, '#ffffff00');
+      pinta(c, brilho, g);
+    }
+    // sombra de oclusão embaixo da lataria
+    c.fillStyle = vgrad(c, base - 5, base, [[0, '#00000000'], [1, '#00000066']]);
+    c.fillRect(-70, base - 5, 140, 6);
+    c.restore();
+    pinta(c, d, null, '#0a101c', 0.9);
+    c.save(); c.clip(P(d));
+    c.fillStyle = '#00000038'; c.fillRect(-70, base - 3.2, 140, 4);
+    c.strokeStyle = '#ffffff30'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(-70, base - 3.2); c.lineTo(70, base - 3.2); c.stroke();
+    c.restore();
+  }
+  function vidro(c, d, tom = '#3a6f8f') {
+    const p = P(d), b = c.createLinearGradient(-20, -26, 20, -12);
+    b.addColorStop(0, '#d9f3ff'); b.addColorStop(0.35, tom); b.addColorStop(1, '#08111f');
+    c.fillStyle = b; c.fill(p);
+    c.save(); c.clip(p);
+    c.fillStyle = '#ffffff40';
+    c.beginPath(); c.moveTo(-30, -14); c.lineTo(-22, -30); c.lineTo(-16, -30); c.lineTo(-24, -14); c.fill();
+    c.beginPath(); c.moveTo(-14, -14); c.lineTo(-6, -30); c.lineTo(-4, -30); c.lineTo(-12, -14); c.fill();
+    c.restore();
+    c.strokeStyle = '#05080f'; c.lineWidth = 0.9; c.stroke(p);
+  }
+  function capacete(c, x, y, cor, r = 3.6) {
+    Neon.circle(c, x, y, r, cor);
+    c.fillStyle = '#0d1a2b'; c.beginPath(); c.ellipse(x + r * 0.45, y + 0.2, r * 0.55, r * 0.42, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff70'; c.beginPath(); c.ellipse(x - r * 0.35, y - r * 0.45, r * 0.35, r * 0.2, -0.5, 0, Math.PI * 2); c.fill();
+  }
+  function farol(c, x, y, w, h, aceso) {
+    c.fillStyle = '#fff6d8'; if (aceso) Neon.glow(c, '#fff3c5', 10);
+    c.beginPath(); c.ellipse(x, y, w, h, 0, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+    c.fillStyle = '#ffffffcc'; c.beginPath(); c.ellipse(x - w * 0.3, y - h * 0.3, w * 0.35, h * 0.3, 0, 0, Math.PI * 2); c.fill();
+  }
+  function lanterna(c, x, y, w, h, freando) {
+    c.fillStyle = freando ? '#ff5a4d' : '#a3202c'; if (freando) Neon.glow(c, '#ff5a4d', 14);
+    c.beginPath(); c.roundRect(x, y, w, h, 1); c.fill(); c.shadowBlur = 0;
+  }
+
+  // Cada carro: corpo (silhueta), brilho, vidros e o resto em detalhes(c, m, s)
+  // onde s traz o estado do quadro (freando, acelerando, andando).
+  const DESENHOS = [
+    { // VÉRTICE GT: cupê esportivo, capô longo, fastback e rabeta pato
+      topo: -25, base: 2, aro: '#d9e2ea', raios: 'estrela', farol: [44, -9.5], lanterna: [-45, -11], escape: [-43, -1],
+      corpo: 'M-44 2 L-45 -5 C-45.5 -9 -44 -11.5 -41 -12.2 L-37 -13.4 C-31 -15.5 -23 -21.8 -13 -24.4 C-5 -25.6 3 -25.3 8 -24 C13 -22 17 -17.5 21 -14.8 C29 -13.4 38 -12.6 44.5 -10.2 C47.5 -9 48.3 -6 47.5 -2.5 L46.5 2 ARCOS Z',
+      brilho: 'M-38 -13.6 C-28 -18 -20 -23.4 -12 -24.3 C-4 -25.3 4 -25 8 -23.6 C13 -21.6 17 -17.3 21 -14.6 C30 -13.2 38 -12.4 45 -10 L45 -8.6 C36 -11 26 -12 19 -13.2 C15 -15.8 11 -20 6 -21.8 C0 -23 -8 -23 -14 -22 C-22 -20 -30 -15.5 -38 -12.2 Z',
+      vidros: ['M-27 -16 C-21 -20.5 -14 -23 -7 -23.4 L-4.5 -23.4 L-4.5 -16 Z', 'M-3 -23.4 L5.5 -23.2 C10 -22.2 13.5 -19 16.5 -16 Z'],
+      detalhes(c, m) {
+        c.save(); c.clip(P(this.corpo));
+        linha(c, 'M-4 -16 L-3 -1.5 M13 -15.2 C13.5 -10 13.5 -5 12.4 -1', '#06101a', 0.7);
+        linha(c, 'M-40 -12 C-20 -13 0 -14.4 21 -14.2 C30 -13 38 -12 45 -9.6', m.claro + 'aa', 0.6);
+        pinta(c, 'M-20 -10 L-11 -10.5 L-10 -6 L-19.5 -5.5 Z', '#0a1622');   // entrada de ar lateral
+        linha(c, 'M-19 -8.5 L-11 -9 M-19 -7 L-10.6 -7.4', '#2d4250', 0.5);
+        pinta(c, 'M-40 -4.5 L40 -5.5 L40.6 -3.8 L-40 -2.9 Z', m.claro);   // faixa de corrida
+        pinta(c, 'M-40 -2.4 L40.6 -3.2 L40.8 -2.4 L-40 -1.6 Z', m.escuro);
+        c.restore();
+        pinta(c, 'M13 -17 C14.5 -18.5 17 -18.4 17.4 -16.6 L14 -15.8 Z', m.escuro, '#0a101c', 0.4);   // retrovisor
+        c.fillStyle = '#e8f5f0'; c.fillRect(-1.5, -12, 4, 1);   // maçaneta
+      },
+    },
+    { // DUNA RALLY: hatch de rali, alto, rack com faróis, para-barro
+      topo: -25, base: 1, aro: '#f4f1ea', raios: 'seis', farol: [43, -9], lanterna: [-44, -14], escape: [-42, 0],
+      corpo: 'M-42 1 L-43.5 -8 C-43.8 -13.5 -42 -16 -38.5 -16.6 L-34.5 -17.2 C-31 -21.5 -26.5 -24.6 -20 -25 L6 -25 C10 -25 12.3 -23.2 14.3 -20.2 L18 -15.8 C28 -14.8 36 -14.2 40.5 -12.4 C43.5 -11.2 44.6 -8.5 44.5 -4 L43.5 1 ARCOS Z',
+      brilho: 'M-38 -16.4 C-32 -18 -30 -22 -26 -24 C-22 -25 -14 -25 6 -25 C10 -25 12 -23 14 -20 L18 -15.6 C28 -14.6 36 -14 41 -12 L41 -10.5 C34 -12.4 26 -13 17 -14 L13 -19 C11 -22 9 -23.2 5 -23.2 L-20 -23.2 C-26 -22.6 -30 -19 -33 -15.6 Z',
+      vidros: ['M-31.5 -17.2 C-28 -21 -24.6 -23 -19.5 -23.2 L-4 -23.2 L-4 -16.6 Z', 'M-2 -23.2 L5.5 -23.2 C8.5 -23.2 10.3 -21.5 12 -19 L14.2 -16.6 L-2 -16.6 Z'],
+      detalhes(c, m) {
+        // pintura de rali: faixa branca diagonal e número na porta
+        c.save(); c.clip(P(this.corpo));
+        pinta(c, 'M-14 -17 L-6 -17 L-18 1 L-26 1 Z', '#f4f1ea');
+        pinta(c, 'M-4 -16.4 L0 -16.4 L-12 1 L-16 1 Z', '#1b2433');
+        c.restore();
+        Neon.circle(c, 3.5, -8.5, 4.4, '#f4f1ea');
+        c.fillStyle = '#1b2433'; c.font = 'italic 900 5.5px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('04', 3.5, -8.3);
+        linha(c, 'M-3 -16.6 L-2 0 M15 -16 C15.5 -10 15.4 -5 14.5 0', '#1a0d05', 0.7);
+        // rack de teto com quatro faróis auxiliares
+        linha(c, 'M-18 -25 L-18 -27 M2 -25 L2 -27 M-20 -27.2 L4 -27.2', '#2a2f38', 1.3);
+        for (const x of [-15, -9, -3, 3]) { Neon.circle(c, x, -29, 2.5, '#2a2f38'); Neon.circle(c, x, -29, 1.6, '#fff4cc'); }
+        // para-barros atrás das rodas e protetor de cárter
+        pinta(c, 'M-37.5 -1 L-35.5 -1 L-35 8 L-38.2 8 Z', '#151a22');
+        pinta(c, 'M7 -1 L9 -1 L9.4 7 L6.4 7 Z', '#151a22');
+        pinta(c, 'M30 1 L44 -1 L46 3 L32 4 Z', '#4b5563', '#151a22', 0.5);
+        pinta(c, 'M14 -18 C15.5 -19.6 18.2 -19.4 18.4 -17.4 L15 -16.6 Z', m.escuro, '#1a0d05', 0.4);
+      },
+    },
+    { // ION RX: hipercarro protótipo, canopi em bolha, asa em pilones e neon por baixo
+      topo: -25, base: 1.5, aro: '#2a2240', raios: 'turbina', farol: [47, -5.4], lanterna: [-46.5, -9], escape: [-46, -2],
+      corpo: 'M-46.5 1.5 L-46.5 -6.5 C-45 -10.6 -41 -12 -34 -12.4 C-25 -12.8 -18.5 -14.5 -14.5 -18.4 C-10 -23.4 -3 -25 4 -24.6 C12 -24 18 -18.5 24 -13 C32 -10.4 42 -7.6 50 -4 C52.4 -2.8 52.6 -0.4 50.5 1.5 ARCOS Z',
+      brilho: 'M-44 -9 C-40 -11.6 -30 -12 -22 -12.8 C-18 -14 -16 -16 -13 -19.5 C-9 -23.5 -2 -24.8 4 -24.4 C12 -23.8 18 -18 24 -12.6 C34 -9.8 44 -6.6 50 -3.6 L49 -2.2 C42 -5 32 -8.2 22.5 -11 C17 -16 11 -21.5 4 -22.4 C-2 -22.8 -8 -21.5 -11.5 -17.6 C-15 -13.6 -22 -11 -34 -10.8 C-40 -10.6 -43 -9.6 -44 -7.4 Z',
+      vidros: ['M-12 -18.2 C-8 -22.4 -2 -23.6 4 -23.2 C11 -22.6 16.5 -18 21 -13.6 L-10 -13.6 Z'],
+      tom: '#5a3f9e',
+      detalhes(c, m, s) {
+        // neon por baixo: a marca do protótipo
+        c.strokeStyle = m.cor; c.lineWidth = 1.6; Neon.glow(c, m.cor, 16);
+        c.beginPath(); c.moveTo(-6, 2.6); c.lineTo(6, 2.6); c.moveTo(-44, 2.6); c.lineTo(-37, 2.6); c.moveTo(37, 2.6); c.lineTo(48, 2.6); c.stroke(); c.shadowBlur = 0;
+        // tomada de ar em lágrima, com aletas
+        pinta(c, 'M-25 -10.4 C-20 -11 -14.5 -10 -11.6 -7.6 C-13 -6 -18 -5.4 -23.4 -6 C-25.4 -7 -25.8 -9 -25 -10.4 Z',
+          vgrad(c, -11, -5, [[0, '#05030c'], [1, '#2a2148']]), m.claro + '88', 0.5);
+        for (let i = 0; i < 3; i++) linha(c, `M${-22 + i * 3.4} -9.8 L${-22.6 + i * 3.4} -6.4`, '#3d3166', 0.5);
+        pinta(c, 'M24 -9 C32 -7.6 40 -5.4 46.5 -2.6 L46 -1.6 C39 -4.2 31 -6.2 24 -7.4 Z', '#0b0718');   // splitter lateral
+        linha(c, 'M42 -6.2 L48.6 -3.6', '#e7ddff', 1.2);   // DRL em lâmina
+        // asa traseira em dois pilones
+        pinta(c, 'M-40 -12 L-38.5 -21.5 L-36.5 -21.5 L-36 -12 Z', '#1a1430');
+        pinta(c, 'M-50 -22.5 C-44 -25.6 -34 -25.6 -28 -23.4 L-28.6 -21.6 C-35 -22.8 -44 -22.6 -50 -20.6 Z', '#1a1430', m.claro, 0.6);
+        pinta(c, 'M-50.5 -24.5 L-49 -24.5 L-49 -19 L-50.5 -19 Z', m.cor);
+      },
+    },
+    { // TROVÃO 4X4: picape monstro, caçamba, santantônio com faróis, chamas
+      topo: -27, base: -2, aro: '#e8edf2', raios: 'monstro', farol: [47.5, -12], lanterna: [-48.5, -14.5], escape: [-17, -29],
+      corpo: 'M-48.5 -2 L-49 -14 L-47 -17.4 L-18.5 -17.4 L-16.6 -18.6 C-14.6 -24 -12.4 -27 -8.4 -27 L8 -27 C12 -27 14 -25 16.2 -21.4 L18.4 -18.2 C30 -17.6 40 -17 46 -15.2 C49.4 -14 50.6 -11.4 50.4 -7 L49.4 -2 ARCOS Z',
+      brilho: 'M-47 -17.2 L-18.5 -17.2 L-16.5 -18.4 C-14.5 -24 -12.4 -26.8 -8.4 -26.8 L8 -26.8 C12 -26.8 14 -25 16 -21.4 L18.4 -18 C30 -17.4 40 -16.8 46.2 -15 L46 -13.6 C38 -15.4 28 -16.2 17.4 -16.6 L14 -21 C12 -24 10.6 -25 7.6 -25 L-8 -25 C-11 -25 -13 -22.5 -15 -17.6 L-17.6 -15.8 L-47 -15.8 Z',
+      vidros: ['M-14.4 -18.4 C-12.8 -23.2 -11.2 -25.3 -8.2 -25.3 L-1 -25.3 L-1 -18.4 Z', 'M1 -25.3 L7.4 -25.3 C10.4 -25.3 12.2 -23.8 14.2 -20.2 L15.4 -18.4 L1 -18.4 Z'],
+      detalhes(c, m) {
+        // chamas na lateral
+        c.save(); c.clip(P(this.corpo));
+        pinta(c, 'M46 -8 C38 -8 30 -10 22 -9 C26 -11 28 -13 24 -13.5 C30 -14 34 -12.6 38 -13.6 C34 -15 30 -15.6 26 -15.5 C33 -16.8 41 -15.8 47 -13 Z', '#ffd36b');
+        pinta(c, 'M45 -9.6 C38 -9.6 32 -11 26 -10.5 C30 -12 31.5 -13 29 -13.4 C33 -13.6 37 -12.6 41 -13.4 C38 -14.4 35 -14.8 32 -14.8 C38 -15.6 43 -14.6 46.5 -12.6 Z', '#ff7a3c');
+        c.restore();
+        linha(c, 'M0 -18.4 L0 -3 M17 -17.6 C17.6 -12 17.4 -7 16.4 -2.5', '#2a0d0d', 0.8);
+        linha(c, 'M-47 -17.2 L-18.5 -17.2', '#ffd2c9', 0.9);   // borda da caçamba
+        // santantônio, faróis no teto e chaminé cromada
+        linha(c, 'M-26 -17.4 L-24 -30 L-14 -30 L-13 -27', '#d7dde5', 1.6);
+        for (const x of [-22, -18.5]) { Neon.circle(c, x, -31.6, 2.1, '#2a2f38'); Neon.circle(c, x, -31.6, 1.3, '#fff0b8'); }
+        for (const x of [-6, -1, 4]) { Neon.circle(c, x, -28.8, 1.9, '#2a2f38'); Neon.circle(c, x, -28.8, 1.2, '#fff0b8'); }
+        pinta(c, 'M-18 -18 L-16.8 -18 L-16.4 -28.6 L-17.8 -28.6 Z', vgrad(c, -29, -18, [[0, '#ffffff'], [0.5, '#8d97a3'], [1, '#e2e8ee']]));
+        // para-choques de tubo
+        linha(c, 'M47 -5 L52 -5 L52.6 -12 M-48.6 -4 L-52 -4 L-52 -10', '#c7d6e1', 2.2);
+        pinta(c, 'M14 -19.8 C15.6 -21.6 18.6 -21.4 18.8 -19.2 L15.2 -18.4 Z', m.escuro, '#2a0d0d', 0.4);
+      },
+    },
+    { // FORMIGA KART: chassi tubular, sidepod, piloto aberto e motor atrás do banco
+      topo: -9, base: 1, aro: '#a8dba0', raios: 'kart', farol: [26, -5], lanterna: [-31, -5], escape: [-27, -6], rodasNaFrente: true,
+      corpo: 'M-10 0.5 L-10.5 -4.6 C-10 -7.4 -7 -8.6 -2 -8.6 L7 -8.2 C10 -8 11.5 -6.4 11.5 -3.6 L11 0.5 Z',
+      brilho: 'M-10.2 -5 C-9.6 -7.6 -7 -8.4 -2 -8.4 L7 -8 C10 -7.8 11.3 -6.4 11.4 -4.6 L10 -4.6 C9.6 -6 8.4 -6.6 6.6 -6.6 L-2 -6.8 C-6 -6.8 -8.6 -6.4 -9 -4.8 Z',
+      vidros: [],
+      detalhes(c, m, s) {
+        // chassi tubular e para-choques
+        linha(c, 'M-30 0.8 L30 0.8 M-30 0.8 L-31 -4.5 L-26 -4.5 M29 0.8 L31 -3.6 L22 -5.2', '#c7d6e1', 1.4);
+        // carenagem do bico na frente, entre a roda e o para-choque
+        pinta(c, 'M11 -3.6 C15 -6.2 22 -6.8 28.4 -5.4 C30 -4.8 30 -2.6 28.6 -1.8 L11.5 -0.6 Z',
+          vgrad(c, -7, 0, [[0, m.claro], [0.4, m.cor], [1, m.escuro]]), '#0a101c', 0.7);
+        c.fillStyle = '#f4f7f2'; c.beginPath(); c.roundRect(17, -5.2, 6, 3.2, 0.8); c.fill();
+        c.fillStyle = '#1b2433'; c.font = '900 3px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('07', 20, -3.5);
+        // motor e escape atrás do banco
+        pinta(c, 'M-21 -9.6 L-12.4 -9.6 L-12 -1.4 L-21.4 -1.4 Z', vgrad(c, -10, -1, [[0, '#8d97a3'], [1, '#3a434f']]), '#11161e', 0.5);
+        for (let i = 0; i < 4; i++) linha(c, `M-20.6 ${-8.4 + i * 1.8} L-12.8 ${-8.4 + i * 1.8}`, '#20262f', 0.5);
+        linha(c, 'M-17 -9.6 C-19 -12 -24 -10 -26.5 -6', '#9aa4ad', 1.3);
+        // banco, piloto de macacão e volante
+        pinta(c, 'M-12.6 -1 L-11.4 -12.4 C-11 -13.6 -9 -13.6 -8.8 -12.4 L-9.6 -1 Z', '#11161e');
+        pinta(c, 'M-9.4 -2 C-9.6 -7 -8.6 -11.6 -5.6 -12 C-3 -12.2 -1.6 -9.6 -1.4 -6.6 L4 -6.6 L4 -4.2 L-2 -3.6 Z',
+          vgrad(c, -12, -2, [[0, m.claro], [1, m.escuro]]), '#0a101c', 0.5);
+        linha(c, 'M-4.6 -9.6 C-2 -9.4 1 -10 3.2 -10.6', m.escuro, 1.6);   // braço
+        linha(c, 'M2.2 -13 L4.6 -8.2', '#1b2433', 1.6);   // volante
+        Neon.circle(c, 3.4, -10.6, 1, '#f2c9a0');   // luva
+        capacete(c, -5.2, -14.8, '#f4f7f2', 3.9);
+        c.save(); c.beginPath(); c.arc(-5.2, -14.8, 3.9, 0, Math.PI * 2); c.clip();
+        c.fillStyle = m.cor; c.fillRect(-9.2, -16.2, 8, 1.4); c.restore();
+      },
+    },
+    { // COMETA JET: carro-foguete, bico agulha, canopi dourado, deriva e turbina
+      topo: -24, base: 0.5, aro: '#f3d58c', raios: 'disco', farol: [52, -2.6], lanterna: [-49, -12], escape: [-57, -6.2],
+      corpo: 'M-50 0.5 L-50.4 -10.2 C-47 -13 -41 -14 -31 -14.2 L-17 -14.8 C-11 -20.8 -4 -24 4 -24 C10 -24 14.4 -21 18.4 -16 C30 -12.2 44 -8 56 -3.4 C57.6 -2.6 57.6 -0.4 55.6 0.5 ARCOS Z',
+      brilho: 'M-49 -10.6 C-45 -13 -39 -13.8 -31 -14 L-17 -14.6 C-11 -20.6 -4 -23.8 4 -23.8 C10 -23.8 14.4 -20.8 18.4 -15.8 C30 -12 44 -7.8 56 -3.2 L55 -2 C43 -6.4 30 -10.4 17.4 -14 C14 -18.6 10 -21.8 4 -22 C-3 -22 -9.6 -19 -14 -13.2 L-31 -12.6 C-40 -12.4 -46 -11.6 -49 -9.4 Z',
+      vidros: ['M-14.2 -15.2 C-9.4 -20.8 -3.6 -23 3.6 -23 C9 -23 12.4 -20.4 15.6 -16 Z'],
+      tom: '#8a6a1c',
+      detalhes(c, m, s) {
+        // deriva da cauda
+        pinta(c, 'M-48.5 -12.6 L-44.5 -31 C-44 -32 -39.5 -32 -39 -31 L-34.4 -13.6 Z', vgrad(c, -32, -13, [[0, m.claro], [0.5, m.cor], [1, m.escuro]]), '#0a101c', 0.8);
+        pinta(c, 'M-44.8 -29.6 L-39.4 -29.6 L-38.8 -27.4 L-45.3 -27.4 Z', '#1b1408');
+        // turbina: anel quente que acende com o gás
+        pinta(c, 'M-50.4 -11.4 L-56 -10.4 L-56 -2 L-50.2 -1 Z', vgrad(c, -11, -1, [[0, '#9aa4ad'], [0.5, '#3a434f'], [1, '#1b2028']]), '#0a101c', 0.6);
+        c.fillStyle = s.acelerando ? '#ffb347' : '#5a2a10'; if (s.acelerando) Neon.glow(c, '#ff9a3c', 16);
+        c.beginPath(); c.ellipse(-56, -6.2, 1.6, 4.2, 0, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+        // faixa xadrez e tomada de ar
+        c.save(); c.clip(P(this.corpo));
+        for (let i = 0; i < 18; i++) for (let j = 0; j < 2; j++) if ((i + j) & 1) { c.fillStyle = '#1b1408'; c.fillRect(-30 + i * 3.4, -8 + j * 2.4, 3.4, 2.4); }
+        c.restore();
+        pinta(c, 'M-24 -13.6 C-20 -13.4 -14 -13.6 -12 -12.4 L-13 -9 L-24 -9.4 Z', '#1b1408');
+        Neon.circle(c, 24, -6.6, 3.8, '#1b1408');
+        c.fillStyle = m.claro; c.font = 'italic 900 4.2px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('99', 24, -6.4);
+      },
+    },
+  ];
+
+  // Caixas de roda centradas na roda de verdade (eixo e altura de cada carro):
+  // o desenho troca ARCOS pelos dois arcos, da frente pra trás.
+  function arcosDe(k, base) {
+    const r = k.raio + 2.5, dy = k.altura - base, dx = Math.sqrt(Math.max(0, r * r - dy * dy)), e = k.eixo / 2;
+    const f = v => v.toFixed(2);
+    return `L${f(e + dx)} ${base} A${r} ${r} 0 0 0 ${f(e - dx)} ${base} L${f(-e + dx)} ${base} A${r} ${r} 0 0 0 ${f(-e - dx)} ${base}`;
+  }
+  DESENHOS.forEach((d, i) => { if (d.corpo.includes('ARCOS')) d.corpo = d.corpo.replace('ARCOS', arcosDe(ajustesDe(i), d.base)); });
+
+  // Roda: pneu com flanco e cravos girando, disco de freio, pinça parada,
+  // aro com o estilo do carro e borrão de velocidade quando gira rápido.
   function desenharRoda(r, carro, ctx) {
-    const R = carro.ajustes.raio, modelo = CARROS[carro.modelo];
+    const R = carro.ajustes.raio, m = CARROS[carro.modelo], d = DESENHOS[carro.modelo];
+    const giroRapido = Math.min(1, Math.abs(r.vt || 0) / 700);
     ctx.save(); ctx.translate(r.lx, r.ly - r.comp);
-    Neon.circle(ctx, 0, 0, R + 1, '#070c16');
-    ctx.lineWidth = 1; ctx.strokeStyle = '#526070'; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke();
-    const metal = ctx.createLinearGradient(-R, -R, R, R);
-    metal.addColorStop(0, '#eef5ff'); metal.addColorStop(.4, '#657487'); metal.addColorStop(.6, '#1d2a3a'); metal.addColorStop(1, '#c5d1da');
-    Neon.circle(ctx, 0, 0, R - 3, metal); Neon.circle(ctx, 0, 0, R - 4.5, '#121c2d');
-    // A pinça de freio fica fixa; os raios acompanham a roda.
-    ctx.fillStyle = modelo.cor; ctx.fillRect(3, -5, 3, 8);
-    ctx.rotate(r.spin); ctx.strokeStyle = '#c7d6e1'; ctx.lineWidth = carro.modelo === 1 ? 2.3 : 1.5;
-    const raios = carro.modelo === 2 ? 3 : 5;
-    for (let i = 0; i < raios; i++) {
-      const a = i * Math.PI * 2 / raios;
-      traco([[0, 0], [Math.cos(a + .18) * 4, Math.sin(a + .18) * 4], [Math.cos(a) * (R - 4), Math.sin(a) * (R - 4)]], false, ctx); ctx.stroke();
+    // pneu
+    const flanco = ctx.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.2, 0, 0, R);
+    flanco.addColorStop(0, '#3b4350'); flanco.addColorStop(0.7, '#171c24'); flanco.addColorStop(1, '#07090d');
+    Neon.circle(ctx, 0, 0, R, flanco);
+    // cravos do pneu: maiores no monstro
+    ctx.save(); ctx.rotate(r.spin);
+    const n = carro.modelo === 3 ? 12 : 18, fundo = carro.modelo === 3 ? 3.2 : 1.6;
+    ctx.fillStyle = '#05070a';
+    for (let i = 0; i < n; i++) {
+      ctx.rotate(Math.PI * 2 / n);
+      ctx.fillRect(-R * 0.09, -R, R * 0.18, fundo);
     }
-    // Borracha escura e sulcos discretos, em vez de um aro inteiro luminoso.
-    ctx.strokeStyle = carro.modelo === 1 ? '#6d665c' : '#394555'; ctx.lineWidth = carro.modelo === 1 ? 2 : 1;
-    for (let i = 0; i < 12; i++) {
-      const a = i * Math.PI / 6;
-      traco([[Math.cos(a) * (R - 1.5), Math.sin(a) * (R - 1.5)], [Math.cos(a + .07) * R, Math.sin(a + .07) * R]], false, ctx); ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = '#2c3440'; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.arc(0, 0, R * 0.78, 0, Math.PI * 2); ctx.stroke();
+    // disco e pinça
+    const ra = R * (carro.modelo === 3 ? 0.56 : 0.66);
+    Neon.circle(ctx, 0, 0, ra, '#0c1016');
+    Neon.circle(ctx, 0, 0, ra * 0.82, '#56606c');
+    ctx.fillStyle = m.cor; ctx.beginPath(); ctx.roundRect(ra * 0.25, -ra * 0.75, ra * 0.42, ra * 0.9, 1); ctx.fill();
+    // aro
+    ctx.save(); ctx.rotate(r.spin);
+    ctx.globalAlpha = 1 - giroRapido * 0.55;
+    const metal = ctx.createLinearGradient(-ra, -ra, ra, ra);
+    metal.addColorStop(0, '#ffffff'); metal.addColorStop(0.45, d.aro); metal.addColorStop(1, '#3b4552');
+    ctx.fillStyle = metal; ctx.strokeStyle = metal;
+    if (d.raios === 'estrela' || d.raios === 'seis') {
+      const k = d.raios === 'estrela' ? 5 : 6;
+      for (let i = 0; i < k; i++) {
+        ctx.save(); ctx.rotate(i * Math.PI * 2 / k);
+        ctx.beginPath(); ctx.moveTo(-ra * 0.16, -ra * 0.2); ctx.lineTo(-ra * 0.08, -ra * 0.95); ctx.lineTo(ra * 0.08, -ra * 0.95); ctx.lineTo(ra * 0.16, -ra * 0.2); ctx.fill();
+        ctx.restore();
+      }
+    } else if (d.raios === 'turbina') {
+      for (let i = 0; i < 9; i++) {
+        ctx.save(); ctx.rotate(i * Math.PI * 2 / 9);
+        ctx.beginPath(); ctx.moveTo(0, -ra * 0.2); ctx.quadraticCurveTo(ra * 0.5, -ra * 0.5, ra * 0.3, -ra * 0.95); ctx.lineTo(ra * 0.1, -ra * 0.95); ctx.quadraticCurveTo(ra * 0.25, -ra * 0.5, -ra * 0.08, -ra * 0.2); ctx.fill();
+        ctx.restore();
+      }
+    } else if (d.raios === 'monstro') {
+      for (let i = 0; i < 8; i++) { ctx.save(); ctx.rotate(i * Math.PI / 4); Neon.circle(ctx, 0, -ra * 0.6, ra * 0.18, metal); ctx.restore(); }
+      ctx.lineWidth = ra * 0.18; ctx.beginPath(); ctx.arc(0, 0, ra * 0.88, 0, Math.PI * 2); ctx.stroke();
+    } else if (d.raios === 'kart') {
+      ctx.lineWidth = ra * 0.28; ctx.beginPath(); ctx.arc(0, 0, ra * 0.8, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 3; i++) { ctx.save(); ctx.rotate(i * Math.PI * 2 / 3); ctx.fillRect(-ra * 0.12, -ra * 0.8, ra * 0.24, ra * 0.6); ctx.restore(); }
+    } else {   // disco liso com furos
+      Neon.circle(ctx, 0, 0, ra * 0.92, metal);
+      for (let i = 0; i < 6; i++) { ctx.save(); ctx.rotate(i * Math.PI / 3); Neon.circle(ctx, 0, -ra * 0.55, ra * 0.13, '#5a4214'); ctx.restore(); }
     }
-    Neon.circle(ctx, 0, 0, 2.4, '#e2eaf2'); Neon.circle(ctx, 0, 0, 1.1, modelo.escuro);
+    ctx.lineWidth = 0.7; ctx.strokeStyle = '#ffffffaa'; ctx.beginPath(); ctx.arc(0, 0, ra * 0.95, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    if (giroRapido > 0.2) {   // borrão do giro
+      ctx.globalAlpha = giroRapido * 0.35; Neon.circle(ctx, 0, 0, ra * 0.92, d.aro); ctx.globalAlpha = 1;
+    }
+    Neon.circle(ctx, 0, 0, ra * 0.26, '#1a2230'); Neon.circle(ctx, 0, 0, ra * 0.14, m.cor);
     ctx.restore();
   }
+
   function desenharCarro(veiculo = car, contexto = ctx, preview = false) {
-    const car = veiculo, ctx = contexto, K = car.ajustes, m = CARROS[car.modelo];
+    const car = veiculo, ctx = contexto, K = car.ajustes, m = CARROS[car.modelo], d = DESENHOS[car.modelo];
     const andando = !preview && state === 'playing';
-    const forma = (pts, cor, borda) => {
-      traco(pts, true, ctx); ctx.fillStyle = cor; ctx.fill();
-      if (borda) { ctx.strokeStyle = borda; ctx.lineWidth = .8; ctx.stroke(); }
-    };
+    const s = { freando: car.freio && andando, acelerando: car.gas && car.gasolina > 0 && andando, andando };
     ctx.save(); ctx.translate(car.x, car.y); ctx.rotate(car.a); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // sombra no chão, só com roda encostando
+    if (car.chao > 0 || preview) {
+      const y = K.altura + K.raio;
+      const g = ctx.createRadialGradient(0, y, 2, 0, y, K.eixo * 0.95);
+      g.addColorStop(0, '#000000aa'); g.addColorStop(1, '#00000000');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, y, K.eixo * 0.95, 4, 0, 0, Math.PI * 2); ctx.fill();
+    }
     if (andando) {
-      const cone = ctx.createLinearGradient(40, 0, 110, 0);
-      cone.addColorStop(0, '#fff3c52b'); cone.addColorStop(1, '#fff3c500');
-      forma([[40, -9], [110, -24], [110, 12], [40, -3]], cone);
+      const [fx, fy] = d.farol;
+      const cone = ctx.createLinearGradient(fx, 0, fx + 70, 0);
+      cone.addColorStop(0, '#fff3c530'); cone.addColorStop(1, '#fff3c500');
+      ctx.fillStyle = cone; ctx.beginPath(); ctx.moveTo(fx, fy - 1); ctx.lineTo(fx + 70, fy - 14); ctx.lineTo(fx + 70, fy + 20); ctx.lineTo(fx, fy + 2); ctx.fill();
     }
-    // Braços de suspensão, chassi inferior e rodas atrás dos para-lamas.
-    ctx.strokeStyle = '#697b8e'; ctx.lineWidth = 2;
+    // suspensão: amortecedor com mola entre o chassi e o cubo
     for (const r of car.rodas) {
-      traco([[r.lx * .6, -3], [r.lx, r.ly - r.comp]], false, ctx); ctx.stroke();
-      ctx.strokeStyle = m.cor; ctx.lineWidth = 1;
-      traco([[r.lx, -7], [r.lx - 2, -4], [r.lx + 2, -1], [r.lx - 2, 2], [r.lx, r.ly - r.comp]], false, ctx); ctx.stroke();
+      const hy = r.ly - r.comp, topoS = Math.min(-4, d.base - 4);
+      ctx.strokeStyle = '#4b5563'; ctx.lineWidth = 2; traco([[r.lx * 0.55, d.base - 1], [r.lx, hy]], false, ctx); ctx.stroke();
+      ctx.strokeStyle = '#ffd36b'; ctx.lineWidth = 1;
+      const pts = [[r.lx - 1, topoS]];
+      for (let i = 1; i < 6; i++) pts.push([r.lx + (i & 1 ? 1.6 : -1.6), topoS + (hy - topoS) * i / 6]);
+      pts.push([r.lx, hy]); traco(pts, false, ctx); ctx.stroke();
     }
-    forma([[-34, -3], [36, -3], [33, 4], [-33, 4]], '#182233', '#68758a');
-    for (const r of car.rodas) desenharRoda(r, car, ctx);
-    const perfil = PERFIS[car.modelo];
-    ctx.beginPath(); ctx.moveTo(perfil[0][0], 2);
-    for (const [x, y] of perfil) ctx.lineTo(x, y);
-    ctx.lineTo(perfil.at(-1)[0], 2);
-    const pl = K.raio + 2;   // para-lama acompanha o tamanho da roda
-    ctx.arc(K.eixo / 2, 2, pl, 0, Math.PI, true);
-    ctx.lineTo(-K.eixo / 2 + pl, 2); ctx.arc(-K.eixo / 2, 2, pl, 0, Math.PI, true); ctx.closePath();
-    const tinta = ctx.createLinearGradient(0, -25, 0, 4);
-    tinta.addColorStop(0, m.claro); tinta.addColorStop(.36, m.cor); tinta.addColorStop(.48, m.escuro); tinta.addColorStop(.75, m.cor); tinta.addColorStop(1, m.escuro);
-    ctx.fillStyle = tinta; ctx.fill(); ctx.strokeStyle = m.claro; ctx.lineWidth = .9; ctx.stroke();
-    // Vidro fumê com reflexo diagonal e motorista sob o teto da física.
-    // O kart não tem cabine: o piloto de capacete aparece por cima.
-    if (car.modelo === 4) {
-      ctx.strokeStyle = '#2b3a2e'; ctx.lineWidth = 2;
-      traco([[-6, -12], [-2, -16], [6, -16]], false, ctx); ctx.stroke();   // volante
-      Neon.circle(ctx, -6, -16, 4, '#1b2a3a');
-      Neon.circle(ctx, -5, -17, 3.6, m.claro);   // capacete
-      forma([[-4, -18], [-1, -18], [-1, -15], [-4, -15]], '#254c65');   // viseira
-      forma([[-28, -9], [-24, -14], [-20, -14], [-22, -9]], m.escuro);   // aerofólio
-      forma([[24, -7], [31, -6], [30, -3], [23, -4]], '#1d2a20', m.claro);
-      ctx.fillStyle = m.claro; ctx.fillRect(-14, -9, 20, 1.5);
-    } else {
-    const vidro = ctx.createLinearGradient(-10, -25, 15, -12);
-    vidro.addColorStop(0, '#a6d8ed'); vidro.addColorStop(.45, '#254c65'); vidro.addColorStop(1, '#101c30');
-    forma([[-10, -23], [7, -23], [16, -15], [-21, -15]], vidro, '#e7faff99');
-    forma([[-9, -22], [-5, -22], [-15, -16], [-19, -16]], '#e7faff77');
-    forma([[0, -24], [2, -24], [5, -14], [3, -14]], m.escuro);
-    ctx.fillStyle = '#0c1728'; ctx.fillRect(-4, -20, 5, 5);
-    ctx.fillStyle = '#e6eff9'; ctx.fillRect(-3, -21, 4, 3);
+    if (!d.rodasNaFrente) {
+      // poço escuro atrás da roda: aparece no vão entre o pneu e o para-lama
+      ctx.save(); ctx.beginPath(); ctx.rect(-80, -60, 160, 60 + d.base); ctx.clip();
+      for (const r of car.rodas) Neon.circle(ctx, r.lx, r.ly, K.raio + 2.5, '#04060b');
+      ctx.restore();
+      for (const r of car.rodas) desenharRoda(r, car, ctx);
     }
-    if (car.modelo === 3) {
-      // Monstro: caçamba, santantônio, faróis no teto e para-choque de tubo.
-      forma([[-44, -17], [-18, -17], [-18, -14], [-44, -14]], '#3d1f22', m.claro);
-      ctx.strokeStyle = '#d7dde5'; ctx.lineWidth = 2;
-      traco([[-20, -17], [-20, -24], [-12, -27]], false, ctx); ctx.stroke();
-      for (const x of [-6, 0, 6]) { Neon.circle(ctx, x, -29, 2.2, '#303c47'); Neon.circle(ctx, x, -29, 1.3, '#fff0b8'); }
-      ctx.strokeStyle = '#c7d6e1'; ctx.lineWidth = 2.5; traco([[44, -12], [50, -10], [50, -2], [44, -1]], false, ctx); ctx.stroke();
-      ctx.fillStyle = m.claro; for (let i = 0; i < 3; i++) ctx.fillRect(-12 + i * 9, -9, 6, 2);
-    } else if (car.modelo === 5) {
-      // Jato: turbina na traseira, aleta, faixa e bico com entrada de ar.
-      forma([[-50, -9], [-40, -9], [-40, 1], [-50, 1]], '#2b2b33', m.claro);
-      Neon.circle(ctx, -50, -4, 4.5, '#141820'); Neon.circle(ctx, -50, -4, 2.5, '#ff9a3c');
-      forma([[-38, -12], [-30, -26], [-24, -26], [-26, -12]], m.escuro, m.claro);
-      forma([[-30, -7], [40, -7], [44, -5], [-30, -4]], m.claro);
-      forma([[30, -9], [44, -6], [40, -4], [30, -5]], '#141820');
-    } else if (car.modelo === 0) {
-      // Cupê: capô longo, faixa dupla, porta recortada e ducktail traseiro.
-      forma([[18, -14], [35, -11], [38, -8], [19, -11]], '#e6fff0');
-      forma([[22, -13], [26, -12], [28, -9], [24, -10]], m.escuro);
-      forma([[-43, -14], [-27, -16], [-26, -13], [-42, -11]], '#193549', m.claro);
-      forma([[-14, -13], [12, -13], [10, -1], [-12, -1]], '#286d6980', m.escuro);
-      ctx.fillStyle = m.claro; ctx.fillRect(-9, -11, 5, 1.3);
-      ctx.fillStyle = '#112c37'; ctx.fillRect(27, -5, 12, 2);
-    } else if (car.modelo === 1) {
-      // Buggy: gaiola externa, caçamba, faróis auxiliares e protetor frontal.
-      forma([[-38, -17], [-23, -17], [-25, -12], [-38, -12]], '#293341', '#baa78c');
-      ctx.strokeStyle = '#3a302c'; ctx.lineWidth = 2.5;
-      traco([[-21, -13], [-10, -25], [8, -25], [18, -13]], false, ctx); ctx.stroke();
-      traco([[-8, -24], [5, -14]], false, ctx); ctx.stroke();
-      ctx.fillStyle = '#3e332e'; ctx.fillRect(18, -17, 15, 3);
-      for (const x of [21, 29]) { Neon.circle(ctx, x, -16, 3.3, '#303c47'); Neon.circle(ctx, x, -16, 2, '#fff0b8'); }
-      forma([[-12, -12], [11, -12], [9, -1], [-10, -1]], '#4c3930');
-      ctx.strokeStyle = '#c5b39b'; ctx.lineWidth = 2.5; traco([[39, -10], [43, -8], [43, 1], [36, 2]], false, ctx); ctx.stroke();
-      ctx.fillStyle = '#303d4a'; ctx.fillRect(-42, -5, 9, 4);
-    } else if (car.modelo === 2) {
-      // Protótipo: asa de carbono, entradas de ar e splitter alongado.
-      ctx.strokeStyle = '#b9b2dd'; ctx.lineWidth = 1.8;
-      traco([[-36, -11], [-36, -21], [-29, -21], [-29, -12]], false, ctx); ctx.stroke();
-      forma([[-46, -24], [-25, -24], [-24, -21], [-46, -20]], '#182235', m.claro);
-      forma([[17, -11], [36, -7], [31, -2], [16, -3]], '#1d2540', m.claro);
-      for (let i = 0; i < 3; i++) { ctx.fillStyle = '#927fcf'; ctx.fillRect(18 + i * 4, -8, 2, 5); }
-      forma([[-13, -12], [13, -12], [10, 0], [-11, 0]], '#302855');
-      forma([[34, 1], [48, -1], [47, 3], [32, 4]], '#131f33', m.cor);
-      forma([[12, -22], [24, -12], [20, -11]], m.claro);
+    lataria(ctx, d.corpo, m, d.topo, d.base, d.brilho);
+    for (const v of d.vidros) vidro(ctx, v, d.tom);
+    // piloto: silhueta escura atrás do vidro fumê, com a faixa do capacete
+    if (d.vidros.length) {
+      const v = P(d.vidros[d.vidros.length > 1 ? 1 : 0]);
+      const hx = car.modelo === 3 ? 5 : car.modelo === 5 ? 1 : 1.5, hy = car.modelo === 3 ? -20.5 : -18.2;
+      ctx.save(); ctx.clip(v);
+      ctx.fillStyle = '#0a1220cc';
+      ctx.beginPath(); ctx.arc(hx, hy, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(hx - 4, hy + 2.4, 7, 6);
+      ctx.fillStyle = m.cor + '99'; ctx.fillRect(hx - 3.4, hy - 1.4, 6.8, 0.9);
+      ctx.restore();
+      // reflexo por cima do piloto, pro vidro continuar parecendo vidro
+      ctx.save(); ctx.clip(v);
+      ctx.fillStyle = '#ffffff22'; ctx.beginPath(); ctx.moveTo(-6, -14); ctx.lineTo(2, -30); ctx.lineTo(7, -30); ctx.lineTo(-1, -14); ctx.fill();
+      ctx.restore();
     }
-    // Numeração de corrida e detalhes pequenos com contraste, sem excesso de glow.
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'italic 700 8px monospace'; ctx.fillStyle = '#f3f6ff';
-    if (car.modelo === 5) ctx.fillStyle = '#4a3410';
-    if (car.modelo !== 4) ctx.fillText(['01', '04', '09', '44', '07', '99'][car.modelo], 0, -6);
-    ctx.fillStyle = car.freio && andando ? '#ff796c' : '#b94c58'; Neon.glow(ctx, '#ff796c', car.freio && andando ? 14 : 0);
-    const pTras = PERFIS[car.modelo][0][0], pFrente = PERFIS[car.modelo].at(-1)[0];
-    ctx.fillRect(pTras + 1, car.modelo === 4 ? -6 : -10, 3, 4); ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff4cd'; Neon.glow(ctx, '#fff4cd', 7); ctx.fillRect(pFrente - (car.modelo === 2 ? 6 : 6), car.modelo === 4 ? -6 : -8, 4, 2.5); ctx.shadowBlur = 0;
-    if (car.gas && car.gasolina > 0 && andando) {
+    d.detalhes(ctx, m, s);
+    if (d.rodasNaFrente) for (const r of car.rodas) desenharRoda(r, car, ctx);
+    farol(ctx, d.farol[0], d.farol[1], 1.8, 1.3, andando);
+    lanterna(ctx, d.lanterna[0], d.lanterna[1], 2.2, 3.4, s.freando);
+    if (s.acelerando) {
       const chama = Neon.motion.reduced ? 12 : 12 + Math.sin(performance.now() / 37) * 7;
-      // escapamento na traseira de cada carroceria; o jato solta chama dobrada da turbina
-      const ex = car.modelo === 5 ? -54 : pTras + 2, ey = car.modelo === 5 ? -4 : 0, ch = car.modelo === 5 ? chama * 1.8 : chama;
-      forma([[ex, ey - 2], [ex - 3 - ch, ey], [ex, ey + 2]], car.modelo === 2 ? '#aaa1ff' : car.modelo === 5 ? '#ff9a3c' : '#efa574');
-      forma([[ex, ey - 1], [ex - 3 - ch * .5, ey], [ex, ey + 1]], '#fff0bf');
+      const [ex, ey] = d.escape, jato = car.modelo === 5, ch = jato ? chama * 1.8 : chama;
+      ctx.fillStyle = jato ? '#ff9a3c' : car.modelo === 2 ? '#aaa1ff' : '#efa574';
+      if (car.modelo === 3) {   // a chaminé solta fumaça e chama pra cima
+        traco([[ex - 1.4, ey], [ex, ey - 3 - ch * 0.6], [ex + 1.4, ey]], true, ctx); ctx.fill();
+      } else {
+        const a = jato ? 4 : 2;
+        traco([[ex, ey - a], [ex - 3 - ch, ey], [ex, ey + a]], true, ctx); ctx.fill();
+        ctx.fillStyle = '#fff0bf'; traco([[ex, ey - a / 2], [ex - 3 - ch * 0.5, ey], [ex, ey + a / 2]], true, ctx); ctx.fill();
+      }
     }
     ctx.restore();
   }
