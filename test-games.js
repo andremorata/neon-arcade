@@ -102,7 +102,7 @@ const wIni = wheels.indexOf('  // \u2500\u2500 f\u00edsica \u2500\u2500');
 const wFim = wheels.indexOf('  // \u2500\u2500 fim da f\u00edsica \u2500\u2500');
 assert.ok(wIni > 0 && wFim > wIni, 'wheels: marcadores do bloco de fisica nao encontrados');
 const W = new Function(wheels.slice(wIni, wFim)
-  + '; return { K, STEP, PISTAS, CONJUNTOS, CARROS, compilar, novoCarro, passo, piloto, correrSozinho };')();
+  + '; return { K, STEP, PISTAS, CONJUNTOS, CARROS, MELHORIAS, CUSTOS, ajustesDe, compilar, novoCarro, passo, piloto, correrSozinho };')();
 
 assert.strictEqual(W.PISTAS.length, 12, 'O Wheels tem 12 fases');
 assert.strictEqual(W.CONJUNTOS.length, 3, 'As 12 fases vem em 3 conjuntos');
@@ -147,8 +147,8 @@ for (const pd of W.PISTAS) {
 }
 
 // A fase 1 e o tutorial: quem so segura o gas, sem soltar no ar, tem que
-// percorrer boa parte dela antes de capotar. Sem isso a crianca bate nos
-// primeiros 10 segundos toda vez e larga o jogo.
+// chegar na primeira bandeira antes de capotar. Dali em diante bater so volta
+// pra ela, entao a crianca nunca perde o comeco da pista de novo.
 {
   const p = W.compilar(W.PISTAS[0].pecas), car = W.novoCarro(p);
   for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
@@ -156,9 +156,107 @@ for (const pd of W.PISTAS) {
     W.passo(car, p, W.STEP);
     car.ev.length = 0;
   }
-  const parte = car.x / p.fim;
-  assert.ok(parte > 0.35,
-    `A fase 1 e o tutorial: so-gas chega a ${(parte * 100).toFixed(0)}% da pista, precisa passar de 35%`);
+  assert.ok(car.cp === p.bandeiras[0],
+    `A fase 1 e o tutorial: so-gas para em x=${car.x.toFixed(0)}, antes da primeira bandeira (x=${p.bandeiras[0].x.toFixed(0)})`);
+}
+
+// Duracao por mundo, e bandeira a cada trecho curto: pista longa sem
+// checkpoint faz a crianca repetir um minuto inteiro por um erro no fim.
+const FAIXA = { RUA: [24, 36], DESERTO: [40, 55], 'ÓRBITA': [50, 62] };
+for (const pd of W.PISTAS) {
+  const p = W.compilar(pd.pecas), car = W.novoCarro(p);
+  const marcos = [0];
+  let t = 0;
+  for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+    W.piloto(car); W.passo(car, p, W.STEP); t += W.STEP;
+    for (const e of car.ev) if (e.tipo === 'bandeira') marcos.push(t);
+    car.ev.length = 0;
+  }
+  marcos.push(t);
+  const [min, max] = FAIXA[W.CONJUNTOS[pd.conj].nome];
+  assert.ok(t >= min && t <= max, `${pd.nome}: ${t.toFixed(1)}s, o mundo pede entre ${min} e ${max}s`);
+  assert.strictEqual(marcos.length - 2, p.bandeiras.length, `${pd.nome}: o piloto passou por bandeira de menos`);
+  for (let i = 1; i < marcos.length; i++) {
+    assert.ok(marcos[i] - marcos[i - 1] <= 16,
+      `${pd.nome}: trecho de ${(marcos[i] - marcos[i - 1]).toFixed(1)}s sem bandeira`);
+  }
+  for (const b of p.bandeiras) {
+    const s = p.segs[b.seg];
+    assert.ok(Math.abs(s.y1 - s.y0) < 1e-6, `${pd.nome}: bandeira fora do plano em x=${b.x.toFixed(0)}`);
+  }
+}
+
+// Melhorias so ajudam: com tudo no maximo, os tres carros fecham todas as
+// pistas. Motor e pneu demais davam cavalinho que virava o carro de costas.
+const UP_MAX = Object.fromEntries(W.MELHORIAS.map(m => [m.id, W.CUSTOS.length]));
+for (const pd of W.PISTAS) {
+  for (let modelo = 0; modelo < W.CARROS.length; modelo++) {
+    for (const up of [null, UP_MAX]) {
+      const r = W.correrSozinho(W.compilar(pd.pecas), 120, modelo, up);
+      assert.ok(!r.morto && r.x >= W.compilar(pd.pecas).fim,
+        `${pd.nome}: ${W.CARROS[modelo].nome}${up ? ' no maximo' : ''} nao chega (${r.morto || 'parou'} em x=${r.x.toFixed(0)})`);
+    }
+  }
+}
+{
+  const base = W.ajustesDe(0, null), cheio = W.ajustesDe(0, UP_MAX);
+  assert.ok(cheio.motor > base.motor && cheio.grip > base.grip && cheio.tilt > base.tilt, 'Melhoria tem que melhorar');
+  assert.ok(cheio.dreno < base.dreno && cheio.drenoGas < base.drenoGas, 'Tanque melhorado gasta menos');
+  assert.deepStrictEqual(W.ajustesDe(0, { motor: 99 }), W.ajustesDe(0, { motor: W.CUSTOS.length }), 'Nivel acima do maximo nao vale');
+}
+
+// Pecas novas: trampolim, gravidade baixa, caixa e bandeira
+{
+  const voo = pecas => {
+    const p = W.compilar(pecas), car = W.novoCarro(p);
+    let ar = 0, mola = false;
+    for (let i = 0; i < 8 * 240 && !car.morto && car.x < p.fim; i++) {
+      W.piloto(car); W.passo(car, p, W.STEP);
+      for (const e of car.ev) { if (e.tipo === 'pouso') ar = Math.max(ar, e.ar); if (e.tipo === 'mola') mola = true; }
+      car.ev.length = 0;
+    }
+    return { ar, mola, car };
+  };
+  const normal = voo([['reta', 1000], ['mola', 120, 800, 5], ['reta', 2600], ['chegada']]);
+  assert.ok(normal.mola && normal.ar > 1.2, `O trampolim tem que lancar o carro (voo de ${normal.ar.toFixed(2)}s)`);
+  assert.ok(!normal.car.morto, 'O trampolim nao pode virar o carro');
+  assert.ok(normal.car.moedas >= 3, `As moedas do trampolim ficam no arco do salto (pegou ${normal.car.moedas}/5)`);
+  const lua = voo([['reta', 1000], ['gravidade', 0.5], ['mola', 120, 800], ['reta', 4000], ['gravidade', 1], ['chegada']]);
+  assert.ok(lua.ar > normal.ar * 1.6, `Na gravidade baixa o voo dura mais (${lua.ar.toFixed(2)}s contra ${normal.ar.toFixed(2)}s)`);
+
+  const pc = W.compilar([['reta', 300], ['caixas', 3], ['reta', 600], ['bandeira'], ['reta', 600], ['chegada']]);
+  assert.strictEqual(pc.itens.filter(i => i.tipo === 'caixa').length, 3, 'A peca caixas gera as caixas');
+  assert.strictEqual(pc.bandeiras.length, 1, 'A peca bandeira gera uma bandeira');
+  const c = W.novoCarro(pc);
+  let vAntes = 0, quebrou = false;
+  for (let i = 0; i < 6 * 240 && c.x < pc.fim; i++) {
+    c.gas = true; vAntes = c.vx; W.passo(c, pc, W.STEP);
+    for (const e of c.ev) if (e.tipo === 'caixa' && !quebrou) { quebrou = true; assert.ok(c.vx < vAntes, 'Quebrar caixa freia um pouco'); }
+    if (c.cp) c.gasolina = Math.min(c.gasolina, 99);   // so pra saber que encheu
+    c.ev.length = 0;
+  }
+  assert.strictEqual(c.caixas, 3, `O carro quebra as caixas no caminho (quebrou ${c.caixas})`);
+  assert.strictEqual(c.cp, pc.bandeiras[0], 'Passar da bandeira guarda o checkpoint');
+  const volta = W.novoCarro(pc, 0, null, c.cp);
+  assert.ok(Math.abs(volta.x - c.cp.x) < 1 && volta.gasolina === W.K.tanque && volta.seg === c.cp.seg,
+    'Renascer na bandeira: no mastro, de tanque cheio e no segmento certo');
+  for (const it of pc.itens) it.pego = false;
+  const tanque = W.novoCarro(pc);
+  tanque.gasolina = 40;
+  for (let i = 0; i < 6 * 240 && !tanque.cp; i++) { tanque.gas = true; W.passo(tanque, pc, W.STEP); tanque.ev.length = 0; }
+  assert.strictEqual(tanque.gasolina > 95, true, 'A bandeira enche o tanque');
+}
+
+// Pouso perfeito acontece no jogo normal: o piloto, que pousa nivelado, ganha alguns
+{
+  const p = W.compilar(W.PISTAS[0].pecas), car = W.novoCarro(p);
+  let perfeitos = 0;
+  for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+    W.piloto(car); W.passo(car, p, W.STEP);
+    for (const e of car.ev) if (e.tipo === 'pouso' && e.perfeito) perfeitos++;
+    car.ev.length = 0;
+  }
+  assert.ok(perfeitos >= 3, `Pouso perfeito quase nunca acontece (${perfeitos} na fase 1)`);
 }
 
 // "Sem pista impossivel": um jogador lento gasta mais gasolina de base. Com o
@@ -265,7 +363,8 @@ for (const carro of [-1, 9, '2', null]) assert.strictEqual(garagem.modeloSalvo({
 // Executa a chegada real: desbloqueio, equipagem e persistência na mesma gravação.
 const finalizarWheels = new Function('save', 'pistaN', 'liberados', 'PISTAS', 'K', `
   let state, fimT, novoModelo = null, pb, persisted;
-  const car = { gasolina: 80, moedas: 3, x: 0, y: 0 }, tempo = 10, alvo = 20;
+  const car = { gasolina: 80, moedas: 3, caixas: 1, x: 0, y: 0 }, tempo = 10, alvo = 20, extra = 2;
+  ${wheels.match(/  const ganhoDe = .*;/)[0]}
   const gravar = () => { persisted = JSON.parse(JSON.stringify(save)); };
   const totalEstrelas = () => Object.values(save.pistas).reduce((n, p) => n + p.estrelas, 0);
   const pintarPainel = () => {}, particles = { burst() {} };
@@ -279,7 +378,8 @@ for (const [aberta, n, esperado] of [[3, 3, 1], [7, 7, 2], [8, 0, null]]) {
   assert.strictEqual(result.novoModelo, esperado, 'Wheels: só anuncia carro ao cruzar uma etapa inédita');
   assert.strictEqual(result.persisted.carro, esperado ?? 0, 'Wheels: novo carro equipado é persistido');
   assert.deepStrictEqual(result.persisted.pistas[1], { estrelas: 2, tempo: 30, moedas: 4 }, 'Wheels: desbloqueio preserva recordes antigos');
-  assert.strictEqual(result.persisted.moedas, 30, 'Wheels: desbloqueio preserva o saldo de moedas');
+  // 27 de saldo + 3 moedas + 1 caixa (2) + 2 de acrobacia
+  assert.strictEqual(result.persisted.moedas, 34, 'Wheels: chegada soma moedas, caixas e acrobacias ao saldo');
 }
 
 // geometria do alvo do Darts: setor/anel precisam bater com o desenho, senao o dardo
