@@ -199,8 +199,9 @@
     rolagem: 25,      // resistência de rolamento por roda
     arrasto: 0.00022, // arrasto do ar (× v²)
     grip: 1.1,        // força tangencial máxima = grip × normal
-    tilt: 11,         // velocidade de giro no ar com o pedal segurado (rad/s)
-    tiltResp: 4,      // rapidez com que o giro chega nessa velocidade (1/s)
+    tilt: 7.5,        // velocidade de giro no ar com o pedal segurado (rad/s)
+    tiltResp: 3,      // rapidez com que o giro chega nessa velocidade (1/s)
+    nivela: 2.2,      // pedal solto no ar: o carro volta sozinho pro reto, devagar
     mola: 140,        // suspensão: força por px de compressão
     amort: 9,         // suspensão: força por px/s de velocidade normal
     curso: 10,        // compressão máxima antes do batente rígido
@@ -224,19 +225,19 @@
     { nome: 'VÉRTICE GT', cor: '#9be7ce', claro: '#defff1', escuro: '#247a73',
       descricao: 'Equilibrado no chão e no ar.', fisica: {} },
     { nome: 'DUNA RALLY', cor: '#efb76f', claro: '#ffe5ad', escuro: '#a44e26',
-      descricao: 'Giro mais suave e menor consumo.', fisica: { tilt: 9, tiltResp: 3.6, drenoGas: 4.5 } },
+      descricao: 'Giro mais suave e menor consumo.', fisica: { tilt: 6.2, tiltResp: 2.7, drenoGas: 4.5 } },
     { nome: 'ION RX', cor: '#b4a2ff', claro: '#ece5ff', escuro: '#6551b2',
-      descricao: 'Giro rápido e resposta ágil no ar.', fisica: { tilt: 13, tiltResp: 5, drenoGas: 7 } },
+      descricao: 'Giro rápido e resposta ágil no ar.', fisica: { tilt: 9, tiltResp: 3.6, drenoGas: 7 } },
     // Os três de baixo se compram com moedas na garagem. Podem mudar a
     // geometria (roda, eixo, teto): o teste roda cada um em todas as pistas.
     { nome: 'TROVÃO 4X4', cor: '#ed887f', claro: '#ffd2c9', escuro: '#8c3a3a', preco: 300,
       descricao: 'Rodas gigantes: agarra em tudo, gira devagar.',
       fisica: { raio: 15, altura: 10, eixo: 48, teto: 27, grip: 1.35, motor: 1000, vmax: 950,
-                tilt: 8, tiltResp: 3.4, curso: 14, inercia: 460, drenoGas: 7 } },
+                tilt: 5.6, tiltResp: 2.6, curso: 14, inercia: 460, drenoGas: 7 } },
     { nome: 'FORMIGA KART', cor: '#a8dba0', claro: '#e4ffdc', escuro: '#3f7a46', preco: 500,
       descricao: 'Pequeno e leve: arranca forte e gira rápido.',
       fisica: { raio: 9, altura: 3, eixo: 38, teto: 19, motor: 1050, vmax: 960,
-                tilt: 14, tiltResp: 5.5, inercia: 300, dreno: 3.8, drenoGas: 5 } },
+                tilt: 9.5, tiltResp: 4, inercia: 300, dreno: 3.8, drenoGas: 5 } },
     { nome: 'COMETA JET', cor: '#efce95', claro: '#fff4d6', escuro: '#9a6b2e', preco: 800,
       descricao: 'Turbina: o mais rápido da garagem, e o mais gastão.',
       fisica: { motor: 1050, vmax: 1150, arrasto: 0.00018, drenoGas: 8.5 } },
@@ -282,7 +283,7 @@
       // tutorial: o primeiro terço é só chão, caixas e um loop
       { nome: 'PRIMEIRA VOLTA', pecas: [
         ['reta', 500], ['moedas', 5], ['onda', 3, 10], ['reta', 300],
-        ['caixas', 3], ['reta', 400], ['mesa', 18, 120], ['reta', 300],
+        ['caixas', 3], ['reta', 400], ['duna', 1, 22], ['reta', 300],
         ['moedas', 5], ['onda', 4, 12], ['reta', 300], ['lata'],
         ['duna', 2, 30], ['reta', 300], ['caixas', 4], ['reta', 400],
         ['booster', 180], ['reta', 220], ['loop', 100], ['reta', 400], ['moedas', 4],
@@ -295,7 +296,7 @@
         ['onda', 2, 16], ['reta', 300], ['lata'], ['duna', 2, 36], ['reta', 300],
         ['bandeira'],
         ['caixas', 4], ['reta', 400], ['lombada', 34], ['reta', 260], ['lata'],
-        ['booster', 200], ['rampao', 30, 240], ['moedas', 5], ['vao', 300, 30], ['pouso', 24, 220], ['reta', 380],
+        ['booster', 200], ['rampao', 30, 240], ['moedas', 5], ['vao', 300, 30], ['pouso', 24, 800], ['reta', 380],
         ['onda', 3, 14], ['reta', 300], ['moedas', 4], ['mesa', 20, 120], ['reta', 300], ['lata'],
         ['rampa', 20, 160], ['vao', 220, 40], ['pouso', 18, 170], ['reta', 300],
         ['booster', 180], ['reta', 220], ['loop', 100], ['reta', 300], ['caixas', 5], ['reta', 500],
@@ -316,7 +317,7 @@
         ['mesa', 26, 100], ['reta', 300], ['duna', 2, 34], ['reta', 300],
         ['bandeira'],
         ['moedas', 4], ['onda', 4, 14], ['reta', 300], ['lata'], ['caixas', 3], ['reta', 300],
-        ['booster', 220], ['rampao', 32, 250], ['moedas', 8], ['vao', 560, 140], ['pouso', 30, 260], ['reta', 400],
+        ['booster', 220], ['rampao', 32, 250], ['moedas', 8], ['vao', 560, 140], ['pouso', 30, 800], ['reta', 400],
         ['rampa', 18, 150], ['vao', 200, 40], ['pouso', 16, 170], ['reta', 300],
         ['booster', 180], ['reta', 200], ['loop', 110], ['reta', 340], ['moedas', 5],
         ['mesa', 24, 120], ['reta', 300], ['caixas', 4], ['reta', 500],
@@ -338,7 +339,7 @@
         ['rampa', 14, 100], ['moedas', 3], ['vao', 190, 20], ['pouso', 8, 260], ['reta', 300], ['lata'],
         ['lombada', 42], ['reta', 300],
         ['bandeira'],
-        ['booster', 210], ['rampao', 32, 250], ['moedas', 7], ['vao', 380, 60], ['pouso', 26, 220], ['reta', 340],
+        ['booster', 210], ['rampao', 32, 250], ['moedas', 7], ['vao', 380, 60], ['pouso', 26, 800], ['reta', 340],
         ['mesa', 28, 100], ['reta', 260], ['lata'], ['onda', 3, 20], ['reta', 300],
         ['rampa', 12, 90], ['moedas', 3], ['vao', 180, 0], ['pouso', 0, 220],
         ['rampa', 12, 90], ['moedas', 3], ['vao', 180, 0], ['pouso', 0, 260], ['reta', 300],
@@ -351,14 +352,14 @@
         ['booster', 220], ['reta', 170], ['loop', 100], ['reta', 90], ['loop', 100], ['reta', 340], ['moedas', 5],
         ['onda', 4, 18], ['reta', 300], ['mesa', 28, 100], ['reta', 300],
         ['bandeira'],
-        ['rampa', 22, 170], ['moedas', 5], ['vao', 260, 90], ['pouso', 22, 190], ['reta', 320], ['lata'],
+        ['rampa', 22, 170], ['moedas', 5], ['vao', 260, 90], ['pouso', 22, 400], ['reta', 320], ['lata'],
         ['booster', 240], ['reta', 180], ['loop', 150], ['reta', 340], ['moedas', 5],
         ['caixas', 4], ['reta', 300], ['duna', 2, 36], ['reta', 300], ['lata'],
         ['rampa', 18, 150], ['vao', 200, 30], ['pouso', 16, 180], ['reta', 300],
         ['bandeira'],
         ['onda', 3, 18], ['reta', 300], ['lata'], ['moedas', 4],
         ['booster', 240], ['reta', 170], ['loop', 105], ['reta', 90], ['loop', 105], ['reta', 90], ['loop', 105], ['reta', 340],
-        ['moedas', 6], ['booster', 200], ['rampao', 32, 250], ['vao', 340, 30], ['pouso', 26, 210], ['reta', 340],
+        ['moedas', 6], ['booster', 200], ['rampao', 32, 250], ['vao', 340, 30], ['pouso', 26, 800], ['reta', 340],
         ['lombada', 40], ['reta', 260], ['caixas', 5], ['reta', 300], ['mesa', 24, 100], ['reta', 500],
         ['bandeira'],
         ['booster', 220], ['reta', 180], ['loop', 120], ['reta', 340], ['moedas', 4], ['onda', 3, 16], ['reta', 300],
@@ -379,16 +380,16 @@
         ['mesa', 30, 100], ['reta', 300], ['duna', 2, 56], ['reta', 300], ['lata'],
         ['bandeira'],
         ['moedas', 5], ['duna', 1, 90], ['reta', 300], ['caixas', 4], ['reta', 300],
-        ['rampa', 26, 200], ['vao', 280, 110], ['pouso', 24, 200], ['reta', 300], ['lata'],
+        ['rampa', 26, 200], ['vao', 280, 110], ['pouso', 24, 400], ['reta', 300], ['lata'],
         ['duna', 3, 46], ['reta', 300], ['lombada', 44], ['reta', 300],
         ['bandeira'],
         ['booster', 220], ['moedas', 6], ['duna', 1, 120], ['reta', 300], ['lata'],
         ['duna', 4, 40], ['reta', 300], ['caixas', 4], ['reta', 300],
-        ['booster', 200], ['rampao', 32, 250], ['moedas', 7], ['vao', 360, 60], ['pouso', 26, 210], ['reta', 340],
+        ['booster', 200], ['rampao', 32, 250], ['moedas', 7], ['vao', 360, 60], ['pouso', 26, 800], ['reta', 340],
         ['duna', 2, 40], ['reta', 500],
         ['bandeira'],
         ['duna', 3, 50], ['reta', 300], ['lata'], ['caixas', 4], ['reta', 300],
-        ['rampa', 24, 200], ['moedas', 5], ['vao', 280, 100], ['pouso', 22, 200], ['reta', 300], ['lata'],
+        ['rampa', 24, 200], ['moedas', 5], ['vao', 280, 100], ['pouso', 22, 400], ['reta', 300], ['lata'],
         ['duna', 1, 110], ['reta', 300], ['lata'], ['mola', 120, 780, 5], ['reta', 1300],
         ['onda', 4, 22], ['reta', 300], ['booster', 200], ['reta', 180], ['loop', 120], ['reta', 340], ['moedas', 5], ['duna', 2, 44], ['reta', 400],
         ['chegada'],
@@ -397,25 +398,25 @@
       { nome: 'CANYON', pecas: [
         ['reta', 400], ['rampa', 26, 300], ['reta', 200], ['moedas', 4], ['rampa', -30, 360], ['reta', 300], ['lata'],
         ['duna', 2, 40], ['reta', 260], ['caixas', 3], ['reta', 300],
-        ['rampa', 28, 200], ['vao', 260, 160], ['pouso', 24, 200], ['reta', 300],
+        ['rampa', 28, 200], ['vao', 260, 160], ['pouso', 24, 400], ['reta', 300],
         ['bandeira'],
         ['rampa', 24, 400], ['reta', 240], ['moedas', 5], ['rampa', -28, 420], ['reta', 300], ['lata'],
         ['booster', 210], ['reta', 180], ['loop', 120], ['reta', 340],
         ['mesa', 30, 100], ['reta', 260], ['onda', 4, 20], ['reta', 300], ['lata'],
         ['bandeira'],
         ['moedas', 4], ['caixas', 4], ['reta', 300],
-        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 620, 280], ['pouso', 36, 300], ['reta', 400],
+        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 620, 280], ['pouso', 36, 800], ['reta', 400],
         ['rampa', 22, 240], ['reta', 260], ['lata'], ['rampa', -24, 260], ['reta', 300],
         ['duna', 3, 44], ['reta', 300],
         ['bandeira'],
-        ['rampa', 30, 220], ['vao', 260, 140], ['pouso', 26, 200], ['reta', 300], ['lata'],
-        ['booster', 210], ['rampao', 34, 260], ['moedas', 7], ['vao', 360, 40], ['pouso', 28, 210], ['reta', 340],
+        ['rampa', 30, 220], ['vao', 260, 140], ['pouso', 26, 400], ['reta', 300], ['lata'],
+        ['booster', 210], ['rampao', 34, 260], ['moedas', 7], ['vao', 360, 40], ['pouso', 28, 800], ['reta', 340],
         ['caixas', 4], ['reta', 300], ['rampa', -22, 260], ['reta', 300], ['moedas', 5], ['duna', 2, 40], ['reta', 500],
         ['bandeira'],
         ['rampa', 26, 380], ['reta', 240], ['moedas', 5], ['rampa', -30, 420], ['reta', 300], ['lata'],
         ['duna', 3, 46], ['reta', 300], ['caixas', 4], ['reta', 300],
-        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 600, 260], ['pouso', 36, 300], ['reta', 400], ['lata'],
-        ['mesa', 30, 100], ['reta', 300], ['onda', 4, 20], ['reta', 300], ['rampa', 28, 220], ['vao', 260, 120], ['pouso', 24, 200], ['reta', 400],
+        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 600, 260], ['pouso', 36, 800], ['reta', 400], ['lata'],
+        ['mesa', 30, 100], ['reta', 300], ['onda', 4, 20], ['reta', 300], ['rampa', 28, 220], ['vao', 260, 120], ['pouso', 24, 400], ['reta', 400],
         ['chegada'],
       ] },
       // trampolins no oásis: moedas lá no alto pra quem segura o giro
@@ -426,46 +427,46 @@
         ['mola', 120, 820, 5], ['reta', 1300],
         ['bandeira'],
         ['booster', 220], ['reta', 170], ['loop', 105], ['reta', 90], ['loop', 105], ['reta', 340], ['lata'],
-        ['rampa', 26, 200], ['moedas', 5], ['vao', 260, 110], ['pouso', 24, 200], ['reta', 300],
+        ['rampa', 26, 200], ['moedas', 5], ['vao', 260, 110], ['pouso', 24, 400], ['reta', 300],
         ['duna', 3, 42], ['reta', 300], ['lata'],
         ['bandeira'],
         ['mola', 120, 780, 4], ['reta', 1300], ['mola', 120, 780, 4], ['reta', 1300],
         ['mola', 120, 860, 5], ['reta', 1300], ['lata'],
         ['caixas', 4], ['reta', 300], ['onda', 4, 20], ['reta', 300],
         ['bandeira'],
-        ['booster', 220], ['rampao', 34, 250], ['moedas', 6], ['vao', 360, -30], ['pouso', 28, 220], ['reta', 300], ['lata'],
+        ['booster', 220], ['rampao', 34, 250], ['moedas', 6], ['vao', 360, -30], ['pouso', 28, 800], ['reta', 300], ['lata'],
         ['mesa', 32, 90], ['reta', 300], ['mola', 120, 800, 5], ['reta', 1300],
         ['duna', 2, 44], ['reta', 300], ['caixas', 4], ['reta', 500],
         ['bandeira'],
         ['duna', 3, 44], ['reta', 300], ['lata'], ['mola', 120, 800, 5], ['reta', 1300],
         ['booster', 220], ['reta', 180], ['loop', 120], ['reta', 340], ['caixas', 4], ['reta', 300], ['lata'],
-        ['rampa', 26, 200], ['moedas', 5], ['vao', 280, 100], ['pouso', 24, 200], ['reta', 300],
+        ['rampa', 26, 200], ['moedas', 5], ['vao', 280, 100], ['pouso', 24, 400], ['reta', 300],
         ['mola', 120, 760, 4], ['reta', 1300], ['mola', 120, 840, 5], ['reta', 1300], ['onda', 3, 20], ['reta', 400], ['lata'],
         ['chegada'],
       ] },
       // tudo do deserto junto, terminando no rampão duplo
       { nome: 'TEMPESTADE', pecas: [
         ['reta', 420], ['duna', 3, 40], ['reta', 260], ['moedas', 4], ['lata'],
-        ['rampa', 28, 200], ['vao', 260, 110], ['pouso', 24, 190], ['reta', 300], ['caixas', 3], ['reta', 300],
+        ['rampa', 28, 200], ['vao', 260, 110], ['pouso', 24, 400], ['reta', 300], ['caixas', 3], ['reta', 300],
         ['mola', 120, 800, 5], ['reta', 1300],
         ['bandeira'],
         ['booster', 220], ['reta', 180], ['loop', 125], ['reta', 340], ['moedas', 5],
         ['rampa', 28, 300], ['reta', 220], ['rampa', -30, 340], ['reta', 300], ['lata'],
         ['duna', 1, 100], ['reta', 300], ['mesa', 32, 90], ['reta', 300],
         ['bandeira'],
-        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 220], ['pouso', 34, 280], ['reta', 380], ['lata'],
+        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 220], ['pouso', 34, 800], ['reta', 380], ['lata'],
         ['caixas', 5], ['reta', 300], ['onda', 5, 22], ['reta', 300],
         ['mola', 120, 820, 5], ['reta', 1300], ['lata'],
         ['bandeira'],
         ['duna', 4, 46], ['reta', 300], ['lombada', 46], ['reta', 300], ['lata'],
-        ['booster', 220], ['rampao', 34, 260], ['moedas', 6], ['vao', 340, 50], ['pouso', 28, 220], ['reta', 260],
-        ['booster', 220], ['rampao', 36, 260], ['moedas', 6], ['vao', 360, 60], ['pouso', 28, 220], ['reta', 340],
+        ['booster', 220], ['rampao', 34, 260], ['moedas', 6], ['vao', 340, 50], ['pouso', 28, 800], ['reta', 260],
+        ['booster', 220], ['rampao', 36, 260], ['moedas', 6], ['vao', 360, 60], ['pouso', 28, 800], ['reta', 340],
         ['caixas', 4], ['reta', 300], ['duna', 2, 40], ['reta', 500],
         ['bandeira'],
         ['rampa', 26, 360], ['reta', 220], ['moedas', 5], ['rampa', -28, 380], ['reta', 300], ['lata'],
         ['mola', 120, 820, 5], ['reta', 1300], ['caixas', 4], ['reta', 300],
         ['duna', 2, 56], ['reta', 300], ['lata'], ['lata'], ['booster', 220], ['reta', 180], ['loop', 120], ['reta', 90], ['loop', 120], ['reta', 340],
-        ['rampa', 28, 200], ['vao', 280, 120], ['pouso', 24, 200], ['reta', 300], ['onda', 4, 22], ['reta', 400], ['lata'],
+        ['rampa', 28, 200], ['vao', 280, 120], ['pouso', 24, 400], ['reta', 300], ['onda', 4, 22], ['reta', 400], ['lata'],
         ['chegada'],
       ] },
     ] },
@@ -480,19 +481,19 @@
         ['gravidade', 0.5], ['reta', 300], ['moedas', 5],
         ['rampa', 20, 170], ['vao', 500, 60], ['pouso', 16, 220], ['reta', 300], ['lata'],
         ['mola', 120, 420, 6], ['reta', 2300],
-        ['booster', 230], ['rampao', 30, 250], ['moedas', 8], ['vao', 900, 80], ['pouso', 22, 260], ['reta', 300],
+        ['booster', 230], ['rampao', 30, 250], ['moedas', 8], ['vao', 900, 80], ['pouso', 22, 800], ['reta', 300],
         ['gravidade', 1], ['reta', 300],
         ['bandeira'],
         ['booster', 220], ['reta', 180], ['loop', 125], ['reta', 340], ['moedas', 5], ['lata'],
         ['duna', 3, 40], ['reta', 300], ['caixas', 4], ['reta', 300],
-        ['rampa', 26, 200], ['vao', 280, 100], ['pouso', 24, 200], ['reta', 300],
+        ['rampa', 26, 200], ['vao', 280, 100], ['pouso', 24, 400], ['reta', 300],
         ['bandeira'],
         ['gravidade', 0.5], ['moedas', 4], ['onda', 4, 22], ['reta', 300], ['lata'],
         ['mola', 120, 440, 6], ['reta', 2400],
         ['rampa', 22, 180], ['vao', 600, 40], ['pouso', 18, 220], ['reta', 300],
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
-        ['mesa', 28, 100], ['reta', 300], ['booster', 220], ['rampao', 32, 250], ['moedas', 6], ['vao', 340, 40], ['pouso', 26, 210], ['reta', 340],
+        ['mesa', 28, 100], ['reta', 300], ['booster', 220], ['rampao', 32, 250], ['moedas', 6], ['vao', 340, 40], ['pouso', 26, 800], ['reta', 340],
         ['caixas', 5], ['reta', 300], ['lombada', 40], ['reta', 500],
         ['bandeira'],
         ['gravidade', 0.5], ['reta', 300], ['caixas', 3], ['reta', 300],
@@ -500,7 +501,7 @@
         ['rampa', 22, 180], ['vao', 560, 60], ['pouso', 18, 220], ['reta', 300], ['duna', 3, 40], ['reta', 300],
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
-        ['onda', 4, 20], ['reta', 300], ['moedas', 5], ['rampa', 24, 180], ['vao', 260, 90], ['pouso', 22, 200], ['reta', 300], ['lata'],
+        ['onda', 4, 20], ['reta', 300], ['moedas', 5], ['rampa', 24, 180], ['vao', 260, 90], ['pouso', 22, 400], ['reta', 300], ['lata'],
         ['mola', 120, 800, 5], ['reta', 1300], ['caixas', 4], ['reta', 300],
         ['booster', 220], ['reta', 180], ['loop', 120], ['reta', 340], ['duna', 2, 44], ['reta', 400],
         ['chegada'],
@@ -516,7 +517,7 @@
         ['rampa', 24, 180], ['vao', 480, 60], ['pouso', 18, 220], ['reta', 300],
         ['gravidade', 1], ['reta', 200], ['lata'],
         ['bandeira'],
-        ['rampa', 28, 200], ['moedas', 6], ['vao', 300, 120], ['pouso', 24, 200], ['reta', 300],
+        ['rampa', 28, 200], ['moedas', 6], ['vao', 300, 120], ['pouso', 24, 400], ['reta', 300],
         ['mesa', 32, 90], ['reta', 300], ['caixas', 4], ['reta', 300], ['lata'],
         ['booster', 230], ['reta', 170], ['loop', 120], ['reta', 90], ['loop', 120], ['reta', 340],
         ['bandeira'],
@@ -533,7 +534,7 @@
         ['rampa', 24, 180], ['vao', 520, 60], ['pouso', 18, 220], ['reta', 300], ['caixas', 4], ['reta', 300],
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
-        ['duna', 3, 44], ['reta', 300], ['moedas', 5], ['rampa', 26, 200], ['vao', 280, 100], ['pouso', 24, 200], ['reta', 300], ['lata'],
+        ['duna', 3, 44], ['reta', 300], ['moedas', 5], ['rampa', 26, 200], ['vao', 280, 100], ['pouso', 24, 400], ['reta', 300], ['lata'],
         ['booster', 230], ['reta', 170], ['loop', 125], ['reta', 340], ['mesa', 30, 100], ['reta', 300],
         ['mola', 120, 800, 5], ['reta', 1300], ['onda', 4, 20], ['reta', 400], ['lata'],
         ['chegada'],
@@ -541,7 +542,7 @@
       // câmara de gravidade zero: trampolins e vãos enormes
       { nome: 'GRAVIDADE ZERO', pecas: [
         ['reta', 420], ['onda', 4, 20], ['reta', 260], ['moedas', 4], ['lata'],
-        ['booster', 230], ['rampao', 34, 250], ['vao', 340, -40], ['pouso', 30, 220], ['reta', 300],
+        ['booster', 230], ['rampao', 34, 250], ['vao', 340, -40], ['pouso', 30, 800], ['reta', 300],
         ['caixas', 3], ['reta', 300],
         ['bandeira'],
         ['gravidade', 0.35], ['reta', 300], ['moedas', 5],
@@ -551,15 +552,15 @@
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
         ['booster', 220], ['reta', 180], ['loop', 125], ['reta', 340], ['moedas', 5],
-        ['rampa', 30, 220], ['vao', 300, 130], ['pouso', 26, 210], ['reta', 300], ['lata'],
+        ['rampa', 30, 220], ['vao', 300, 130], ['pouso', 26, 400], ['reta', 300], ['lata'],
         ['duna', 3, 44], ['reta', 300], ['caixas', 4], ['reta', 300],
         ['bandeira'],
         ['gravidade', 0.35], ['moedas', 4], ['reta', 300],
-        ['booster', 230], ['rampao', 30, 250], ['moedas', 10], ['vao', 1300, 60], ['pouso', 20, 260], ['reta', 400],
+        ['booster', 230], ['rampao', 30, 250], ['moedas', 10], ['vao', 1300, 60], ['pouso', 20, 800], ['reta', 400],
         ['mola', 120, 420, 6], ['reta', 2500],
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
-        ['mesa', 30, 90], ['reta', 300], ['booster', 230], ['rampao', 34, 260], ['moedas', 6], ['vao', 340, 30], ['pouso', 28, 220], ['reta', 340],
+        ['mesa', 30, 90], ['reta', 300], ['booster', 230], ['rampao', 34, 260], ['moedas', 6], ['vao', 340, 30], ['pouso', 28, 800], ['reta', 340],
         ['lombada', 46], ['reta', 300], ['caixas', 5], ['reta', 500],
         ['bandeira'],
         ['gravidade', 0.4], ['reta', 300], ['moedas', 5],
@@ -568,7 +569,7 @@
         ['mola', 120, 400, 6], ['reta', 2400],
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
-        ['duna', 3, 46], ['reta', 300], ['moedas', 5], ['rampa', 28, 200], ['vao', 280, 110], ['pouso', 24, 200], ['reta', 300], ['lata'],
+        ['duna', 3, 46], ['reta', 300], ['moedas', 5], ['rampa', 28, 200], ['vao', 280, 110], ['pouso', 24, 400], ['reta', 300], ['lata'],
         ['booster', 220], ['reta', 180], ['loop', 120], ['reta', 340], ['caixas', 4], ['reta', 300],
         ['mola', 120, 820, 5], ['reta', 1300], ['onda', 4, 22], ['reta', 400],
         ['chegada'],
@@ -583,12 +584,12 @@
         ['duna', 3, 46], ['reta', 300], ['mola', 120, 800, 5], ['reta', 1300],
         ['bandeira'],
         ['gravidade', 0.45], ['reta', 300],
-        ['booster', 230], ['rampao', 30, 250], ['moedas', 8], ['vao', 1000, 60], ['pouso', 20, 260], ['reta', 300],
+        ['booster', 230], ['rampao', 30, 250], ['moedas', 8], ['vao', 1000, 60], ['pouso', 20, 800], ['reta', 300],
         ['mola', 120, 420, 6], ['reta', 2300],
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
         ['rampa', 28, 300], ['reta', 220], ['rampa', -30, 340], ['reta', 300], ['moedas', 5],
-        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 200], ['pouso', 34, 280], ['reta', 380], ['lata'],
+        ['booster', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 200], ['pouso', 34, 800], ['reta', 380], ['lata'],
         ['caixas', 5], ['reta', 300], ['onda', 4, 22], ['reta', 300],
         ['bandeira'],
         ['gravidade', 0.6], ['reta', 200],
@@ -597,7 +598,7 @@
         ['gravidade', 1], ['reta', 300], ['lata'],
         ['bandeira'],
         ['booster', 230], ['reta', 170], ['loop', 140], ['reta', 340], ['lata'],
-        ['booster', 230], ['rampao', 36, 260], ['moedas', 8], ['vao', 350, 60], ['pouso', 28, 230], ['reta', 320],
+        ['booster', 230], ['rampao', 36, 260], ['moedas', 8], ['vao', 350, 60], ['pouso', 28, 800], ['reta', 320],
         ['lombada', 46], ['reta', 260], ['caixas', 5], ['reta', 300], ['mesa', 28, 90], ['reta', 500],
         ['bandeira'],
         ['gravidade', 0.4], ['reta', 300], ['moedas', 5],
@@ -654,7 +655,9 @@
       const [tipo, p, q] = peca;
       if (tipo === 'reta') { arco(0, CURVA); reto(p); }
       else if (tipo === 'rampa') { arco(-rad(p), CURVA); reto(q); }
-      else if (tipo === 'pouso') { ang = rad(p); reto(q); arco(0, CURVA); }
+      // a saída do pouso pro plano é suave: com curva fechada, chegar rápido
+      // empinava o carro e ele capotava de costas
+      else if (tipo === 'pouso') { ang = rad(p); reto(q); arco(0, CURVA * 3); }
       else if (tipo === 'vao') { trechos.push(trecho); x += p; y += q || 0; ang = 0; trecho = [[x, y]]; }
       else if (tipo === 'lombada') { arco(0, CURVA); lombada(p); }
       else if (tipo === 'onda') { arco(0, CURVA); for (let k = 0; k < p; k++) lombada(q); }
@@ -858,9 +861,20 @@
     // gira, soltou para. Torque puro acumulava giro que a criança não conseguia
     // desfazer antes do chão. Com uma roda no chão quem inclina é a reação da
     // tração e do freio no ponto de contato, que já é forte.
+    // Uma roda só no chão e o carro já bem inclinado em relação à pista:
+    // puxa de volta, como a barra anti-cavalinho. Abaixo de ~30° não faz
+    // nada, então empinar de leve e passar por lombada seguem iguais.
+    if (chao === 1) {
+      const r = car.rodas.find(x => x.chao), s = r.seg;
+      const rel = anguloCurto(car.a - Math.atan2(s.y1 - s.y0, s.x1 - s.x0));
+      if (Math.abs(rel) > 0.5) car.w += (-rel * 5 - car.w) * Math.min(1, 4 * dt);
+    }
     if (!chao) {
-      const alvo = car.gas === car.freio ? 0 : car.gas ? -K.tilt : K.tilt;
-      const k = car.gas || car.freio ? K.tiltResp : 2;
+      // Pedal solto: em vez de só parar o giro, puxa devagar pro reto mais
+      // próximo. Pouco, pra não roubar o flip de quem está girando de propósito.
+      const reto = clamp(-anguloCurto(car.a) * K.nivela, -K.tilt * 0.45, K.tilt * 0.45);
+      const alvo = car.gas === car.freio ? reto : car.gas ? -K.tilt : K.tilt;
+      const k = car.gas || car.freio ? K.tiltResp : 4;   // soltou: segura o giro rápido
       car.w += (alvo - car.w) * Math.min(1, k * dt);
     }
     // 4. arrasto do ar

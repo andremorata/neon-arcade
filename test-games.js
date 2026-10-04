@@ -160,6 +160,20 @@ for (const pd of W.PISTAS) {
     `A fase 1 e o tutorial: so-gas para em x=${car.x.toFixed(0)}, antes da primeira bandeira (x=${p.bandeiras[0].x.toFixed(0)})`);
 }
 
+// Controle que perdoa: quem so acelera no chao e solta os pedais no ar fecha
+// todas as pistas sem bater. O nivelamento automatico faz o resto; o giro
+// rapido de antes deixava o carro incontrolavel na mao de crianca.
+for (const pd of W.PISTAS) {
+  const p = W.compilar(pd.pecas), car = W.novoCarro(p);
+  for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+    car.gas = car.chao > 0; car.freio = false;
+    W.passo(car, p, W.STEP);
+    car.ev.length = 0;
+  }
+  assert.ok(!car.morto && car.x >= p.fim,
+    `${pd.nome}: soltando os pedais no ar o carro bate (${car.morto || 'parou'} em x=${car.x.toFixed(0)})`);
+}
+
 // Duracao por mundo, e bandeira a cada trecho curto: pista longa sem
 // checkpoint faz a crianca repetir um minuto inteiro por um erro no fim.
 const FAIXA = { RUA: [24, 36], DESERTO: [40, 55], 'ÓRBITA': [50, 62] };
@@ -352,7 +366,7 @@ assert.ok(Math.abs(comparacao[1].w) < Math.abs(comparacao[0].w) && Math.abs(comp
   'Wheels: buggy gira mais suave, protótipo gira mais rápido');
 assert.ok(comparacao[1].gasolina > comparacao[0].gasolina && comparacao[0].gasolina > comparacao[2].gasolina,
   'Wheels: economia do buggy e consumo do protótipo aparecem na física');
-assert.strictEqual(W.K.tilt, 11, 'Wheels: escolher carro não altera a física base');
+assert.strictEqual(W.K.tilt, 7.5, 'Wheels: escolher carro não altera a física base');
 const garagem = new Function('CONJUNTOS', 'PISTAS',
   block(wheels, '  function liberados(s)') + block(wheels, '  function modeloSalvo(s)') + '; return { liberados, modeloSalvo };')(W.CONJUNTOS, W.PISTAS);
 for (const [aberta, quantidade] of [[0, 1], [3, 1], [4, 2], [7, 2], [8, 3], [11, 3]]) {
