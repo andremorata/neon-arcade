@@ -330,7 +330,9 @@ assert.ok(bebe.gasolina > 10, 'A lata tem que reabastecer');
 assert.ok(bebe.gasolina <= W.K.tanque, 'A lata nao pode passar do tanque cheio');
 
 // Garagem: cada carro precisa fechar todas as pistas, inclusive ao repetir etapas antigas.
-assert.strictEqual(W.CARROS.length, 3, 'Wheels: três carros');
+assert.strictEqual(W.CARROS.length, 6, 'Wheels: seis carros');
+assert.ok(W.CARROS.slice(0, 3).every(c => !c.preco) && W.CARROS.slice(3).every(c => c.preco > 0),
+  'Wheels: os três primeiros vêm com as etapas, os outros se compram');
 for (let modelo = 0; modelo < W.CARROS.length; modelo++) {
   for (const pd of W.PISTAS) {
     const p = W.compilar(pd.pecas), resultado = W.correrSozinho(p, 120, modelo);
@@ -360,6 +362,8 @@ for (const [aberta, quantidade] of [[0, 1], [3, 1], [4, 2], [7, 2], [8, 3], [11,
 assert.strictEqual(garagem.modeloSalvo({ aberta: 0, carro: 2 }), 0, 'Wheels: seleção salva não libera carro bloqueado');
 assert.strictEqual(garagem.modeloSalvo({ aberta: 8, carro: 0 }), 0, 'Wheels: pode manter o primeiro carro após liberar os demais');
 for (const carro of [-1, 9, '2', null]) assert.strictEqual(garagem.modeloSalvo({ aberta: 4, carro }), 1, 'Wheels: seleção inválida tem retorno seguro');
+assert.strictEqual(garagem.modeloSalvo({ aberta: 0, carro: 4, comprados: [4] }), 4, 'Wheels: carro comprado vale desde o começo');
+assert.strictEqual(garagem.modeloSalvo({ aberta: 0, carro: 4, comprados: [3] }), 0, 'Wheels: carro não comprado não vale');
 // Executa a chegada real: desbloqueio, equipagem e persistência na mesma gravação.
 const finalizarWheels = new Function('save', 'pistaN', 'liberados', 'PISTAS', 'K', `
   let state, fimT, novoModelo = null, pb, persisted;

@@ -48,6 +48,8 @@
   .melhoria:focus-visible, .aba:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
   @media (hover: hover) { .melhoria:not(:disabled):hover { background: #ffffff10; } }
   .garagem { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; flex-shrink: 0; }
+  .carro-opcao.a-venda canvas { opacity: .55; }
+  .carro-opcao.a-venda .situacao { color: var(--neon-yellow); }
   .carro-opcao { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 5px 8px 9px; border: 1px solid #ffffff22; border-radius: 12px; background: #ffffff05; color: var(--text); font: inherit; cursor: pointer; }
   .carro-opcao canvas { width: 100%; height: clamp(65px, 12vh, 130px); object-fit: contain; }
   .carro-opcao b { color: var(--carro); font-size: 12px; letter-spacing: .08em; }
@@ -92,7 +94,8 @@
     .hub { padding: 8px 10px 10px; gap: 6px; }
     .hub-grade { gap: 5px; }
     .fase { min-height: 52px; padding: 5px 3px; }
-    .carro-opcao canvas { height: 52px; }
+    .carro-opcao canvas { height: 38px; }
+    .carro-opcao span:not(.situacao) { display: none; }
   }
   /* em pé o quadro tem uns 240px de altura e o botão de voltar come o topo.
      O jogo pede pra girar, mas as 12 fases têm que caber e clicar assim mesmo. */
@@ -105,7 +108,9 @@
     .fase { min-height: 34px; padding: 3px 2px; gap: 1px; }
     .garagem { gap: 4px; }
     .carro-opcao { padding: 4px; }
-    .carro-opcao canvas { height: 34px; }
+    .garagem { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .carro-opcao canvas { height: 30px; }
+    .carro-opcao b { font-size: 6px; }
     .carro-opcao b { font-size: 8px; }
     .carro-opcao span { font-size: 8px; }
     .carro-opcao span:not(.situacao) { display: none; }
@@ -157,7 +162,7 @@
 
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON WHEELS</h2>
-      <p id="overlayText">Três mundos, doze pistas. As bandeiras enchem o tanque e guardam o progresso: bateu, volta na última. Moedas, caixas quebradas e acrobacias compram melhorias na garagem. Gás na direita, freio na esquerda; no ar, os pedais giram o carro. Pouse reto para ganhar velocidade!</p>
+      <p id="overlayText">Três mundos, doze pistas. As bandeiras enchem o tanque e guardam o progresso: bateu, volta na última. Moedas, caixas quebradas e acrobacias compram melhorias e carros novos na garagem. Gás na direita, freio na esquerda; no ar, os pedais giram o carro. Pouse reto para ganhar velocidade!</p>
       <div class="sub" id="overlaySub"></div>
       <div class="final-stats" id="finalStats" style="display:none;">
         <div class="fstat"><span>Tempo</span><b id="fsTempo">0</b></div>
@@ -222,6 +227,19 @@
       descricao: 'Giro mais suave e menor consumo.', fisica: { tilt: 9, tiltResp: 3.6, drenoGas: 4.5 } },
     { nome: 'ION RX', cor: '#b4a2ff', claro: '#ece5ff', escuro: '#6551b2',
       descricao: 'Giro rápido e resposta ágil no ar.', fisica: { tilt: 13, tiltResp: 5, drenoGas: 7 } },
+    // Os três de baixo se compram com moedas na garagem. Podem mudar a
+    // geometria (roda, eixo, teto): o teste roda cada um em todas as pistas.
+    { nome: 'TROVÃO 4X4', cor: '#ed887f', claro: '#ffd2c9', escuro: '#8c3a3a', preco: 300,
+      descricao: 'Rodas gigantes: agarra em tudo, gira devagar.',
+      fisica: { raio: 15, altura: 10, eixo: 48, teto: 27, grip: 1.35, motor: 1000, vmax: 950,
+                tilt: 8, tiltResp: 3.4, curso: 14, inercia: 460, drenoGas: 7 } },
+    { nome: 'FORMIGA KART', cor: '#a8dba0', claro: '#e4ffdc', escuro: '#3f7a46', preco: 500,
+      descricao: 'Pequeno e leve: arranca forte e gira rápido.',
+      fisica: { raio: 9, altura: 3, eixo: 38, teto: 19, motor: 1050, vmax: 960,
+                tilt: 14, tiltResp: 5.5, inercia: 300, dreno: 3.8, drenoGas: 5 } },
+    { nome: 'COMETA JET', cor: '#efce95', claro: '#fff4d6', escuro: '#9a6b2e', preco: 800,
+      descricao: 'Turbina: o mais rápido da garagem, e o mais gastão.',
+      fisica: { motor: 1050, vmax: 1150, arrasto: 0.00018, drenoGas: 8.5 } },
   ];
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
@@ -723,14 +741,15 @@
 
   // cp: bandeira de onde o carro renasce, parado e de tanque cheio
   function novoCarro(pista, modelo = 0, up = null, cp = null) {
+    const k = ajustesDe(modelo, up);   // cada carro tem seu eixo, roda e altura
     return {
-      modelo, ajustes: ajustesDe(modelo, up),
-      x: cp ? cp.x : 80, y: (cp ? cp.y : pista.y0) - K.altura - K.raio + 3, vx: 0, vy: 0, a: 0, w: 0,
+      modelo, ajustes: k,
+      x: cp ? cp.x : 80, y: (cp ? cp.y : pista.y0) - k.altura - k.raio + 3, vx: 0, vy: 0, a: 0, w: 0,
       gas: false, freio: false, seg: cp ? cp.seg : 0, chao: 2, ar: 0, giro: 0, flipsAr: 0, estavel: 0,
       gasolina: K.tanque, moedas: 0, caixas: 0, flips: 0, ev: [], morto: '', cp, molaT: 0,
       rodas: [
-        { lx: -K.eixo / 2, ly: K.altura, comp: 0, chao: true, spin: 0, vt: 0 },
-        { lx: K.eixo / 2, ly: K.altura, comp: 0, chao: true, spin: 0, vt: 0 },
+        { lx: -k.eixo / 2, ly: k.altura, comp: 0, chao: true, spin: 0, vt: 0 },
+        { lx: k.eixo / 2, ly: k.altura, comp: 0, chao: true, spin: 0, vt: 0 },
       ],
     };
   }
@@ -812,8 +831,10 @@
       // Controle de tração: só a roda de trás no chão e o nariz já bem
       // empinado, o motor alivia. Sem isso, motor e pneu no máximo davam
       // cavalinho que virava o carro de costas no plano com o pé no fundo.
-      if (car.gas && motorOn && chao === 1 && r.lx < 0 &&
-          anguloCurto(car.a - Math.atan2(r.seg.y1 - r.seg.y0, r.seg.x1 - r.seg.x0)) < -0.45) Ft *= 0.25;
+      if (car.gas && motorOn && chao === 1 && r.lx < 0) {
+        const empinado = -anguloCurto(car.a - Math.atan2(r.seg.y1 - r.seg.y0, r.seg.x1 - r.seg.x0));
+        if (empinado > 0.75) Ft = 0; else if (empinado > 0.45) Ft *= 0.25;
+      }
       const lim = K.grip * N;
       Ft = clamp(Ft, -lim, lim);
       // Booster é esteira, não pneu: empurra o chassi no centro de massa. Passando
@@ -957,15 +978,18 @@
   function liberados(s) {
     return 1 + CONJUNTOS.slice(1).filter((_, i) => s.aberta >= PISTAS.find(p => p.conj === i + 1).n).length;
   }
+  // Os três primeiros vêm com as etapas; os outros, comprados, ficam em s.comprados.
   function modeloSalvo(s) {
     const limite = liberados(s);
+    if (Number.isInteger(s.carro) && s.carro >= 3 && (s.comprados || []).includes(s.carro)) return s.carro;
     return Number.isInteger(s.carro) && s.carro >= 0 && s.carro < limite ? s.carro : limite - 1;
   }
   function carregarSave() {
     try {
       const s = JSON.parse(localStorage.getItem(SAVE_KEY));
       if (!s || typeof s !== 'object') return saveVazio();
-      return { ...saveVazio(), ...s, pistas: s.pistas || {}, up: { ...saveVazio().up, ...(s.up || {}) } };
+      return { ...saveVazio(), ...s, pistas: s.pistas || {}, up: { ...saveVazio().up, ...(s.up || {}) },
+        comprados: Array.isArray(s.comprados) ? s.comprados.filter(i => Number.isInteger(i) && i >= 3 && i < CARROS.length) : [] };
     } catch (e) { return saveVazio(); }   // JSON corrompido não pode travar o jogo
   }
   let save = carregarSave();
@@ -1008,10 +1032,12 @@
     const garagem = Neon.$('garagem');
     garagem.innerHTML = '';
     CARROS.forEach((modelo, i) => {
-      const b = document.createElement('button'), bloqueado = i >= liberados(save);
-      b.className = 'carro-opcao'; b.style.setProperty('--carro', modelo.cor); b.disabled = bloqueado;
+      const b = document.createElement('button'), aVenda = !!modelo.preco && !save.comprados.includes(i);
+      const bloqueado = modelo.preco ? false : i >= liberados(save);
+      b.className = 'carro-opcao' + (aVenda ? ' a-venda' : ''); b.style.setProperty('--carro', modelo.cor); b.disabled = bloqueado;
       b.setAttribute('aria-pressed', String(i === save.carro));
-      const situacao = bloqueado ? `🔒 Complete ${CONJUNTOS[i - 1].nome}` : i === save.carro ? '✓ SELECIONADO' : 'SELECIONAR';
+      const situacao = bloqueado ? `🔒 Complete ${CONJUNTOS[i - 1].nome}` : aVenda ? `🪙 ${modelo.preco} · COMPRAR`
+        : i === save.carro ? '✓ SELECIONADO' : 'SELECIONAR';
       b.setAttribute('aria-label', `${modelo.nome}. ${modelo.descricao} ${situacao}`);
       const preview = document.createElement('canvas'); preview.width = 260; preview.height = 135;
       preview.setAttribute('aria-hidden', 'true');
@@ -1019,7 +1045,14 @@
       for (const [tag, texto, classe] of [['b', modelo.nome, ''], ['span', modelo.descricao, ''], ['span', situacao, 'situacao']]) {
         const el = document.createElement(tag); el.textContent = texto; el.className = classe; b.appendChild(el);
       }
-      b.addEventListener('click', () => { save.carro = i; gravar(); montarGaragem(); garagem.children[i].focus(); Neon.audio.sfx.click(); });
+      b.addEventListener('click', () => {
+        if (aVenda) {
+          if (save.moedas < modelo.preco) { Neon.audio.sfx.wrong(); Neon.toast(`FALTAM ${modelo.preco - save.moedas} MOEDAS`); return; }
+          save.moedas -= modelo.preco; save.comprados.push(i);
+          Neon.audio.sfx.record(); Neon.toast(`🚗 ${modelo.nome} NA GARAGEM!`);
+        } else Neon.audio.sfx.click();
+        save.carro = i; gravar(); montarHub(); garagem.children[i].focus();
+      });
       garagem.appendChild(b);
       const c = preview.getContext('2d'); c.translate(130, 80); c.scale(2.65, 2.65);
       desenharCarro({ ...novoCarro({ y0: 0 }, i), x: 0, y: 0 }, c, true);
@@ -1348,6 +1381,12 @@
     [[-42, -3], [-40, -13], [-27, -15], [-10, -25], [8, -25], [20, -15], [36, -12], [43, -5]],
     [[-41, -3], [-40, -16], [-23, -16], [-10, -25], [8, -25], [17, -15], [35, -15], [41, -7]],
     [[-44, -2], [-42, -12], [-23, -12], [-10, -25], [8, -25], [22, -12], [40, -8], [46, -2]],
+    // picape monstro: cabine alta e caçamba
+    [[-46, -4], [-46, -17], [-16, -17], [-12, -27], [10, -27], [17, -18], [42, -16], [48, -7]],
+    // kart: chassi rente ao chão, o piloto vai aberto por cima
+    [[-30, -2], [-29, -8], [-16, -9], [-12, -12], [8, -12], [12, -8], [27, -7], [32, -2]],
+    // jato: bico longo e cauda com turbina
+    [[-46, -3], [-45, -12], [-22, -13], [-9, -24], [6, -24], [24, -11], [45, -6], [52, -1]],
   ];
   const traco = (pts, fechar, contexto = ctx) => {
     contexto.beginPath(); contexto.moveTo(pts[0][0], pts[0][1]);
@@ -1405,12 +1444,24 @@
     ctx.beginPath(); ctx.moveTo(perfil[0][0], 2);
     for (const [x, y] of perfil) ctx.lineTo(x, y);
     ctx.lineTo(perfil.at(-1)[0], 2);
-    ctx.arc(K.eixo / 2, 2, 13, 0, Math.PI, true);
-    ctx.lineTo(-K.eixo / 2 + 13, 2); ctx.arc(-K.eixo / 2, 2, 13, 0, Math.PI, true); ctx.closePath();
+    const pl = K.raio + 2;   // para-lama acompanha o tamanho da roda
+    ctx.arc(K.eixo / 2, 2, pl, 0, Math.PI, true);
+    ctx.lineTo(-K.eixo / 2 + pl, 2); ctx.arc(-K.eixo / 2, 2, pl, 0, Math.PI, true); ctx.closePath();
     const tinta = ctx.createLinearGradient(0, -25, 0, 4);
     tinta.addColorStop(0, m.claro); tinta.addColorStop(.36, m.cor); tinta.addColorStop(.48, m.escuro); tinta.addColorStop(.75, m.cor); tinta.addColorStop(1, m.escuro);
     ctx.fillStyle = tinta; ctx.fill(); ctx.strokeStyle = m.claro; ctx.lineWidth = .9; ctx.stroke();
     // Vidro fumê com reflexo diagonal e motorista sob o teto da física.
+    // O kart não tem cabine: o piloto de capacete aparece por cima.
+    if (car.modelo === 4) {
+      ctx.strokeStyle = '#2b3a2e'; ctx.lineWidth = 2;
+      traco([[-6, -12], [-2, -16], [6, -16]], false, ctx); ctx.stroke();   // volante
+      Neon.circle(ctx, -6, -16, 4, '#1b2a3a');
+      Neon.circle(ctx, -5, -17, 3.6, m.claro);   // capacete
+      forma([[-4, -18], [-1, -18], [-1, -15], [-4, -15]], '#254c65');   // viseira
+      forma([[-28, -9], [-24, -14], [-20, -14], [-22, -9]], m.escuro);   // aerofólio
+      forma([[24, -7], [31, -6], [30, -3], [23, -4]], '#1d2a20', m.claro);
+      ctx.fillStyle = m.claro; ctx.fillRect(-14, -9, 20, 1.5);
+    } else {
     const vidro = ctx.createLinearGradient(-10, -25, 15, -12);
     vidro.addColorStop(0, '#a6d8ed'); vidro.addColorStop(.45, '#254c65'); vidro.addColorStop(1, '#101c30');
     forma([[-10, -23], [7, -23], [16, -15], [-21, -15]], vidro, '#e7faff99');
@@ -1418,7 +1469,23 @@
     forma([[0, -24], [2, -24], [5, -14], [3, -14]], m.escuro);
     ctx.fillStyle = '#0c1728'; ctx.fillRect(-4, -20, 5, 5);
     ctx.fillStyle = '#e6eff9'; ctx.fillRect(-3, -21, 4, 3);
-    if (car.modelo === 0) {
+    }
+    if (car.modelo === 3) {
+      // Monstro: caçamba, santantônio, faróis no teto e para-choque de tubo.
+      forma([[-44, -17], [-18, -17], [-18, -14], [-44, -14]], '#3d1f22', m.claro);
+      ctx.strokeStyle = '#d7dde5'; ctx.lineWidth = 2;
+      traco([[-20, -17], [-20, -24], [-12, -27]], false, ctx); ctx.stroke();
+      for (const x of [-6, 0, 6]) { Neon.circle(ctx, x, -29, 2.2, '#303c47'); Neon.circle(ctx, x, -29, 1.3, '#fff0b8'); }
+      ctx.strokeStyle = '#c7d6e1'; ctx.lineWidth = 2.5; traco([[44, -12], [50, -10], [50, -2], [44, -1]], false, ctx); ctx.stroke();
+      ctx.fillStyle = m.claro; for (let i = 0; i < 3; i++) ctx.fillRect(-12 + i * 9, -9, 6, 2);
+    } else if (car.modelo === 5) {
+      // Jato: turbina na traseira, aleta, faixa e bico com entrada de ar.
+      forma([[-50, -9], [-40, -9], [-40, 1], [-50, 1]], '#2b2b33', m.claro);
+      Neon.circle(ctx, -50, -4, 4.5, '#141820'); Neon.circle(ctx, -50, -4, 2.5, '#ff9a3c');
+      forma([[-38, -12], [-30, -26], [-24, -26], [-26, -12]], m.escuro, m.claro);
+      forma([[-30, -7], [40, -7], [44, -5], [-30, -4]], m.claro);
+      forma([[30, -9], [44, -6], [40, -4], [30, -5]], '#141820');
+    } else if (car.modelo === 0) {
       // Cupê: capô longo, faixa dupla, porta recortada e ducktail traseiro.
       forma([[18, -14], [35, -11], [38, -8], [19, -11]], '#e6fff0');
       forma([[22, -13], [26, -12], [28, -9], [24, -10]], m.escuro);
@@ -1437,7 +1504,7 @@
       forma([[-12, -12], [11, -12], [9, -1], [-10, -1]], '#4c3930');
       ctx.strokeStyle = '#c5b39b'; ctx.lineWidth = 2.5; traco([[39, -10], [43, -8], [43, 1], [36, 2]], false, ctx); ctx.stroke();
       ctx.fillStyle = '#303d4a'; ctx.fillRect(-42, -5, 9, 4);
-    } else {
+    } else if (car.modelo === 2) {
       // Protótipo: asa de carbono, entradas de ar e splitter alongado.
       ctx.strokeStyle = '#b9b2dd'; ctx.lineWidth = 1.8;
       traco([[-36, -11], [-36, -21], [-29, -21], [-29, -12]], false, ctx); ctx.stroke();
@@ -1450,14 +1517,18 @@
     }
     // Numeração de corrida e detalhes pequenos com contraste, sem excesso de glow.
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'italic 700 8px monospace'; ctx.fillStyle = '#f3f6ff';
-    ctx.fillText(['01', '04', '09'][car.modelo], 0, -6);
+    if (car.modelo === 5) ctx.fillStyle = '#4a3410';
+    if (car.modelo !== 4) ctx.fillText(['01', '04', '09', '44', '07', '99'][car.modelo], 0, -6);
     ctx.fillStyle = car.freio && andando ? '#ff796c' : '#b94c58'; Neon.glow(ctx, '#ff796c', car.freio && andando ? 14 : 0);
-    ctx.fillRect(-41, -10, 3, 4); ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fff4cd'; Neon.glow(ctx, '#fff4cd', 7); ctx.fillRect(car.modelo === 2 ? 40 : 37, -8, 4, 2.5); ctx.shadowBlur = 0;
+    const pTras = PERFIS[car.modelo][0][0], pFrente = PERFIS[car.modelo].at(-1)[0];
+    ctx.fillRect(pTras + 1, car.modelo === 4 ? -6 : -10, 3, 4); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff4cd'; Neon.glow(ctx, '#fff4cd', 7); ctx.fillRect(pFrente - (car.modelo === 2 ? 6 : 6), car.modelo === 4 ? -6 : -8, 4, 2.5); ctx.shadowBlur = 0;
     if (car.gas && car.gasolina > 0 && andando) {
       const chama = Neon.motion.reduced ? 12 : 12 + Math.sin(performance.now() / 37) * 7;
-      forma([[-40, -2], [-43 - chama, 0], [-40, 2]], car.modelo === 2 ? '#aaa1ff' : '#efa574');
-      forma([[-40, -1], [-43 - chama * .5, 0], [-40, 1]], '#fff0bf');
+      // escapamento na traseira de cada carroceria; o jato solta chama dobrada da turbina
+      const ex = car.modelo === 5 ? -54 : pTras + 2, ey = car.modelo === 5 ? -4 : 0, ch = car.modelo === 5 ? chama * 1.8 : chama;
+      forma([[ex, ey - 2], [ex - 3 - ch, ey], [ex, ey + 2]], car.modelo === 2 ? '#aaa1ff' : car.modelo === 5 ? '#ff9a3c' : '#efa574');
+      forma([[ex, ey - 1], [ex - 3 - ch * .5, ey], [ex, ey + 1]], '#fff0bf');
     }
     ctx.restore();
   }
