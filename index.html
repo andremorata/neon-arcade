@@ -36,6 +36,7 @@
   const Neon = window.Neon;
 
   const GAMES = [
+    { key: 'garrafas', emoji: '🧪', name: 'NEON GARRAFAS', desc: 'Separe as cores despejando de garrafa em garrafa. Níveis sem fim, dicas, desfazer e garrafas-mistério.', href: 'games/neon-garrafas.html', color: '#ff4d8d' },
     { key: 'torres', emoji: '🗼', name: 'NEON TORRES', desc: 'Tower defense: quatro torres para construir, evoluir e vender contra ondas infinitas com chefes. O recorde é a onda.', href: 'games/neon-torres.html', color: '#ff7ad9' },
     { key: 'brawl', emoji: '🥊', name: 'NEON BRAWL', desc: 'Briga de rua sem fim: três lutadores, combos, armas que quebram e andares montados na hora.', href: 'games/neon-brawl.html', color: '#ed887f' },
     { key: 'pulse', emoji: '✨', name: 'NEON PULSE', desc: 'Salto duplo, blocos e caminhos secretos: dez setores, sete tipos de inimigo e um pulso que vira escudo.', href: 'games/neon-pulse.html', color: '#9be7ce' },
@@ -75,6 +76,7 @@
     if (key === 'salto' || key === 'planador') return val ? `🏆 ${val} m` : '';
     if (key === 'nucleo') return val ? `🏆 ${val} pessoas` : '';
     if (key === 'torres') return val ? `🏆 onda ${val}` : '';
+    if (key === 'garrafas') return val ? `🏆 nível ${val}` : '';
     return val ? `🏆 ${val}` : '';
   };
 

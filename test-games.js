@@ -52,7 +52,7 @@ assert.ok(hit(true).vx > 0, 'A bola deve sair da raquete do jogador para a direi
 assert.ok(hit(false).vx < 0, 'A bola deve sair da raquete da CPU para a esquerda');
 
 // jogos de placar crescente gravam o recorde em memoria antes de mostrar o resultado
-const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score', planador: 'distancia', nucleo: 'pico', torres: 'onda' };
+const BEST = { flappy: 'passed', hoops: 'score', siege: 'score', darts: 'youScore', archer: 'youScore', piano: 'score', bomber: 'score', enduro: 'score', racha: 'score', runner: 'score', river: 'score', brawl: 'score', salto: 'distancia', pinball: 'score', planador: 'distancia', nucleo: 'pico', torres: 'onda', garrafas: 'nivel' };
 // o slug grava dentro de fim(venceu), com bonus antes, entao fica fora do BEST
 assert.match(games.slug, /pb = Neon\.best\.update\('slug', score\)/, 'O Slug precisa gravar o recorde');
 // o wheels grava o total de estrelas dentro de chegou(), entao fica fora do BEST
@@ -62,6 +62,36 @@ assert.match(games.breach, /pb = Neon\.best\.update\('breach', score\)/, 'O Brea
 for (const [key, variable] of Object.entries(BEST)) {
   assert.match(games[key], new RegExp(`pb\\s*=\\s*Neon\\.best\\.update\\('${key}', ${variable}\\)`),
     `O ${key} deve atualizar o recorde em memória`);
+}
+
+// ── NEON GARRAFAS ──────────────────────────────────
+// Os niveis sao gerados na hora: o bloco de logica roda aqui pra garantir que
+// todo nivel tem solucao e que REINICIAR devolve o mesmo quebra-cabeca.
+{
+  const src = games.garrafas;
+  const ini = src.indexOf('  // \u2500\u2500 l\u00f3gica \u2500\u2500');
+  const fim = src.indexOf('  // \u2500\u2500 fim da l\u00f3gica \u2500\u2500');
+  assert.ok(ini > 0 && fim > ini, 'garrafas: marcadores do bloco de logica nao encontrados');
+  const G = new Function(src.slice(ini, fim)
+    + '; return { CAP, CORES, config, quanto, despejar, venceu, completo, resolver, gerar };')();
+  for (let n = 1; n <= 40; n++) {
+    const a = G.gerar(n), b = G.gerar(n);
+    assert.deepStrictEqual(a, b, `garrafas: nivel ${n} tem que ser deterministico`);
+    const cfg = G.config(n);
+    assert.strictEqual(a.tubos.length, cfg.cores + cfg.vazios, `garrafas: nivel ${n} com garrafas a mais`);
+    assert.ok(!a.tubos.some(G.completo), `garrafas: nivel ${n} comeca com garrafa pronta`);
+    const sol = G.resolver(a.tubos);
+    assert.ok(sol, `garrafas: nivel ${n} sem solucao`);
+    const t = a.tubos.map(x => x.slice());
+    for (const [x, y] of sol) assert.ok(G.despejar(t, x, y) > 0, `garrafas: dica invalida no nivel ${n}`);
+    assert.ok(G.venceu(t), `garrafas: a solucao do nivel ${n} nao fecha`);
+  }
+  assert.ok(G.config(40).cores <= G.CORES.length, 'garrafas: mais cores que a paleta');
+  // so cai sobre a mesma cor, e no maximo o que cabe
+  const r = [[0, 1, 1], [2, 2, 2, 1], [], [0]];
+  assert.strictEqual(G.quanto(r, 0, 1), 0, 'garrafas: nao despeja em garrafa cheia');
+  assert.strictEqual(G.quanto(r, 0, 2), 2, 'garrafas: despeja o bloco inteiro da cor do topo');
+  assert.strictEqual(G.quanto(r, 0, 3), 0, 'garrafas: nao despeja sobre outra cor');
 }
 
 // ── NEON WHEELS ────────────────────────────────────

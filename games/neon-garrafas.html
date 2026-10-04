@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON GARRAFAS — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  .stage { --arw: 3; --arh: 2; --maxw: 900px; }
+  #game { touch-action: manipulation; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON GARRAFAS</h1></a>
+      <div class="tag">// | Separe as cores · uma cor por garrafa | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:3;">
+    <div class="stat"><span class="lbl">Nível</span><span class="val" id="nivel">1</span></div>
+    <div class="stat"><span class="lbl">Jogadas</span><span class="val" id="jogadas">0</span></div>
+    <div class="stat"><span class="lbl">Melhor</span><span class="val" id="best" data-key="garrafas">0</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">🏆 NOVO RECORDE!</div>
+    <canvas id="game" width="720" height="480"></canvas>
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON GARRAFAS</h2>
+      <p id="overlayText">Toque numa garrafa e depois em outra para despejar. O líquido só cai sobre a mesma cor ou numa garrafa vazia. Junte 4 camadas iguais e a garrafa ganha rolha.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Nível</span><b id="fsNivel">1</b></div>
+        <div class="fstat"><span>Jogadas</span><b id="fsJogadas">0</b></div>
+        <div class="fstat"><span>Recorde</span><b id="fsRec">—</b></div>
+      </div>
+      <button class="btn" id="startBtn">JOGAR</button>
+      <div class="controls-hint">
+        <span class="key">Toque seleciona</span><span class="key">Z desfaz</span><span class="key">D dica</span><span class="key">R reinicia</span><span class="key">P pausa</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · níveis sem fim · garrafas com ? escondem as cores de baixo</footer>
+</div>
+
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game');
+  const { W, H, retrato } = Neon.world(canvas, [720, 480], [360, 600]);
+  const ctx = canvas.getContext('2d');
+
+  // ── lógica ──
+  // Pura, sem DOM: o teste recorta este bloco e gera os níveis fora do navegador.
+  const CAP = 4;
+  const CORES = ['#ff4d8d', '#8ee000', '#ff9a3c', '#2fa8ff', '#ffd23f',
+                 '#a77bff', '#3ff0e0', '#ff3b3b', '#eef3ff', '#c98a4b'];
+
+  // mulberry32: o nível N é sempre o mesmo, então REINICIAR devolve o mesmo quebra-cabeça
+  function sorteio(seed) {
+    let s = seed >>> 0;
+    return () => {
+      s = (s + 0x6d2b79f5) >>> 0;
+      let t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function config(nivel) {
+    return {
+      cores: Math.min(3 + ((nivel - 1) >> 1), CORES.length),
+      vazios: 2,
+      misterio: nivel >= 5 && nivel % 3 === 2,
+    };
+  }
+
+  const topo = t => t[t.length - 1];
+  const completo = t => t.length === CAP && t.every(c => c === t[0]);
+  const venceu = tubos => tubos.every(t => !t.length || completo(t));
+
+  // quantas camadas saem de a para b (0 = jogada inválida)
+  function quanto(tubos, a, b) {
+    const ta = tubos[a], tb = tubos[b];
+    if (a === b || !ta.length || completo(ta) || tb.length >= CAP) return 0;
+    const c = topo(ta);
+    if (tb.length && topo(tb) !== c) return 0;
+    let n = 0;
+    for (let i = ta.length - 1; i >= 0 && ta[i] === c; i--) n++;
+    return Math.min(n, CAP - tb.length);
+  }
+
+  function despejar(tubos, a, b) {
+    const n = quanto(tubos, a, b);
+    for (let i = 0; i < n; i++) tubos[b].push(tubos[a].pop());
+    return n;
+  }
+
+  // Busca em profundidade com memória de estados. A ordem das garrafas não
+  // importa, então a chave ordena. Devolve a lista de jogadas ou null.
+  function resolver(tubos, limite = 200000) {
+    const t = tubos.map(x => x.slice());
+    const vistos = new Set();
+    const caminho = [];
+    let nos = 0;
+    function busca() {
+      if (venceu(t)) return true;
+      if (++nos > limite) return false;
+      const k = t.map(x => x.join(',')).sort().join('|');
+      if (vistos.has(k)) return false;
+      vistos.add(k);
+      const jogadas = [];
+      for (let a = 0; a < t.length; a++) {
+        if (!t[a].length || completo(t[a])) continue;
+        const uniforme = t[a].every(c => c === t[a][0]);
+        let vazio = false;
+        for (let b = 0; b < t.length; b++) {
+          if (!quanto(t, a, b)) continue;
+          if (t[b].length) jogadas.push([a, b, 0]);
+          // garrafa de uma cor só para outra vazia não muda nada; e uma vazia basta
+          else if (!uniforme && !vazio) { vazio = true; jogadas.push([a, b, 1]); }
+        }
+      }
+      jogadas.sort((x, y) => x[2] - y[2]);
+      for (const [a, b] of jogadas) {
+        const n = despejar(t, a, b);
+        caminho.push([a, b]);
+        if (busca()) return true;
+        caminho.pop();
+        for (let i = 0; i < n; i++) t[a].push(t[b].pop());
+      }
+      return false;
+    }
+    return busca() ? caminho : null;
+  }
+
+  function gerar(nivel) {
+    const cfg = config(nivel);
+    for (let tentativa = 0; tentativa < 500; tentativa++) {
+      const r = sorteio(nivel * 7919 + tentativa * 104729);
+      const bolo = [];
+      for (let c = 0; c < cfg.cores; c++) for (let i = 0; i < CAP; i++) bolo.push(c);
+      for (let i = bolo.length - 1; i > 0; i--) {
+        const j = (r() * (i + 1)) | 0;
+        [bolo[i], bolo[j]] = [bolo[j], bolo[i]];
+      }
+      const tubos = [];
+      for (let c = 0; c < cfg.cores; c++) tubos.push(bolo.slice(c * CAP, (c + 1) * CAP));
+      for (let i = 0; i < cfg.vazios; i++) tubos.push([]);
+      if (tubos.some(t => t.length && t.every(c => c === t[0]))) continue; // nada pronto de saída
+      if (resolver(tubos)) return { tubos, misterio: cfg.misterio };
+    }
+    throw new Error('nível sem solução: ' + nivel);
+  }
+  // ── fim da lógica ──
+
+  const els = {
+    nivel: Neon.$('nivel'), jogadas: Neon.$('jogadas'), best: Neon.$('best'),
+    fsNivel: Neon.$('fsNivel'), fsJogadas: Neon.$('fsJogadas'), fsRec: Neon.$('fsRec'),
+  };
+  const SAVE = 'neon-garrafas-save';
+  const DESFAZER = 5, DICAS = 3, DUR = 0.7;
+  const TOPO = 58, BASE = 84;
+
+  let nivel = 1, tubos = [], oc = [], misterio = false, hist = [];
+  let jogadas = 0, desfazer = DESFAZER, dicas = DICAS, extra = false;
+  let sel = -1, dica = null, anim = null, tremor = null;
+  let state = 'menu', lastFrame = performance.now();
+  let pos = [], botoes = [];
+  const particles = new Neon.Particles();
+
+  // ── salvar ────────────────────────────────────────
+  function salvar() {
+    try {
+      localStorage.setItem(SAVE, JSON.stringify({ nivel, tubos, oc, misterio, jogadas, desfazer, dicas, extra }));
+    } catch (_) { /* sem armazenamento a partida segue */ }
+  }
+
+  function carregar() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SAVE) || 'null');
+      if (s && s.nivel > 0) {
+        const ok = Array.isArray(s.tubos) && Array.isArray(s.oc) && s.tubos.length === s.oc.length
+          && s.tubos.every((t, i) => Array.isArray(t) && t.length <= CAP && s.oc[i].length === t.length);
+        if (!ok) return novoNivel(s.nivel);
+        nivel = s.nivel; tubos = s.tubos; oc = s.oc; misterio = !!s.misterio;
+        jogadas = s.jogadas | 0; desfazer = s.desfazer ?? DESFAZER; dicas = s.dicas ?? DICAS; extra = !!s.extra;
+        hist = []; sel = -1; dica = null; anim = null;
+        layout(); hud();
+        return;
+      }
+    } catch (_) { /* save corrompido: começa do recorde */ }
+    novoNivel(Neon.best.get('garrafas') + 1);
+  }
+
+  function novoNivel(n) {
+    nivel = n;
+    const g = gerar(n);
+    tubos = g.tubos; misterio = g.misterio;
+    oc = tubos.map(t => t.map((_, j) => misterio && j < t.length - 1));
+    hist = []; jogadas = 0; desfazer = DESFAZER; dicas = DICAS; extra = false;
+    sel = -1; dica = null; anim = null;
+    layout(); hud(); salvar();
+  }
+
+  function hud() {
+    els.nivel.textContent = nivel;
+    els.jogadas.textContent = jogadas;
+    els.best.textContent = Neon.best.get('garrafas');
+  }
+
+  // ── layout ────────────────────────────────────────
+  function layout() {
+    const n = tubos.length;
+    const linhas = Math.ceil(n / (retrato ? 5 : 7));
+    const nl = Math.ceil(n / linhas);
+    const areaH = H - TOPO - BASE, linhaH = areaH / linhas;
+    const cel = Math.min(W / (nl + 0.4), 110);
+    let tw = Math.min(cel * 0.6, 56);
+    const th = Math.min(linhaH * 0.74, tw * 3.4);
+    tw = Math.min(tw, th / 2.8);
+    pos = [];
+    for (let i = 0; i < n; i++) {
+      const r = (i / nl) | 0, j = i % nl;
+      const k = r < linhas - 1 ? nl : n - nl * (linhas - 1);
+      pos.push({
+        x: W / 2 + (j - (k - 1) / 2) * cel,
+        y: TOPO + r * linhaH + (linhaH - th) / 2 + 10,
+        w: tw, h: th, cel,
+      });
+    }
+    const esp = Math.min(96, W / 4.6), by = H - BASE / 2;
+    botoes = ['dica', 'desfazer', 'tubo', 'reiniciar'].map((id, i) => ({ id, x: W / 2 + (i - 1.5) * esp, y: by, r: 24 }));
+  }
+
+  // ── jogada ────────────────────────────────────────
+  function toque(i) {
+    if (anim || state !== 'playing') return;
+    if (sel < 0) {
+      if (!tubos[i].length || completo(tubos[i])) { Neon.audio.sfx.wall(); return; }
+      sel = i; Neon.audio.sfx.click(); return;
+    }
+    if (i === sel) { sel = -1; Neon.audio.sfx.move(); return; }
+    if (quanto(tubos, sel, i)) { jogar(sel, i); return; }
+    if (tubos[i].length && !completo(tubos[i])) { sel = i; Neon.audio.sfx.click(); return; }
+    Neon.audio.sfx.wrong();
+    tremor = { i, t: 0.3 };
+  }
+
+  function jogar(a, b) {
+    hist.push({ t: tubos.map(x => x.slice()), o: oc.map(x => x.slice()) });
+    if (hist.length > 50) hist.shift();
+    const cor = topo(tubos[a]);
+    const n = despejar(tubos, a, b);
+    for (let k = 0; k < n; k++) { oc[a].pop(); oc[b].push(false); }
+    anim = { a, b, cor, n, t: 0 };
+    sel = -1; dica = null;
+    jogadas++; hud();
+  }
+
+  function fimDespejo() {
+    const { a, b } = anim;
+    anim = null;
+    if (oc[a].length) oc[a][oc[a].length - 1] = false; // a camada de baixo aparece
+    if (completo(tubos[b])) {
+      Neon.audio.sfx.lock();
+      setTimeout(() => Neon.audio.sfx.point(), 90);
+      const p = pos[b];
+      particles.burst(p.x, p.y, CORES[tubos[b][0]], 26, 170);
+    }
+    salvar();
+    if (venceu(tubos)) return vitoria();
+    let alguma = false;
+    for (let x = 0; x < tubos.length && !alguma; x++)
+      for (let y = 0; y < tubos.length && !alguma; y++) alguma = quanto(tubos, x, y) > 0;
+    if (!alguma) Neon.toast('😵 SEM JOGADAS — DESFAÇA OU REINICIE');
+  }
+
+  function vitoria() {
+    state = 'venceu';
+    const antes = Neon.best.get('garrafas');
+    const pb = Neon.best.update('garrafas', nivel);
+    const recorde = pb > antes;
+    hud();
+    try { localStorage.setItem(SAVE, JSON.stringify({ nivel: nivel + 1 })); } catch (_) { /* idem */ }
+    if (recorde) Neon.audio.sfx.record(); else Neon.audio.sfx.level();
+    Neon.toast(recorde ? '🏆 NOVO RECORDE!' : '🧪 NÍVEL COMPLETO!');
+    for (let i = 0; i < 8; i++) {
+      setTimeout(() => particles.burst(Neon.rand(40, W - 40), Neon.rand(60, H - 120), Neon.choice(CORES), 16, 160), i * 90);
+    }
+    setTimeout(() => {
+      if (state !== 'venceu') return;
+      Neon.audio.music.down();
+      els.fsNivel.textContent = nivel;
+      els.fsJogadas.textContent = jogadas;
+      els.fsRec.textContent = recorde ? '🏆 SIM' : pb;
+      Neon.$('finalStats').style.display = 'grid';
+      Neon.overlay.show(`NÍVEL ${nivel} COMPLETO!`, `Cores separadas em ${jogadas} jogadas.`, 'PRÓXIMO NÍVEL', recorde ? 'record' : 'go');
+    }, 1100);
+  }
+
+  function acao(id) {
+    if (anim || state !== 'playing') return;
+    if (id === 'desfazer') {
+      if (!hist.length) { Neon.audio.sfx.wall(); return; }
+      if (desfazer <= 0) { Neon.toast('↶ SEM DESFAZER NESTE NÍVEL'); Neon.audio.sfx.wrong(); return; }
+      const h = hist.pop();
+      while (h.t.length < tubos.length) { h.t.push([]); h.o.push([]); } // a garrafa extra fica
+      tubos = h.t; oc = h.o; desfazer--; sel = -1; dica = null;
+      Neon.audio.sfx.rotate(); salvar();
+    } else if (id === 'dica') {
+      if (dicas <= 0) { Neon.toast('💡 SEM DICAS NESTE NÍVEL'); Neon.audio.sfx.wrong(); return; }
+      const sol = resolver(tubos);
+      if (!sol) { Neon.toast('😵 SEM SAÍDA — DESFAÇA OU REINICIE'); Neon.audio.sfx.wrong(); return; }
+      dicas--; sel = -1;
+      dica = { a: sol[0][0], b: sol[0][1], t: 3 };
+      Neon.audio.sfx.golden(); salvar();
+    } else if (id === 'tubo') {
+      if (extra) { Neon.toast('➕ SÓ UMA GARRAFA EXTRA POR NÍVEL'); Neon.audio.sfx.wrong(); return; }
+      extra = true; tubos.push([]); oc.push([]); sel = -1; dica = null;
+      layout(); Neon.audio.sfx.boost(); salvar();
+    } else if (id === 'reiniciar') {
+      novoNivel(nivel); Neon.audio.sfx.drop();
+    }
+  }
+
+  // ── input ─────────────────────────────────────────
+  canvas.addEventListener('pointerdown', (e) => {
+    if (state !== 'playing') return;
+    const r = canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+    for (const b of botoes) if (Math.hypot(x - b.x, y - b.y) < b.r + 10) return acao(b.id);
+    for (let i = 0; i < pos.length; i++) {
+      const p = pos[i];
+      if (Math.abs(x - p.x) < Math.max(p.w / 2 + 12, p.cel * 0.45) && y > p.y - 34 && y < p.y + p.h + 14) return toque(i);
+    }
+    if (sel >= 0) { sel = -1; Neon.audio.sfx.move(); }
+  });
+
+  function start() {
+    Neon.audio.ensure();
+    if (state === 'venceu') novoNivel(nivel + 1);
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+  function pause() {
+    state = 'paused';
+    Neon.audio.sfx.pause();
+    Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P para retomar.', 'CONTINUAR');
+  }
+  function resume() {
+    state = 'playing';
+    Neon.overlay.hide();
+    Neon.audio.music.start();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === ' ' || k === 'enter') {
+      e.preventDefault();
+      if (state === 'menu' || state === 'venceu') start();
+      else if (state === 'paused') resume();
+      return;
+    }
+    if (k === 'p') {
+      if (state === 'playing') pause();
+      else if (state === 'paused') resume();
+      return;
+    }
+    if (k === 'z') acao('desfazer');
+    else if (k === 'd') acao('dica');
+    else if (k === 'r') acao('reiniciar');
+    else if (k === 't') acao('tubo');
+    else if (/^[0-9]$/.test(k)) { const i = (+k + 9) % 10; if (i < tubos.length) toque(i); }
+  });
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resume(); else start();
+  });
+  Neon.onHide(() => { if (state === 'playing') pause(); });
+
+  // ── render ────────────────────────────────────────
+  const ease = u => u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+  const fluxo = () => anim ? Neon.clamp((anim.t / DUR - 0.3) / 0.4, 0, 1) : 0;
+
+  // camadas do jeito que aparecem agora, com o despejo pela metade
+  function camadas(i) {
+    const s = tubos[i].map((c, j) => ({ c, h: 1, o: oc[i][j] }));
+    if (anim) {
+      const falta = anim.n * (1 - fluxo());
+      if (i === anim.a && falta > 0) s.push({ c: anim.cor, h: falta, o: false });
+      if (i === anim.b) {
+        let f = falta;
+        while (f > 0.0001 && s.length) {
+          const t = s[s.length - 1], tira = Math.min(t.h, f);
+          t.h -= tira; f -= tira;
+          if (t.h <= 0.0001) s.pop();
+        }
+      }
+    }
+    // junta camadas vizinhas da mesma cor para não desenhar emendas
+    const m = [];
+    for (const x of s) {
+      const u = m[m.length - 1];
+      if (u && !u.o && !x.o && u.c === x.c) u.h += x.h; else m.push({ ...x });
+    }
+    return m;
+  }
+
+  function caminho(w, h) {
+    const r = w / 2;
+    ctx.beginPath();
+    ctx.moveTo(-r, 0);
+    ctx.lineTo(-r, h - r);
+    ctx.arc(0, h - r, r, Math.PI, 0, true);
+    ctx.lineTo(r, 0);
+    ctx.closePath();
+  }
+
+  function desenhaTubo(i, x, y, ang, brilho) {
+    const p = pos[i], w = p.w, h = p.h;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    caminho(w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fill();
+
+    ctx.save();
+    caminho(w, h);
+    ctx.clip();
+    const un = (h - 8) / CAP;
+    let yy = h;
+    for (const c of camadas(i)) {
+      const hh = c.h * un;
+      if (c.o) {
+        ctx.fillStyle = '#262b44';
+        ctx.fillRect(-w / 2, yy - hh, w, hh + 0.6);
+        ctx.fillStyle = 'rgba(200,210,255,0.55)';
+        ctx.font = `700 ${Math.round(un * 0.45)}px Orbitron, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (let k = 0; k < Math.round(c.h); k++) ctx.fillText('?', 0, yy - un * (k + 0.5));
+      } else {
+        const g = ctx.createLinearGradient(-w / 2, 0, w / 2, 0);
+        g.addColorStop(0, CORES[c.c]);
+        g.addColorStop(0.5, CORES[c.c]);
+        g.addColorStop(1, 'rgba(0,0,0,0.25)');
+        ctx.fillStyle = CORES[c.c];
+        ctx.fillRect(-w / 2, yy - hh, w, hh + 0.6);
+        ctx.fillStyle = g;
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(-w / 2, yy - hh, w, hh + 0.6);
+        ctx.globalAlpha = 1;
+      }
+      yy -= hh;
+    }
+    if (yy < h) { // superfície
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      ctx.fillRect(-w / 2, yy, w, 2);
+    }
+    ctx.restore();
+
+    // reflexo do vidro
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-w / 2 + 6, 8);
+    ctx.lineTo(-w / 2 + 6, Math.min(26, h * 0.25));
+    ctx.stroke();
+
+    if (brilho) Neon.glow(ctx, brilho, 18);
+    ctx.strokeStyle = brilho || 'rgba(200,210,255,0.6)';
+    ctx.lineWidth = 2.2;
+    caminho(w, h);
+    ctx.stroke();
+    ctx.fillStyle = brilho || 'rgba(200,210,255,0.7)';
+    ctx.beginPath();
+    ctx.roundRect(-w / 2 - 4, -3, w + 8, 6, 3);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    if (completo(tubos[i]) && !(anim && anim.b === i)) { // rolha
+      ctx.fillStyle = '#d9a066';
+      ctx.beginPath();
+      ctx.roundRect(-w / 2 + 2, -14, w - 4, 13, 4);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(120,70,30,0.5)';
+      for (let k = 0; k < 4; k++) ctx.fillRect(-w / 2 + 6 + k * (w - 12) / 4, -10, 2, 2);
+    }
+    ctx.restore();
+  }
+
+  function desenhaBotao(b, now) {
+    const conta = { dica: dicas, desfazer, tubo: extra ? 0 : 1, reiniciar: -1 }[b.id];
+    const icone = { dica: '💡', desfazer: '↶', tubo: '🧪', reiniciar: '⟳' }[b.id];
+    const ativo = conta !== 0;
+    ctx.globalAlpha = ativo ? 1 : 0.35;
+    Neon.glow(ctx, '#ff7ad9', 10);
+    ctx.fillStyle = 'rgba(40,20,70,0.9)';
+    Neon.circle(ctx, b.x, b.y, b.r);
+    ctx.strokeStyle = '#ff7ad9';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#eaf6ff';
+    ctx.font = (b.id === 'dica' || b.id === 'tubo') ? `20px ${Neon.EMOJI}` : '700 22px sans-serif';
+    ctx.fillText(icone, b.x, b.y + 1);
+    if (conta >= 0) {
+      ctx.fillStyle = '#ffd23f';
+      Neon.circle(ctx, b.x + 17, b.y + 17, 9);
+      ctx.fillStyle = '#080d1c';
+      ctx.font = '700 11px Orbitron, sans-serif';
+      ctx.fillText(b.id === 'tubo' ? (extra ? '0' : '+') : conta, b.x + 17, b.y + 18);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function render(now) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0d0f2a');
+    g.addColorStop(1, '#080d1c');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // faixa do nível
+    const fw = retrato ? 136 : 180, fx = W / 2 - fw / 2, fy = 14;
+    const fg = ctx.createLinearGradient(fx, 0, fx + fw, 0);
+    fg.addColorStop(0, '#ff3fb4');
+    fg.addColorStop(1, '#7a4dff');
+    ctx.fillStyle = fg;
+    Neon.glow(ctx, '#ff3fb4', 14);
+    ctx.beginPath();
+    ctx.roundRect(fx, fy, fw, 32, 8);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = `700 ${retrato ? 14 : 16}px Orbitron, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(`NÍVEL ${nivel}${misterio ? ' ?' : ''}`, W / 2, fy + 17);
+
+    const pulso = 0.5 + 0.5 * Math.sin(now / 160);
+    for (let i = 0; i < pos.length; i++) {
+      if (anim && anim.a === i) continue;
+      const p = pos[i];
+      let x = p.x, y = p.y, brilho = null;
+      if (i === sel) { y -= 18; brilho = '#3ff0e0'; }
+      if (dica && (i === dica.a || i === dica.b)) brilho = `rgba(255,210,63,${0.5 + 0.5 * pulso})`;
+      if (tremor && tremor.i === i) x += Math.sin(tremor.t * 60) * 5 * (tremor.t / 0.3);
+      desenhaTubo(i, x, y, 0, brilho);
+    }
+    if (dica) { // seta da dica
+      const a = pos[dica.a], b = pos[dica.b];
+      ctx.strokeStyle = `rgba(255,210,63,${0.5 + 0.5 * pulso})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      const ay = Math.min(a.y, b.y) - 26;
+      ctx.moveTo(a.x, a.y - 8);
+      ctx.quadraticCurveTo((a.x + b.x) / 2, ay - 30, b.x, b.y - 8);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    if (anim) { // garrafa em movimento por cima das outras
+      const a = pos[anim.a], b = pos[anim.b];
+      const dir = a.x >= b.x ? 1 : -1;
+      const u = anim.t / DUR;
+      const k = u < 0.3 ? ease(u / 0.3) : u > 0.7 ? 1 - ease((u - 0.7) / 0.3) : 1;
+      const bx = b.x + dir * b.w * 0.35, by = b.y - 16;
+      const ang = -dir * 1.85 * k;
+      const x = a.x + (bx - a.x) * k, y = a.y + (by - a.y) * k;
+      const f = fluxo();
+      if (f > 0 && f < 1) {
+        const fundo = b.y + b.h - (tubos[anim.b].length - anim.n * (1 - f)) * (b.h - 8) / CAP;
+        ctx.strokeStyle = CORES[anim.cor];
+        ctx.lineWidth = Math.max(3, b.w * 0.14);
+        Neon.glow(ctx, CORES[anim.cor], 8);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(b.x, fundo);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      desenhaTubo(anim.a, x, y, ang, null);
+    }
+
+    for (const b of botoes) desenhaBotao(b, now);
+    particles.draw(ctx);
+  }
+
+  function loop(now) {
+    const dt = Math.min(0.05, (now - lastFrame) / 1000);
+    lastFrame = now;
+    if (state === 'playing') {
+      if (anim) {
+        const antes = fluxo();
+        anim.t += dt;
+        if (antes < 0.5 && fluxo() >= 0.5) Neon.audio.sfx.pour(tubos[anim.b].length / CAP);
+        if (anim.t >= DUR) fimDespejo();
+      }
+      if (dica && (dica.t -= dt) <= 0) dica = null;
+      if (tremor && (tremor.t -= dt) <= 0) tremor = null;
+    }
+    particles.update(dt);
+    render(now);
+    requestAnimationFrame(loop);
+  }
+
+  carregar();
+  if (nivel > 1) Neon.overlay.show('NEON GARRAFAS', `Continue do nível ${nivel}. Toque numa garrafa e depois em outra para despejar — só cai sobre a mesma cor ou numa vazia.`, 'CONTINUAR');
+  render(performance.now());
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

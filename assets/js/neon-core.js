@@ -168,6 +168,8 @@ window.Neon = (function () {
     freeze()      { if (!g()) return; tone(1800, 600, 0, 0.25, 'sine', 0.1); tone(2400, 900, 0.05, 0.25, 'triangle', 0.05); },
     snipe()       { if (!g()) return; noise(0, 0.14, 0.22, null, 2500); tone(170, 40, 0, 0.26, 'square', 0.16); },
     acid()        { if (!g()) return; tone(420, 260, 0, 0.12, 'triangle', 0.09); },
+    // gluglu: sobe de tom conforme a garrafa de destino enche (k de 0 a 1)
+    pour(k)       { if (!g()) return; const b = 260 + (k || 0) * 320; for (let i = 0; i < 4; i++) tone(b + i * 40, b + i * 40 + 120, i * 0.07, 0.06, 'sine', 0.12); },
   };
   const g = () => soundOn && AC;
 
