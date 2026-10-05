@@ -102,7 +102,7 @@ const wIni = wheels.indexOf('  // \u2500\u2500 f\u00edsica \u2500\u2500');
 const wFim = wheels.indexOf('  // \u2500\u2500 fim da f\u00edsica \u2500\u2500');
 assert.ok(wIni > 0 && wFim > wIni, 'wheels: marcadores do bloco de fisica nao encontrados');
 const W = new Function(wheels.slice(wIni, wFim)
-  + '; return { K, STEP, PISTAS, CONJUNTOS, CARROS, MELHORIAS, CUSTOS, ajustesDe, compilar, novoCarro, passo, piloto, correrSozinho };')();
+  + '; return { K, STEP, PISTAS, CONJUNTOS, CARROS, MELHORIAS, CUSTOS, ajustesDe, compilar, novoCarro, passo, piloto, correrSozinho, passoCamera, chaoSob };')();
 
 assert.strictEqual(W.PISTAS.length, 12, 'O Wheels tem 12 fases');
 assert.strictEqual(W.CONJUNTOS.length, 3, 'As 12 fases vem em 3 conjuntos');
@@ -172,6 +172,25 @@ for (const pd of W.PISTAS) {
   }
   assert.ok(!car.morto && car.x >= p.fim,
     `${pd.nome}: soltando os pedais no ar o carro bate (${car.morto || 'parou'} em x=${car.x.toFixed(0)})`);
+}
+
+// Camera: o carro nunca sai da tela, e o chao logo abaixo dele tambem nao.
+// A versao antiga mirava o ponto mais baixo das redondezas e, em descida longa
+// ou queda, o carro sumia pelo topo (18% do tempo no Canyon).
+for (const pd of W.PISTAS) {
+  const p = W.compilar(pd.pecas), car = W.novoCarro(p), cam = { x: car.x + 200, y: car.y - 80, z: 1.45 };
+  for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+    W.piloto(car); W.passo(car, p, W.STEP); car.ev.length = 0;
+    if (i % 4) continue;   // 60 quadros por segundo
+    W.passoCamera(cam, car, p, 1 / 60, 960, 540);
+    const sy = (car.y - cam.y) * cam.z + 270;
+    assert.ok(sy > 30 && sy < 510, `${pd.nome}: carro fora da tela em x=${car.x.toFixed(0)} (y na tela ${sy.toFixed(0)})`);
+    const ch = W.chaoSob(car, p, null);
+    if (ch != null && ch - car.y < 300) {
+      const gy = (ch - cam.y) * cam.z + 270;
+      assert.ok(gy < 540, `${pd.nome}: chao embaixo do carro fora da tela em x=${car.x.toFixed(0)}`);
+    }
+  }
 }
 
 // Duracao por mundo, e bandeira a cada trecho curto: pista longa sem

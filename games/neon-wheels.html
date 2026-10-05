@@ -983,6 +983,51 @@
     for (const it of pista.itens) it.pego = false;
     return { t, morto: car.morto, x: car.x, gasolina: car.gasolina, moedas: car.moedas, caixas: car.caixas };
   }
+  // Câmera: chão é a pista logo abaixo do carro, não o ponto mais baixo das
+  // redondezas. Com o mais baixo, descida longa ou queda puxavam o quadro pra
+  // baixo até o carro sumir pelo topo. Ordem de prioridade: o carro sempre na
+  // tela; o chão embaixo dele também, quando cabe junto.
+  function chaoSob(car, pista, ultimo) {
+    const segs = pista.segs;
+    let y = Infinity;
+    for (let i = Math.max(0, car.seg - 40); i <= Math.min(segs.length - 1, car.seg + 40); i++) {
+      const s = segs[i];
+      if (s.loop || car.x < Math.min(s.x0, s.x1) || car.x > Math.max(s.x0, s.x1) || s.x0 === s.x1) continue;
+      const sy = s.y0 + (s.y1 - s.y0) * (car.x - s.x0) / (s.x1 - s.x0);
+      if (sy >= car.y - 40 && sy < y) y = sy;
+    }
+    if (y < Infinity) return y;
+    // Sobre um vão: o chão que conta é o do outro lado, onde o carro vai
+    // pousar. É ele que o jogador precisa ver chegando.
+    for (let i = car.seg; i < Math.min(segs.length, car.seg + 40); i++) {
+      const s = segs[i];
+      if (!s.loop && s.x0 > car.x && s.y0 >= car.y - 40) return s.y0;
+    }
+    return ultimo;
+  }
+  function alvoCamera(car, pista, cam, W, H) {
+    cam.chao = chaoSob(car, pista, cam.chao ?? car.y + 20);
+    const alt = clamp(cam.chao - car.y, 0, 600), v = Math.hypot(car.vx, car.vy);
+    // Perto o bastante pra ver o carro, longe o bastante pra ler o que vem.
+    // Afasta quando ele sobe ou corre, que é quando o jogador precisa de campo.
+    // e abre o bastante pra caber carro e chão no mesmo quadro
+    const z = clamp(Math.min(1.45 - alt / 520 - v / 2600, H / (alt + 230)), 0.6, 1.45);
+    const x = car.x + car.vx * 0.22 + 90 / z;
+    let y = car.y - 70 / z + car.vy * 0.03;
+    y = Math.max(y, cam.chao - H / 2 / z + 90);                      // chão embaixo à vista
+    y = clamp(y, car.y - (H / 2 - 90) / z, car.y + (H / 2 - 80) / z); // carro sempre na tela
+    return { x, y, z };
+  }
+  function passoCamera(cam, car, pista, dt, W, H) {
+    const alvo = alvoCamera(car, pista, cam, W, H);
+    // afastar é rápido (o chão está chegando), aproximar é suave
+    const k = 1 - Math.exp(-5 * dt), kz = 1 - Math.exp(-(alvo.z < cam.z ? 6 : 2.5) * dt);
+    cam.z += (alvo.z - cam.z) * kz;
+    cam.x += (alvo.x - cam.x) * k; cam.y += (alvo.y - cam.y) * k;
+    // a suavização não pode tirar o chão nem o carro do quadro numa queda rápida
+    cam.y = Math.max(cam.y, cam.chao - (H / 2 - 50) / cam.z);
+    cam.y = clamp(cam.y, car.y - (H / 2 - 90) / cam.z, car.y + (H / 2 - 80) / cam.z);
+  }
   // ── fim da física ──
 
   // ── save ──────────────────────────────────────────
@@ -1372,22 +1417,7 @@
   Neon.onHide(() => { if (state === 'playing') pauseGame(); });
 
   // ── câmera ────────────────────────────────────────
-  function camera(dt) {
-    let base = -Infinity;
-    for (let i = Math.max(0, car.seg - JANELA); i <= Math.min(pista.segs.length - 1, car.seg + JANELA); i++) {
-      base = Math.max(base, pista.segs[i].y0, pista.segs[i].y1);
-    }
-    const alt = Math.max(0, base - car.y), v = Math.hypot(car.vx, car.vy);
-    // Perto o bastante pra ver o carro, longe o bastante pra ler o que vem.
-    // Afasta quando ele sobe ou corre, que é quando o jogador precisa de campo.
-    const zt = clamp(1.45 - alt / 520 - v / 2600, 0.7, 1.45);
-    const k = 1 - Math.exp(-5 * dt), kz = 1 - Math.exp(-2.5 * dt);
-    cam.z += (zt - cam.z) * kz;
-    // num salto alto o chão não pode sair do quadro: é pra ele que o jogador mira o pouso
-    const tx = car.x + car.vx * 0.22 + 90 / cam.z;
-    const ty = Math.max(car.y - 70 / cam.z + car.vy * 0.05, base - H / 2 / cam.z + 90);
-    cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
-  }
+  const camera = dt => passoCamera(cam, car, pista, dt, W, H);
 
   // ── carro ─────────────────────────────────────────
   // Carrocerias desenhadas à mão em caminhos SVG (Path2D), com curvas em vez
