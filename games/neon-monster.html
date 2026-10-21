@@ -1,0 +1,2390 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON MONSTER — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  /* 16:9 como o Wheels: em celular deitado sobra menos tarja */
+  .stage { --arw: 16; --arh: 9; --maxw: 960px; }
+  .toast { top: 52px; }
+
+  /* Hub: HTML sobre o quadro, não canvas. O tema vem de graça do neon-theme. */
+  .hub {
+    position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column;
+    justify-content: safe center; gap: 12px; padding: 14px 16px 16px; overflow-y: auto;
+    background: linear-gradient(180deg, rgba(8,13,28,0.94), rgba(26,16,12,0.97));
+    font-family: 'Orbitron', sans-serif;
+  }
+  .hub.hidden { display: none; }
+  .garagem, #hubMundos, .hub-topo, .oficina { width: 100%; max-width: 1100px; margin-inline: auto; }
+  #hubMundos.hidden, .oficina.hidden { display: none; }
+  .abas { display: flex; gap: 6px; }
+  .aba {
+    font: inherit; font-size: clamp(10px, 2.4vw, 14px); letter-spacing: .14em; padding: 7px 12px;
+    border-radius: 10px; border: 1px solid #ffffff22; background: #ffffff08; color: var(--text-dim); cursor: pointer;
+  }
+  .aba[aria-pressed="true"] { color: var(--title); border-color: #f2b33d; box-shadow: inset 0 -2px #f2b33d; }
+  .oficina { display: flex; flex-direction: column; gap: 10px; }
+  .oficina-titulo { font-size: clamp(9px, 1.9vw, 11px); letter-spacing: .2em; color: var(--neon-cyan); opacity: .8; }
+  .oficina-titulo b { color: var(--carro, #f2b33d); }
+  .melhorias { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .melhoria {
+    display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 6px;
+    border: 1px solid #ffffff22; border-radius: 12px; background: #ffffff05; color: var(--text); font: inherit; cursor: pointer;
+  }
+  .melhoria .ic { font-size: 22px; line-height: 1; }
+  .melhoria b { font-size: 10px; letter-spacing: .08em; color: var(--neon-cyan); }
+  .melhoria .pips { letter-spacing: 2px; color: var(--neon-yellow); font-size: 11px; }
+  .melhoria .desc { font: 9px/1.3 'Space Mono', monospace; color: var(--text-dim); text-align: center; }
+  .melhoria .preco { font-size: 11px; color: var(--neon-yellow); }
+  .melhoria.caro .preco { color: var(--text-dim); }
+  .melhoria:disabled { opacity: .5; cursor: default; }
+  .melhoria:focus-visible, .aba:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
+  @media (hover: hover) { .melhoria:not(:disabled):hover { background: #ffffff10; } }
+  .garagem { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; flex-shrink: 0; }
+  .carro-opcao { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 5px 8px 9px; border: 1px solid #ffffff22; border-radius: 12px; background: #ffffff05; color: var(--text); font: inherit; cursor: pointer; }
+  .carro-opcao canvas { width: 100%; height: clamp(70px, 14vh, 140px); object-fit: contain; }
+  .carro-opcao b { color: var(--carro); font-size: 12px; letter-spacing: .08em; text-shadow: 0 0 8px var(--carro); }
+  .carro-opcao span { font: 10px/1.4 'Space Mono', monospace; color: var(--text-dim); text-align: center; }
+  .carro-opcao .situacao { color: var(--carro); font-size: 9px; }
+  .carro-opcao.a-venda canvas { opacity: .55; filter: saturate(.5); }
+  .carro-opcao.a-venda .situacao { color: var(--neon-yellow); }
+  .carro-opcao[aria-pressed="true"] { border-color: var(--carro); background: #ffffff0b; box-shadow: inset 0 -2px var(--carro); }
+  .carro-opcao:focus-visible, .fase:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
+  /* o botão de voltar mora no canto superior esquerdo do quadro */
+  .hub-topo { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-left: 58px; }
+  .hub-topo .placar { font-size: clamp(10px, 2.2vw, 13px); color: var(--text-dim); letter-spacing: 0.08em; }
+  .hub-topo .placar b { color: var(--neon-yellow); }
+  #hubMundos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; flex: 1; max-height: 440px; }
+  .hub-mundo { display: flex; flex-direction: column; gap: 6px; }
+  .hub-mundo > span { font-size: clamp(9px, 1.9vw, 11px); letter-spacing: 0.22em; color: var(--mundo); opacity: 0.85; }
+  .hub-grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; flex: 1; }
+  .fase {
+    position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; padding: 7px 4px; min-height: 58px; border-radius: 12px; cursor: pointer;
+    border: 1px solid var(--mundo-borda); background: var(--mundo-fundo);
+    color: var(--text); font-family: inherit; touch-action: manipulation;
+  }
+  .fase .n { font-size: clamp(15px, 3.4vw, 21px); font-weight: 700; color: var(--mundo); line-height: 1; }
+  .fase .nome { font-size: clamp(7px, 1.5vw, 9px); letter-spacing: 0.1em; opacity: 0.8; text-align: center; }
+  .fase .estrelas { font-size: clamp(9px, 2vw, 12px); letter-spacing: 0.08em; color: var(--neon-yellow); line-height: 1; }
+  .fase:active { transform: scale(0.96); }
+  .fase.feita { border-color: rgba(168,219,160, 0.6); }
+  .fase.travada { border-color: rgba(255,255,255,0.14); background: rgba(255,255,255,0.03); cursor: not-allowed; }
+  .fase.travada .n, .fase.travada .nome { color: var(--text-dim); opacity: 0.5; }
+  @media (hover: hover) { .fase:not(.travada):hover { background: var(--mundo-hover); } }
+  /* em celular deitado a altura é curta: encolhe tudo pra caber sem rolagem */
+  @media (orientation: landscape) and (max-height: 520px) {
+    .hub { padding: 8px 10px 10px; gap: 6px; }
+    .hub-grade { gap: 5px; }
+    #hubMundos { gap: 6px 10px; }
+    .fase { min-height: 46px; padding: 4px 3px; gap: 2px; }
+    .carro-opcao canvas { height: 44px; }
+    .carro-opcao span:not(.situacao) { display: none; }
+    .melhoria .desc { display: none; }
+  }
+  /* em pé o quadro é baixo e o botão de voltar come o topo */
+  @media (max-width: 560px) and (orientation: portrait) {
+    .hub { padding: 60px 8px 8px; gap: 5px; }
+    #hubMundos { gap: 4px 6px; max-height: none; }
+    .hub-grade { gap: 3px; }
+    .hub-topo { position: absolute; top: 16px; left: 56px; right: 104px; width: auto; padding-left: 0; flex-wrap: wrap; gap: 4px; }
+    .aba { padding: 5px 8px; }
+    .fase { min-height: 30px; padding: 2px; gap: 1px; }
+    .fase .nome { display: none; }
+    .garagem { gap: 4px; }
+    .carro-opcao { padding: 4px; }
+    .carro-opcao canvas { height: 30px; }
+    .carro-opcao b { font-size: 7px; }
+    .carro-opcao span { font-size: 8px; }
+    .carro-opcao span:not(.situacao) { display: none; }
+    .oficina { gap: 4px; }
+    .melhorias { gap: 3px; }
+    .melhoria { padding: 4px 2px; }
+    .melhoria .desc { display: none; }
+    .melhoria .ic { font-size: 15px; }
+    .melhoria b, .melhoria .preco { font-size: 7px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON MONSTER</h1></a>
+      <div class="tag">// | Monster truck em pista de neon | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <div class="dashboard" style="--dash-cols:4;">
+    <div class="stat"><span class="lbl">Estrelas</span><span class="val" id="estrelas">0</span></div>
+    <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="monster">0</span></div>
+    <div class="stat"><span class="lbl">Fase</span><span class="val" id="fase">1</span></div>
+    <div class="stat"><span class="lbl">Moedas</span><span class="val" id="moedas">0</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <button class="pause-toggle" id="pauseToggle" title="Pausa (P)">⏸</button>
+    <div class="toast" id="toast">ESMAGOU!</div>
+    <canvas id="game" width="960" height="540"></canvas>
+
+    <div class="hub hidden" id="hub">
+      <div class="hub-topo">
+        <div class="abas">
+          <button class="aba" id="abaPistas" aria-pressed="true">PISTAS</button>
+          <button class="aba" id="abaGaragem" aria-pressed="false">🔧 GARAGEM</button>
+        </div>
+        <span class="placar">★ <b id="hubEstrelas">0</b>/<span id="hubMax">36</span> · 🪙 <b id="hubMoedas">0</b></span>
+      </div>
+      <div id="hubMundos"></div>
+      <div class="oficina hidden" id="oficina">
+        <div class="garagem" id="garagem" role="group" aria-label="Escolha seu caminhão"></div>
+        <div class="oficina-titulo" id="oficinaTitulo">MELHORIAS</div>
+        <div class="melhorias" id="melhorias" role="group" aria-label="Melhorias do caminhão"></div>
+      </div>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <h2 id="overlayTitle">NEON MONSTER</h2>
+      <p id="overlayText">Quatro mundos, doze pistas. Passe por cima de carros, ônibus e muros: sucata esmagada vira moeda. Cada pancada amassa a lataria, e lataria amassada deixa o motor fraco: pegue a chave 🔧 para consertar. Bandeiras enchem o tanque e guardam o progresso. Gás na direita, freio na esquerda; no ar, os pedais giram o caminhão.</p>
+      <div class="sub" id="overlaySub"></div>
+      <div class="final-stats" id="finalStats" style="display:none;">
+        <div class="fstat"><span>Tempo</span><b id="fsTempo">0</b></div>
+        <div class="fstat"><span>Moedas</span><b id="fsMoedas">0</b></div>
+        <div class="fstat"><span>Sucata</span><b id="fsSucata">0</b></div>
+        <div class="fstat"><span>Lataria</span><b id="fsLataria">0</b></div>
+      </div>
+      <button class="btn" id="startBtn">JOGAR</button>
+      <div class="controls-hint">
+        <span class="key">→ gás</span><span class="key">← freio</span><span class="key">R reinicia</span><span class="key">P pausa</span><span class="key">ESC fases</span>
+      </div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · 🚗 sucata esmagada vira moeda · 🛢️ barril explode · 🔧 conserta a lataria · ★ chegar · ★ esmagar 80% · ★ bater o tempo</footer>
+</div>
+
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
+  const W = 960, H = 540;
+
+  // ── física ──
+  // Tudo em px, s e rad, com massa 1: força e aceleração são o mesmo número.
+  // Este bloco não toca DOM nem Neon — o test-games.js recorta e roda em Node.
+  // A base é a do NEON WHEELS, com roda gigante, curso longo e lataria que amassa.
+  const STEP = 1 / 240;
+  const K = {
+    g: 1000,          // gravidade
+    motor: 1000,      // aceleração total no zero; cai linear até vmax
+    vmax: 900,        // velocidade em que o motor para de empurrar
+    freio: 700,       // desaceleração de freio por roda
+    rolagem: 30,      // resistência de rolamento por roda
+    arrasto: 0.00024, // arrasto do ar (× v²)
+    grip: 1.3,        // força tangencial máxima = grip × normal
+    tilt: 6,          // velocidade de giro no ar com o pedal segurado (rad/s)
+    tiltResp: 2.8,    // rapidez com que o giro chega nessa velocidade (1/s)
+    nivela: 2.2,      // pedal solto no ar: o caminhão volta sozinho pro reto, devagar
+    mola: 150,        // suspensão: força por px de compressão
+    amort: 9,         // suspensão: força por px/s de velocidade normal
+    curso: 16,        // compressão máxima antes do batente rígido
+    quique: 0.12,     // restituição no batente
+    inercia: 640,     // momento de inércia do chassi
+    boost: 2400,      // empurrão do nitro, fora do limite do grip
+    vboost: 1080,     // velocidade que o nitro entrega
+    eixo: 58,         // distância entre eixos
+    altura: 14,       // eixo abaixo do centro de massa
+    raio: 19,         // raio da roda: é monster truck
+    teto: 36,         // altura do teto acima do centro
+    tetoX: [-16, 14], // pontos do teto que a física testa
+    choque: 50,       // para-choques, à frente e atrás do centro
+    tanque: 100,      // gasolina cheia
+    dreno: 4,         // gasolina por segundo, sempre
+    drenoGas: 6,      // gasolina por segundo a mais com o pé no fundo
+    lata: 34,         // quanto uma lata devolve
+    pega: 40,         // raio de coleta de moeda, lata e chave
+    perfeito: 150,    // empurrão do pouso perfeito, na direção da pista
+    saude: 100,       // lataria inteira
+    limiar: 300,      // batida no batente abaixo disso não amassa (px/s)
+    dano: 0.07,       // lataria perdida por px/s acima do limiar
+    blindagem: 0,     // fração do dano que a lataria ignora
+    cravo: 0,         // aderência mínima no gelo (0 = sofre o gelo inteiro)
+    conserto: 35,     // quanto uma chave devolve de lataria
+  };
+  // Obstáculos de sucata: largura e altura da caixa de colisão (meias medidas
+  // em x), moedas que rendem e o tranco que dão no caminhão.
+  const OBST = {
+    carro:  { w: 28, h: 20, moedas: 3, passo: 64, freio: 0.96, pulo: 50, giro: 0.25 },
+    onibus: { w: 74, h: 34, moedas: 8, passo: 170, freio: 0.9, pulo: 100, giro: 0.35 },
+    caixa:  { w: 13, h: 26, moedas: 2, passo: 54, freio: 0.95, pulo: 40, giro: 0.2 },
+    barril: { w: 10, h: 24, moedas: 2, passo: 34, freio: 0.97, pulo: 120, giro: 0 },
+    muro:   { w: 9, h: 58, moedas: 4, passo: 40, freio: 0.8, pulo: 0, giro: 0 },
+  };
+  const CAMINHOES = [
+    { nome: 'TOURO BRAVO', cor: '#f2b33d', claro: '#ffe7a8', escuro: '#9a5a12', neon: '#4da3ff',
+      descricao: 'O de fábrica: firme no chão e chifre no teto.', fisica: {} },
+    // Os três de baixo se compram com moedas na garagem. O teste roda cada um
+    // em todas as pistas, de fábrica e com tudo no máximo.
+    { nome: 'COVEIRO', cor: '#262b36', claro: '#5d6577', escuro: '#0b0e14', neon: '#7dff6a', preco: 400,
+      descricao: 'Blindado e pesado: aguenta pancada, gira devagar.',
+      fisica: { blindagem: 0.35, inercia: 720, motor: 1060, tilt: 5.2, tiltResp: 2.5 } },
+    { nome: 'INFERNO', cor: '#ff5a1f', claro: '#ffc36b', escuro: '#7a1408', neon: '#ffb347', preco: 700,
+      descricao: 'Motor em brasa: o mais rápido e o mais gastão.',
+      fisica: { motor: 1150, vmax: 1010, drenoGas: 8, arrasto: 0.0002 } },
+    { nome: 'NEVASCA', cor: '#8fe3ff', claro: '#f1fcff', escuro: '#2a6c96', neon: '#c8f4ff', preco: 1000,
+      descricao: 'Cravos de gelo: agarra até na geleira e gira solto.',
+      fisica: { grip: 1.55, cravo: 0.85, tilt: 7, tiltResp: 3.4 } },
+  ];
+  const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+  // Melhorias da garagem, compradas com moedas e guardadas por caminhão. Só
+  // ajudam: o teste roda todas as pistas de fábrica e com tudo no máximo.
+  const MELHORIAS = [
+    { id: 'motor', nome: 'MOTOR', icone: '🔧', desc: 'Mais força e velocidade' },
+    { id: 'suspensao', nome: 'SUSPENSÃO', icone: '🔩', desc: 'Pouso pesado amassa menos' },
+    { id: 'pneus', nome: 'PNEUS', icone: '🛞', desc: 'Mais aderência nas subidas' },
+    { id: 'blindagem', nome: 'BLINDAGEM', icone: '🛡️', desc: 'Menos dano em tudo' },
+    { id: 'tanque', nome: 'TANQUE', icone: '⛽', desc: 'Gasta menos gasolina' },
+  ];
+  const CUSTOS = [30, 60, 100, 160, 240];
+  function ajustesDe(modelo, up) {
+    const k = { ...K, ...CAMINHOES[modelo].fisica };
+    const n = id => clamp((up && up[id]) | 0, 0, CUSTOS.length);
+    k.motor *= 1 + 0.06 * n('motor'); k.vmax *= 1 + 0.04 * n('motor');
+    k.limiar *= 1 + 0.12 * n('suspensao'); k.amort *= 1 + 0.04 * n('suspensao');
+    k.grip *= 1 + 0.08 * n('pneus');
+    k.blindagem = 1 - (1 - k.blindagem) * (1 - 0.1 * n('blindagem'));
+    k.dreno *= 1 - 0.08 * n('tanque'); k.drenoGas *= 1 - 0.08 * n('tanque');
+    return k;
+  }
+  const CURVA = 80;
+  // Só os segmentos perto do progresso do caminhão colidem.
+  const JANELA = 22;
+  const anguloCurto = a => Math.atan2(Math.sin(a), Math.cos(a));
+
+  // Peças: reta L · rampa graus L (negativo desce) · pouso graus L · vao largura queda
+  // · lombada altura · onda n altura · duna n altura · colina altura L · mesa altura topo
+  // · rampao graus raio · nitro L · gelo fator (1 fecha) · moedas n [altura] · lata
+  // · chave · caixas n · carros n · barris n · onibus · muro · bandeira · chegada.
+  // Regras da casa, todas verificadas no test-games.js:
+  // - toda pista fecha com o piloto automático segurando o gás, e sobra gasolina;
+  // - o piloto esmaga pelo menos 75% da sucata, senão a segunda estrela não sai;
+  // - bandeira a cada ~15s: reabastece e é onde o caminhão volta se quebrar.
+  const MUNDOS = [
+    { nome: 'ARENA', tema: 'arena', trilho: '#f2b33d', chao: '#24160d', terra: '#5a3a22',
+      ceu: ['#05060f', '#1b1840', '#0a0812'], serra: '#14122b', pistas: [
+      // tutorial: chão, sucata pra esmagar e os primeiros saltos
+      { nome: 'ESTREIA', pecas: [
+        ['reta', 500], ['moedas', 5], ['reta', 200], ['carros', 3], ['reta', 400], ['lombada', 26], ['reta', 300],
+        ['caixas', 3], ['reta', 300], ['onda', 3, 16], ['reta', 300], ['lata'],
+        ['moedas', 4], ['duna', 2, 24], ['reta', 300],
+        ['carros', 4], ['reta', 400],
+        ['bandeira'],
+        ['rampa', 16, 140], ['moedas', 4], ['vao', 160, 40], ['pouso', 14, 170], ['reta', 300],
+        ['colina', 70, 420], ['reta', 300], ['moedas', 4], ['barris', 2], ['reta', 300],
+        ['mesa', 30, 160], ['reta', 300], ['carros', 5], ['reta', 400], ['lata'],
+        ['rampa', 20, 160], ['vao', 220, 40], ['pouso', 18, 200], ['reta', 300], ['chave'],
+        ['onibus'], ['reta', 400], ['duna', 2, 30], ['reta', 300],
+        ['bandeira'],
+        ['nitro', 200], ['rampao', 32, 250], ['moedas', 5], ['vao', 420, 70], ['pouso', 28, 800], ['reta', 300],
+        ['carros', 4], ['reta', 300], ['muro'], ['reta', 300], ['lata'],
+        ['colina', 90, 520], ['reta', 300], ['caixas', 4], ['reta', 300], ['moedas', 5],
+        ['bandeira'],
+        ['carros', 5], ['reta', 400], ['onda', 3, 18], ['reta', 300], ['lata'],
+        ['rampa', 18, 150], ['moedas', 4], ['vao', 200, 30], ['pouso', 16, 200], ['reta', 300],
+        ['barris', 2], ['reta', 300], ['onibus'], ['reta', 300], ['moedas', 5], ['carros', 4], ['reta', 500],
+        ['chegada'],
+      ] },
+      // manobras: saltos em sequência e mesa pra quem quer girar
+      { nome: 'FREESTYLE', pecas: [
+        ['reta', 450], ['carros', 4], ['reta', 300], ['moedas', 4], ['onda', 3, 20], ['reta', 300], ['lata'],
+        ['rampa', 22, 160], ['moedas', 4], ['vao', 240, 60], ['pouso', 20, 200], ['reta', 300],
+        ['onibus'], ['reta', 300], ['mesa', 34, 140], ['reta', 300],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['colina', 100, 560], ['reta', 300], ['lata'], ['barris', 3], ['reta', 300],
+        ['nitro', 200], ['rampao', 30, 250], ['moedas', 6], ['vao', 380, 60], ['pouso', 26, 800], ['reta', 300],
+        ['muro'], ['reta', 300], ['chave'], ['caixas', 4], ['reta', 300],
+        ['bandeira'],
+        ['rampa', 24, 170], ['vao', 260, 70], ['pouso', 22, 220], ['reta', 300], ['carros', 5], ['reta', 300], ['lata'],
+        ['duna', 3, 36], ['reta', 300], ['onibus'], ['reta', 400],
+        ['rampa', 20, 150], ['moedas', 4], ['vao', 220, 30], ['pouso', 18, 200], ['reta', 300],
+        ['bandeira'],
+        ['barris', 3], ['reta', 300], ['mesa', 36, 120], ['reta', 300], ['lata'], ['carros', 5], ['reta', 300],
+        ['nitro', 200], ['rampao', 30, 250], ['moedas', 6], ['vao', 400, 50], ['pouso', 26, 800], ['reta', 300],
+        ['caixas', 4], ['reta', 300], ['carros', 5], ['reta', 500],
+        ['chegada'],
+      ] },
+      // a final do estádio: tudo da arena, com ônibus e muro duplo
+      { nome: 'GRANDE FINAL', pecas: [
+        ['reta', 450], ['onibus'], ['reta', 300], ['moedas', 4], ['carros', 5], ['reta', 400], ['lata'],
+        ['nitro', 200], ['rampao', 30, 250], ['moedas', 6], ['vao', 400, 60], ['pouso', 26, 800], ['reta', 300],
+        ['muro'], ['reta', 300], ['colina', 110, 600], ['reta', 300],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['lata'], ['mesa', 36, 140], ['reta', 300], ['barris', 3], ['reta', 400],
+        ['rampa', 24, 180], ['moedas', 5], ['vao', 280, 80], ['pouso', 22, 220], ['reta', 300], ['chave'],
+        ['onibus'], ['reta', 300], ['onda', 4, 22], ['reta', 300],
+        ['bandeira'],
+        ['nitro', 220], ['rampao', 32, 260], ['moedas', 7], ['vao', 460, 80], ['pouso', 28, 800], ['reta', 300], ['lata'],
+        ['carros', 6], ['reta', 300], ['muro'], ['reta', 200], ['muro'], ['reta', 300],
+        ['colina', 120, 640], ['reta', 300], ['caixas', 5], ['reta', 300],
+        ['bandeira'],
+        ['duna', 3, 40], ['reta', 300], ['lata'], ['onibus'], ['reta', 400], ['moedas', 5],
+        ['rampa', 22, 170], ['vao', 260, 50], ['pouso', 20, 220], ['reta', 300], ['carros', 6], ['reta', 300],
+        ['barris', 3], ['reta', 300], ['mesa', 34, 140], ['reta', 300], ['lata'],
+        ['nitro', 200], ['rampao', 30, 250], ['moedas', 6], ['vao', 380, 40], ['pouso', 26, 800], ['reta', 300],
+        ['onibus'], ['reta', 200], ['carros', 5], ['reta', 500],
+        ['chegada'],
+      ] },
+    ] },
+    { nome: 'FERRO-VELHO', tema: 'ferro', trilho: '#ff8a3c', chao: '#1c1210', terra: '#4a3426',
+      ceu: ['#1a0a10', '#6a2a1e', '#1a0a0e'], serra: '#2a1418', pistas: [
+      // montanhas de sucata: subida e descida no ritmo das pilhas
+      { nome: 'SUCATÃO', pecas: [
+        ['reta', 450], ['carros', 4], ['reta', 300], ['colina', 90, 480], ['reta', 200], ['moedas', 4], ['lata'],
+        ['caixas', 4], ['reta', 300], ['colina', 110, 560], ['reta', 300], ['barris', 3], ['reta', 300],
+        ['bandeira'],
+        ['rampa', 26, 300], ['reta', 200], ['moedas', 4], ['rampa', -28, 320], ['reta', 300], ['lata'],
+        ['carros', 6], ['reta', 300], ['onibus'], ['reta', 300], ['duna', 3, 40], ['reta', 400], ['chave'],
+        ['rampa', 22, 170], ['vao', 260, 70], ['pouso', 20, 220], ['reta', 300],
+        ['bandeira'],
+        ['colina', 130, 640], ['reta', 300], ['moedas', 5], ['carros', 5], ['reta', 300], ['lata'],
+        ['nitro', 200], ['rampao', 32, 260], ['moedas', 6], ['vao', 440, 70], ['pouso', 28, 800], ['reta', 300],
+        ['muro'], ['reta', 300], ['barris', 3], ['reta', 300],
+        ['bandeira'],
+        ['colina', 100, 520], ['reta', 300], ['caixas', 5], ['reta', 300], ['lata'],
+        ['carros', 6], ['reta', 300], ['onda', 4, 22], ['reta', 300],
+        ['rampa', 24, 300], ['reta', 200], ['moedas', 4], ['rampa', -26, 320], ['reta', 300],
+        ['bandeira'],
+        ['onibus'], ['reta', 300], ['lata'], ['colina', 120, 600], ['reta', 400],
+        ['rampa', 22, 170], ['moedas', 4], ['vao', 260, 60], ['pouso', 20, 220], ['reta', 300],
+        ['barris', 3], ['reta', 300], ['carros', 6], ['reta', 500],
+        ['chegada'],
+      ] },
+      // a prensa: muro atrás de muro, e ônibus empilhado
+      { nome: 'PRENSA', pecas: [
+        ['reta', 450], ['muro'], ['reta', 300], ['carros', 5], ['reta', 300], ['moedas', 4], ['lata'],
+        ['mesa', 34, 160], ['reta', 300], ['muro'], ['reta', 250], ['muro'], ['reta', 400],
+        ['rampa', 24, 180], ['vao', 280, 90], ['pouso', 22, 240], ['reta', 300],
+        ['bandeira'],
+        ['onibus'], ['reta', 200], ['onibus'], ['reta', 300], ['lata'], ['colina', 120, 600], ['reta', 300],
+        ['barris', 4], ['reta', 300], ['chave'], ['carros', 6], ['reta', 300],
+        ['nitro', 200], ['rampao', 30, 250], ['moedas', 6], ['vao', 420, 60], ['pouso', 26, 800], ['reta', 300],
+        ['bandeira'],
+        ['muro'], ['reta', 250], ['muro'], ['reta', 250], ['muro'], ['reta', 300], ['lata'],
+        ['duna', 3, 42], ['reta', 300], ['caixas', 5], ['reta', 300],
+        ['rampa', 26, 300], ['reta', 200], ['rampa', -28, 320], ['reta', 300], ['moedas', 5],
+        ['bandeira'],
+        ['carros', 7], ['reta', 300], ['lata'], ['colina', 110, 560], ['reta', 400],
+        ['rampa', 22, 170], ['vao', 260, 60], ['pouso', 20, 220], ['reta', 300], ['onibus'], ['reta', 300],
+        ['mesa', 34, 140], ['reta', 300], ['chave'],
+        ['bandeira'],
+        ['muro'], ['reta', 250], ['muro'], ['reta', 300], ['carros', 6], ['reta', 300], ['lata'],
+        ['nitro', 200], ['rampao', 30, 250], ['moedas', 6], ['vao', 400, 40], ['pouso', 26, 800], ['reta', 300],
+        ['barris', 3], ['reta', 300], ['onibus'], ['reta', 200], ['onibus'], ['reta', 500],
+        ['chegada'],
+      ] },
+      // o guindaste: descidas longas e o salto do eletroímã
+      { nome: 'GUINDASTE', pecas: [
+        ['reta', 420], ['rampa', 26, 320], ['reta', 200], ['moedas', 4], ['rampa', -30, 380], ['reta', 300], ['lata'],
+        ['carros', 5], ['reta', 400], ['rampa', 26, 200], ['vao', 260, 110], ['pouso', 30, 700], ['reta', 300],
+        ['bandeira'],
+        ['barris', 3], ['reta', 300], ['colina', 130, 620], ['reta', 300], ['lata'], ['onibus'], ['reta', 300],
+        ['nitro', 220], ['rampa', 24, 160], ['moedas', 8], ['vao', 600, 200], ['pouso', 36, 800], ['reta', 300],
+        ['chave'], ['carros', 6], ['reta', 300],
+        ['bandeira'],
+        ['rampa', 24, 400], ['reta', 240], ['moedas', 5], ['rampa', -28, 420], ['reta', 300], ['lata'],
+        ['muro'], ['reta', 300], ['caixas', 5], ['reta', 300], ['duna', 3, 44], ['reta', 300],
+        ['nitro', 200], ['rampao', 32, 260], ['moedas', 6], ['vao', 420, 40], ['pouso', 28, 800], ['reta', 300],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['lata'], ['colina', 120, 600], ['reta', 300], ['barris', 3], ['reta', 300],
+        ['rampa', 26, 200], ['vao', 260, 120], ['pouso', 30, 700], ['reta', 300], ['onibus'], ['reta', 300],
+        ['bandeira'],
+        ['rampa', 26, 360], ['reta', 200], ['moedas', 5], ['rampa', -30, 400], ['reta', 300], ['lata'],
+        ['carros', 6], ['reta', 300], ['muro'], ['reta', 300], ['chave'],
+        ['nitro', 220], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 220], ['pouso', 34, 800], ['reta', 300],
+        ['caixas', 4], ['reta', 300], ['carros', 5], ['reta', 500],
+        ['chegada'],
+      ] },
+    ] },
+    { nome: 'VULCÃO', tema: 'vulcao', trilho: '#ff4d2e', chao: '#140608', terra: '#3a1210',
+      ceu: ['#12020a', '#5a0c12', '#1a0408'], serra: '#2a060c', pistas: [
+      // a encosta: subidas íngremes com lava nos vãos
+      { nome: 'ENCOSTA', pecas: [
+        ['reta', 450], ['carros', 4], ['reta', 300], ['rampa', 24, 360], ['reta', 200], ['moedas', 4], ['lata'],
+        ['reta', 300], ['rampa', 20, 160], ['vao', 220, 40], ['pouso', 18, 220], ['reta', 300], ['barris', 3], ['reta', 300],
+        ['rampa', -26, 360], ['reta', 300],
+        ['bandeira'],
+        ['colina', 140, 680], ['reta', 300], ['lata'], ['caixas', 4], ['reta', 400],
+        ['rampa', 24, 180], ['moedas', 5], ['vao', 280, 60], ['pouso', 22, 240], ['reta', 300], ['chave'],
+        ['onibus'], ['reta', 300], ['colina', 120, 600], ['reta', 300],
+        ['bandeira'],
+        ['nitro', 220], ['rampao', 32, 260], ['moedas', 6], ['vao', 460, 80], ['pouso', 28, 800], ['reta', 300], ['lata'],
+        ['carros', 6], ['reta', 300], ['muro'], ['reta', 300], ['duna', 3, 44], ['reta', 300],
+        ['bandeira'],
+        ['rampa', 26, 380], ['reta', 200], ['moedas', 5], ['rampa', -28, 400], ['reta', 300], ['lata'],
+        ['barris', 3], ['reta', 400], ['rampa', 24, 180], ['vao', 280, 70], ['pouso', 22, 240], ['reta', 300],
+        ['carros', 6], ['reta', 300],
+        ['bandeira'],
+        ['colina', 150, 720], ['reta', 300], ['onibus'], ['reta', 300], ['lata'], ['chave'],
+        ['rampa', 24, 360], ['reta', 300], ['nitro', 160], ['rampa', 20, 160], ['moedas', 4], ['vao', 260, 40], ['pouso', 18, 220], ['reta', 300],
+        ['rampa', -26, 380], ['reta', 300], ['caixas', 4], ['reta', 300],
+        ['bandeira'],
+        ['nitro', 220], ['rampao', 32, 260], ['moedas', 6], ['vao', 440, 60], ['pouso', 28, 800], ['reta', 300], ['lata'],
+        ['barris', 3], ['reta', 300], ['carros', 6], ['reta', 500],
+        ['chegada'],
+      ] },
+      // rio de lava: vão atrás de vão, com o pouso sempre mais baixo
+      { nome: 'RIO DE LAVA', pecas: [
+        ['reta', 450], ['moedas', 4], ['caixas', 3], ['reta', 300], ['lata'],
+        ['rampa', 20, 150], ['vao', 220, 30], ['pouso', 16, 200], ['reta', 260],
+        ['rampa', 22, 160], ['vao', 260, 50], ['pouso', 20, 220], ['reta', 300], ['carros', 5], ['reta', 300],
+        ['bandeira'],
+        ['nitro', 220], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 200], ['pouso', 34, 800], ['reta', 300], ['lata'],
+        ['barris', 4], ['reta', 300], ['colina', 120, 600], ['reta', 400], ['chave'],
+        ['rampa', 24, 170], ['vao', 280, 60], ['pouso', 22, 230], ['reta', 300],
+        ['bandeira'],
+        ['onibus'], ['reta', 300], ['lata'], ['mesa', 36, 140], ['reta', 300], ['carros', 6], ['reta', 300],
+        ['rampa', 22, 160], ['moedas', 5], ['vao', 260, 40], ['pouso', 20, 220], ['reta', 260],
+        ['rampa', 22, 160], ['vao', 260, 40], ['pouso', 20, 220], ['reta', 300], ['muro'], ['reta', 300],
+        ['bandeira'],
+        ['nitro', 220], ['rampao', 32, 260], ['moedas', 6], ['vao', 480, 80], ['pouso', 28, 800], ['reta', 300], ['lata'],
+        ['caixas', 5], ['reta', 300], ['duna', 3, 44], ['reta', 300], ['carros', 6], ['reta', 300],
+        ['bandeira'],
+        ['rampa', 20, 150], ['moedas', 4], ['vao', 220, 30], ['pouso', 16, 200], ['reta', 260],
+        ['rampa', 22, 160], ['vao', 260, 50], ['pouso', 20, 220], ['reta', 260],
+        ['rampa', 24, 170], ['vao', 280, 60], ['pouso', 22, 230], ['reta', 300], ['lata'], ['onibus'], ['reta', 300],
+        ['bandeira'],
+        ['barris', 3], ['reta', 300], ['colina', 130, 640], ['reta', 300], ['chave'],
+        ['nitro', 220], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 200], ['pouso', 34, 800], ['reta', 300],
+        ['carros', 6], ['reta', 500],
+        ['chegada'],
+      ] },
+      // a cratera: desce até o fundo e sobe pela parede do outro lado
+      { nome: 'CRATERA', pecas: [
+        ['reta', 450], ['onibus'], ['reta', 300], ['moedas', 4], ['lata'],
+        ['rampa', -30, 500], ['reta', 300], ['carros', 6], ['reta', 300], ['rampa', 28, 520], ['reta', 300],
+        ['bandeira'],
+        ['barris', 3], ['reta', 300], ['colina', 150, 720], ['reta', 300], ['lata'], ['chave'],
+        ['nitro', 220], ['rampa', 26, 170], ['moedas', 8], ['vao', 600, 240], ['pouso', 36, 800], ['reta', 300],
+        ['muro'], ['reta', 250], ['muro'], ['reta', 300],
+        ['bandeira'],
+        ['rampa', -28, 460], ['reta', 300], ['caixas', 5], ['reta', 300], ['lata'], ['rampa', 26, 480], ['reta', 400],
+        ['carros', 6], ['reta', 300], ['nitro', 160], ['rampa', 24, 180], ['vao', 300, 80], ['pouso', 22, 240], ['reta', 300],
+        ['bandeira'],
+        ['colina', 140, 680], ['reta', 300], ['onibus'], ['reta', 300], ['lata'],
+        ['nitro', 220], ['rampao', 34, 260], ['moedas', 7], ['vao', 480, 60], ['pouso', 28, 800], ['reta', 300],
+        ['barris', 3], ['reta', 300], ['carros', 6], ['reta', 300],
+        ['bandeira'],
+        ['rampa', -30, 520], ['reta', 300], ['onibus'], ['reta', 300], ['lata'], ['rampa', 28, 540], ['reta', 400],
+        ['muro'], ['reta', 300], ['chave'], ['colina', 130, 640], ['reta', 300],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['lata'], ['nitro', 220], ['rampa', 26, 170], ['moedas', 8], ['vao', 600, 240], ['pouso', 36, 800], ['reta', 300],
+        ['caixas', 4], ['reta', 300], ['barris', 3], ['reta', 300], ['onibus'], ['reta', 500],
+        ['chegada'],
+      ] },
+    ] },
+    { nome: 'GELEIRA', tema: 'geleira', trilho: '#8fe3ff', chao: '#0a1424', terra: '#1c3550',
+      ceu: ['#020814', '#0c2a4a', '#030a16'], serra: '#0e2238', pistas: [
+      // primeira placa de gelo: o pneu patina e a subida pede embalo
+      { nome: 'DEGELO', pecas: [
+        ['reta', 450], ['carros', 4], ['reta', 300], ['moedas', 4], ['colina', 90, 480], ['reta', 300], ['lata'],
+        ['gelo', 0.45], ['reta', 400], ['caixas', 4], ['reta', 300], ['onda', 3, 20], ['reta', 300], ['gelo', 1],
+        ['rampa', 22, 170], ['vao', 260, 60], ['pouso', 20, 220], ['reta', 300],
+        ['bandeira'],
+        ['carros', 5], ['reta', 300], ['lata'], ['gelo', 0.45], ['nitro', 200], ['colina', 120, 600], ['reta', 300], ['gelo', 1],
+        ['barris', 3], ['reta', 300], ['chave'], ['onibus'], ['reta', 300],
+        ['nitro', 200], ['rampao', 32, 260], ['moedas', 6], ['vao', 440, 70], ['pouso', 28, 800], ['reta', 300],
+        ['bandeira'],
+        ['gelo', 0.45], ['reta', 300], ['moedas', 5], ['duna', 3, 40], ['reta', 300], ['lata'], ['gelo', 1],
+        ['carros', 6], ['reta', 300], ['muro'], ['reta', 300], ['colina', 110, 560], ['reta', 400],
+        ['bandeira'],
+        ['rampa', 24, 180], ['moedas', 5], ['vao', 300, 70], ['pouso', 22, 240], ['reta', 300], ['lata'],
+        ['gelo', 0.45], ['caixas', 5], ['reta', 400], ['gelo', 1], ['carros', 6], ['reta', 300],
+        ['bandeira'],
+        ['onibus'], ['reta', 300], ['lata'], ['gelo', 0.45], ['onda', 4, 20], ['reta', 300], ['gelo', 1],
+        ['nitro', 200], ['rampao', 30, 250], ['moedas', 6], ['vao', 400, 50], ['pouso', 26, 800], ['reta', 300],
+        ['barris', 3], ['reta', 300], ['colina', 120, 600], ['reta', 300], ['chave'],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['lata'], ['rampa', 22, 170], ['moedas', 4], ['vao', 260, 60], ['pouso', 20, 220], ['reta', 300],
+        ['gelo', 0.45], ['caixas', 4], ['reta', 400], ['gelo', 1], ['carros', 5], ['reta', 500],
+        ['chegada'],
+      ] },
+      // fendas: vãos estreitos em cima de placas escorregadias
+      { nome: 'FENDA', pecas: [
+        ['reta', 450], ['moedas', 4], ['onibus'], ['reta', 300], ['lata'],
+        ['gelo', 0.4], ['reta', 300], ['rampa', 20, 150], ['vao', 240, 40], ['pouso', 18, 220], ['reta', 300], ['gelo', 1],
+        ['carros', 5], ['reta', 300], ['colina', 110, 560], ['reta', 300],
+        ['bandeira'],
+        ['barris', 3], ['reta', 300], ['lata'], ['nitro', 220], ['rampa', 24, 160], ['moedas', 8], ['vao', 580, 220], ['pouso', 34, 800], ['reta', 300],
+        ['gelo', 0.4], ['caixas', 4], ['reta', 400], ['gelo', 1], ['chave'], ['reta', 200],
+        ['rampa', 22, 170], ['vao', 280, 60], ['pouso', 20, 230], ['reta', 300],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['lata'], ['gelo', 0.4], ['nitro', 200], ['colina', 130, 640], ['reta', 300], ['gelo', 1],
+        ['muro'], ['reta', 250], ['muro'], ['reta', 300], ['duna', 3, 44], ['reta', 300],
+        ['bandeira'],
+        ['nitro', 220], ['rampao', 32, 260], ['moedas', 6], ['vao', 460, 70], ['pouso', 28, 800], ['reta', 300], ['lata'],
+        ['onibus'], ['reta', 300], ['gelo', 0.4], ['onda', 4, 22], ['reta', 300], ['gelo', 1],
+        ['carros', 6], ['reta', 300],
+        ['bandeira'],
+        ['gelo', 0.4], ['reta', 300], ['rampa', 20, 150], ['moedas', 4], ['vao', 240, 40], ['pouso', 18, 220], ['reta', 300],
+        ['rampa', 20, 150], ['vao', 240, 40], ['pouso', 18, 220], ['reta', 300], ['gelo', 1], ['lata'],
+        ['barris', 3], ['reta', 300], ['colina', 120, 600], ['reta', 300], ['chave'],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['lata'], ['nitro', 220], ['rampa', 24, 160], ['moedas', 8], ['vao', 560, 200], ['pouso', 34, 800], ['reta', 300],
+        ['gelo', 0.4], ['caixas', 4], ['reta', 400], ['gelo', 1], ['onibus'], ['reta', 500],
+        ['chegada'],
+      ] },
+      // o pico: a maior subida do jogo e o salto da avalanche no fim
+      { nome: 'AVALANCHE', pecas: [
+        ['reta', 450], ['carros', 5], ['reta', 300], ['moedas', 4], ['lata'],
+        ['rampa', 24, 420], ['reta', 200], ['gelo', 0.45], ['reta', 300], ['caixas', 4], ['reta', 300], ['gelo', 1],
+        ['rampa', -28, 440], ['reta', 300],
+        ['bandeira'],
+        ['onibus'], ['reta', 300], ['lata'], ['colina', 150, 720], ['reta', 300], ['barris', 3], ['reta', 300], ['chave'],
+        ['nitro', 220], ['rampao', 32, 260], ['moedas', 7], ['vao', 480, 80], ['pouso', 28, 800], ['reta', 300],
+        ['bandeira'],
+        ['gelo', 0.4], ['reta', 300], ['moedas', 5], ['duna', 3, 44], ['reta', 300], ['gelo', 1], ['lata'],
+        ['carros', 6], ['reta', 300], ['muro'], ['reta', 250], ['muro'], ['reta', 400],
+        ['rampa', 24, 180], ['vao', 300, 80], ['pouso', 22, 240], ['reta', 300],
+        ['bandeira'],
+        ['rampa', 26, 440], ['reta', 200], ['moedas', 5], ['rampa', -30, 460], ['reta', 300], ['lata'],
+        ['gelo', 0.4], ['caixas', 5], ['reta', 400], ['gelo', 1], ['onibus'], ['reta', 300],
+        ['bandeira'],
+        ['carros', 6], ['reta', 300], ['lata'], ['colina', 140, 680], ['reta', 300],
+        ['nitro', 220], ['rampao', 32, 260], ['moedas', 6], ['vao', 440, 60], ['pouso', 28, 800], ['reta', 300],
+        ['barris', 3], ['reta', 300], ['chave'],
+        ['bandeira'],
+        ['rampa', 24, 440], ['reta', 200], ['gelo', 0.45], ['onda', 3, 20], ['reta', 300], ['gelo', 1],
+        ['rampa', -28, 460], ['reta', 300], ['lata'], ['carros', 6], ['reta', 300],
+        ['bandeira'],
+        ['onibus'], ['reta', 300], ['lata'], ['colina', 150, 720], ['reta', 300],
+        ['nitro', 230], ['rampa', 24, 160], ['moedas', 8], ['vao', 640, 260], ['pouso', 36, 800], ['reta', 300],
+        ['barris', 3], ['reta', 300], ['carros', 6], ['reta', 500],
+        ['chegada'],
+      ] },
+    ] },
+  ];
+  // Lista plana: a fase 1 é o índice 0, e é assim que o save guarda.
+  const PISTAS = MUNDOS.flatMap((m, mi) => m.pistas.map((p, pi) => ({ ...p, mundo: mi, n: mi * 3 + pi })));
+
+  // Peças viram uma polilinha. Normal aponta pro lado em que o caminhão anda (pra cima).
+  function compilar(pecas) {
+    const segs = [], trechos = [], itens = [], pedidos = [], mesas = [], zonas = [];
+    let zona = null;
+    let x = 0, y = 0, ang = 0, fim = 0, fundo = 0, trecho = [[0, 0]];
+    const ponto = (nx, ny) => {
+      const [px, py] = trecho[trecho.length - 1];
+      const dx = nx - px, dy = ny - py, len = Math.hypot(dx, dy);
+      if (len < 1e-6) return;
+      segs.push({ x0: px, y0: py, x1: nx, y1: ny, nx: dy / len, ny: -dx / len, len });
+      trecho.push([nx, ny]); x = nx; y = ny; fundo = Math.max(fundo, ny);
+    };
+    const reto = len => ponto(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+    const arco = (ate, r) => {
+      if (ate === ang) return;
+      const s = ate < ang ? -1 : 1;
+      const cx = x - s * Math.sin(ang) * r, cy = y + s * Math.cos(ang) * r;
+      const n = Math.ceil(Math.abs(ate - ang) / (Math.PI / 30));
+      for (let i = 1; i <= n; i++) {
+        const a = ang + (ate - ang) * i / n;
+        ponto(cx + s * Math.sin(a) * r, cy - s * Math.cos(a) * r);
+      }
+      ang = ate;
+    };
+    const rad = d => d * Math.PI / 180;
+    // morro em cosseno: inclinação máxima = π × altura / comprimento
+    const morro = (h, L, n = 14) => {
+      const x0 = x, y0 = y;
+      for (let i = 1; i <= n; i++) {
+        const s = i / n;
+        ponto(x0 + L * s, y0 - h * (1 - Math.cos(2 * Math.PI * s)) / 2);
+      }
+    };
+    for (const peca of pecas) {
+      const [tipo, p, q] = peca;
+      if (tipo === 'reta') { arco(0, CURVA); reto(p); }
+      else if (tipo === 'rampa') { arco(-rad(p), CURVA); reto(q); }
+      else if (tipo === 'pouso') { ang = rad(p); reto(q); arco(0, CURVA * 3); }
+      else if (tipo === 'vao') { trechos.push(trecho); x += p; y += q || 0; ang = 0; trecho = [[x, y]]; }
+      else if (tipo === 'lombada') { arco(0, CURVA); morro(p, p * 8); }
+      else if (tipo === 'onda') { arco(0, CURVA); for (let k = 0; k < p; k++) morro(q, q * 8); }
+      else if (tipo === 'duna') { arco(0, CURVA); for (let k = 0; k < p; k++) morro(q, q * 14); }
+      else if (tipo === 'colina') { arco(0, CURVA); morro(p, q, 28); }
+      else if (tipo === 'gelo') {
+        // faixa de x com pouca aderência; fator 1 fecha a faixa aberta
+        if (zona) { zona.x1 = x; zonas.push(zona); zona = null; }
+        if (p !== 1) zona = { x0: x, x1: Infinity, f: p };
+      } else if (tipo === 'bandeira') {
+        // checkpoint num trecho plano: reabastece e vira o ponto de volta
+        arco(0, CURVA);
+        itens.push({ tipo: 'bandeira', x: x + 60, y, seg: segs.length, pego: false });
+        reto(220);
+      }
+      else if (tipo === 'nitro') { arco(0, CURVA); reto(p); segs[segs.length - 1].boost = true; }
+      else if (tipo === 'mesa') {
+        // Trapézio: sobe, topo plano, desce. Parede vertical não serve: o pneu
+        // encostado nela recebe tração pra cima e capota o caminhão sozinho.
+        arco(0, CURVA);
+        const r = p * 1.6;
+        mesas.push([[x, y], [x + r, y - p], [x + r + q, y - p], [x + r * 2 + q, y]]);
+        ponto(x + r, y - p); ponto(x + r + q, y - p); ponto(x + r * 2 + q, y);
+      } else if (tipo === 'rampao') { arco(-rad(p), q); }   // quarto de pipe
+      else if (tipo === 'moedas') pedidos.push({ i: segs.length, n: p, tipo: 'moeda', alto: q });
+      else if (tipo === 'lata' || tipo === 'chave') pedidos.push({ i: segs.length, n: 1, tipo });
+      else if (tipo === 'carros') pedidos.push({ i: segs.length, n: p, tipo: 'carro' });
+      else if (tipo === 'caixas') pedidos.push({ i: segs.length, n: p, tipo: 'caixa' });
+      else if (tipo === 'barris') pedidos.push({ i: segs.length, n: p, tipo: 'barril' });
+      else if (tipo === 'onibus' || tipo === 'muro') pedidos.push({ i: segs.length, n: 1, tipo });
+      else if (tipo === 'chegada') { arco(0, CURVA); fim = x; reto(360); }
+    }
+    trechos.push(trecho);
+    if (zona) { zona.x1 = x; zonas.push(zona); }
+    // Itens seguem a pista a partir do ponto pedido. Sucata fica no chão,
+    // em fila; moeda, lata e chave flutuam e fazem o arco por cima dos vãos.
+    let semente = 0;
+    for (const { i, n, tipo, alto: pedido } of pedidos) {
+      const o = OBST[tipo];
+      let k = i, d = o ? o.w + 20 : 30;
+      const passo = o ? o.passo : 46, alto = pedido || 38;
+      for (let c = 0; c < n; c++, d += passo) {
+        while (k < segs.length && d > segs[k].len) { d -= segs[k].len; k++; }
+        if (k >= segs.length) break;
+        const s = segs[k], t = d / s.len, prox = segs[k + 1];
+        if (o) {
+          itens.push({ tipo, x: s.x0 + (s.x1 - s.x0) * t, y: s.y0 + (s.y1 - s.y0) * t, w: o.w, h: o.h,
+            ang: Math.atan2(s.y1 - s.y0, s.x1 - s.x0), v: semente++, pego: false });
+          continue;
+        }
+        if (prox && t > 0.98 && Math.hypot(prox.x0 - s.x1, prox.y0 - s.y1) > 4) {
+          const falta = n - c, ax = s.x1, ay = s.y1, bx = prox.x0, by = prox.y0;
+          const arcoAlto = Math.hypot(bx - ax, by - ay) * 0.22;
+          for (let j = 0; j < falta; j++) {
+            const u = (j + 0.5) / falta;
+            itens.push({ tipo, x: ax + (bx - ax) * u, y: ay + (by - ay) * u - arcoAlto * 4 * u * (1 - u) - 34, pego: false });
+          }
+          break;
+        }
+        itens.push({ tipo, x: s.x0 + (s.x1 - s.x0) * t + s.nx * alto, y: s.y0 + (s.y1 - s.y0) * t + s.ny * alto, pego: false });
+      }
+    }
+    const moedas = itens.filter(i => i.tipo === 'moeda').length;
+    const sucata = itens.filter(i => OBST[i.tipo]).length;
+    const bandeiras = itens.filter(i => i.tipo === 'bandeira');
+    return { segs, trechos, itens, mesas, zonas, bandeiras, moedas, sucata, fim, y0: 0, fundo: fundo + 420 };
+  }
+
+  // cp: bandeira de onde o caminhão renasce, parado, de tanque cheio e lataria nova
+  function novoCaminhao(pista, modelo = 0, up = null, cp = null) {
+    const k = ajustesDe(modelo, up);
+    return {
+      modelo, ajustes: k,
+      x: cp ? cp.x : 80, y: (cp ? cp.y : pista.y0) - k.altura - k.raio + 3, vx: 0, vy: 0, a: 0, w: 0,
+      gas: false, freio: false, seg: cp ? cp.seg : 0, chao: 2, ar: 0, giro: 0, flipsAr: 0, estavel: 0,
+      gasolina: K.tanque, saude: K.saude, moedas: 0, sucata: 0, destruidos: 0, flips: 0,
+      ev: [], morto: '', cp, choques: [false, false],
+      rodas: [
+        { lx: -k.eixo / 2, ly: k.altura, comp: 0, chao: true, spin: 0, vt: 0 },
+        { lx: k.eixo / 2, ly: k.altura, comp: 0, chao: true, spin: 0, vt: 0 },
+      ],
+    };
+  }
+
+  // Lataria: blindagem corta uma fração do dano. Zerou, o caminhão quebra.
+  function ferir(car, d, fonte) {
+    d *= 1 - car.ajustes.blindagem;
+    if (d <= 0 || car.morto) return;
+    car.saude = Math.max(0, car.saude - d);
+    car.ev.push({ tipo: 'dano', d, fonte });
+    if (car.saude <= 0) car.morto = 'quebrou';
+  }
+
+  function maisPerto(s, px, py) {
+    const dx = s.x1 - s.x0, dy = s.y1 - s.y0;
+    const t = clamp(((px - s.x0) * dx + (py - s.y0) * dy) / (s.len * s.len), 0, 1);
+    return [s.x0 + dx * t, s.y0 + dy * t, t];
+  }
+
+  // Um subpasso. Corpo rígido (x, y, a) com duas rodas presas ao chassi. Cada
+  // roda que penetra a pista recebe mola + amortecedor; passou do curso, bate
+  // no batente rígido, e é aí que a lataria amassa.
+  function passo(car, pista, dt) {
+    const K = car.ajustes;
+    const segs = pista.segs;
+    const i0 = Math.max(0, car.seg - JANELA), i1 = Math.min(segs.length - 1, car.seg + JANELA);
+    const fx = Math.cos(car.a), fy = Math.sin(car.a);   // frente do caminhão
+    const dx = -fy, dy = fx;                             // "baixo" do caminhão
+    car.vy += K.g * dt;
+    let aderencia = 1;
+    for (const z of pista.zonas || []) if (car.x >= z.x0 && car.x < z.x1) aderencia = Math.max(z.f, K.cravo);
+
+    // 0. gasolina: drena sempre, mais ainda com o pé no fundo
+    if (car.gasolina > 0) car.gasolina = Math.max(0, car.gasolina - (K.dreno + (car.gas ? K.drenoGas : 0)) * dt);
+    const motorOn = car.gasolina > 0;
+    // lataria amassada rende menos: com metade da saúde, o motor perde ~28%
+    const vigor = 0.45 + 0.55 * car.saude / K.saude;
+
+    // 1. geometria: penetração e direção de empurrão de cada roda
+    let chao = 0;
+    for (const r of car.rodas) {
+      r.ax = car.x + fx * r.lx + dx * r.ly;
+      r.ay = car.y + fy * r.lx + dy * r.ly;
+      r.pen = 0;
+      for (let i = i0; i <= i1; i++) {
+        const s = segs[i];
+        const [cx, cy, t] = maisPerto(s, r.ax, r.ay);
+        const vx = r.ax - cx, vy = r.ay - cy, d = Math.hypot(vx, vy);
+        if (d >= K.raio) continue;
+        const lado = vx * s.nx + vy * s.ny;
+        let p, px, py;
+        if (lado < 0 && t > 0 && t < 1) { p = K.raio - lado; px = s.nx; py = s.ny; }
+        else if (d > 1e-6) { p = K.raio - d; px = vx / d; py = vy / d; }
+        else { p = K.raio; px = s.nx; py = s.ny; }
+        if (p > r.pen) { r.pen = p; r.nx = px; r.ny = py; r.seg = s; }
+      }
+      r.chao = r.pen > 0;
+      if (r.chao) chao++;
+    }
+
+    // 2. forças de contato
+    let boost = null;
+    for (const r of car.rodas) {
+      if (!r.chao) { r.comp *= 0.85; r.spin += r.vt / K.raio * dt; continue; }
+      const ox = r.ax - car.x, oy = r.ay - car.y, nx = r.nx, ny = r.ny;
+      const vpx = car.vx - car.w * oy, vpy = car.vy + car.w * ox;
+      const vn = vpx * nx + vpy * ny;
+      const braco = ox * ny - oy * nx;
+      let N = K.mola * Math.min(r.pen, K.curso) - K.amort * vn;
+      if (N < 0) N = 0;
+      car.vx += N * nx * dt; car.vy += N * ny * dt; car.w += braco * N / K.inercia * dt;
+      if (r.pen > K.curso && vn < 0) {
+        const j = -(1 + K.quique) * vn / (1 + braco * braco / K.inercia);
+        car.vx += j * nx; car.vy += j * ny; car.w += braco * j / K.inercia;
+        const c = (r.pen - K.curso) * 0.5;
+        car.x += nx * c; car.y += ny * c;
+        car.ev.push({ tipo: 'batida', forca: -vn, x: r.ax, y: r.ay + K.raio });
+        if (-vn > K.limiar) ferir(car, (-vn - K.limiar) * K.dano, 'pouso');
+      }
+      r.comp = Math.min(r.pen, K.curso);
+      const tx = -ny, ty = nx;
+      const vt = vpx * tx + vpy * ty;
+      let Ft;
+      if (car.gas && motorOn) Ft = K.motor * vigor / chao * clamp(1 - vt / (K.vmax * (0.75 + 0.25 * vigor)), 0, 1);
+      else if (car.freio) Ft = -Math.sign(vt) * Math.min(K.freio, Math.abs(vt) / dt);
+      else Ft = -Math.sign(vt) * Math.min(K.rolagem, Math.abs(vt) / dt);
+      // Controle de tração: só a roda de trás no chão e o nariz já bem
+      // empinado, o motor alivia. Sem isso, empinava e virava de costas.
+      if (car.gas && motorOn && chao === 1 && r.lx < 0) {
+        const empinado = -anguloCurto(car.a - Math.atan2(r.seg.y1 - r.seg.y0, r.seg.x1 - r.seg.x0));
+        if (empinado > 0.75) Ft = 0; else if (empinado > 0.45) Ft *= 0.25;
+      }
+      const lim = K.grip * aderencia * N;
+      Ft = clamp(Ft, -lim, lim);
+      if (r.seg.boost && vt < K.vboost) boost = { fx: tx, fy: ty };
+      car.vx += Ft * tx * dt; car.vy += Ft * ty * dt;
+      const bx = ox - nx * K.raio, by = oy - ny * K.raio;
+      car.w += (bx * ty - by * tx) * Ft / K.inercia * dt;
+      r.vt = vt; r.spin += vt / K.raio * dt;
+    }
+    if (boost) { car.vx += boost.fx * K.boost * dt; car.vy += boost.fy * K.boost * dt; }
+    // 3. uma roda só no chão e bem inclinado: puxa de volta (barra anti-cavalinho).
+    // No ar o pedal manda na velocidade de giro: segurou gira, soltou nivela.
+    if (chao === 1) {
+      const r = car.rodas.find(x => x.chao), s = r.seg;
+      const rel = anguloCurto(car.a - Math.atan2(s.y1 - s.y0, s.x1 - s.x0));
+      if (Math.abs(rel) > 0.5) car.w += (-rel * 5 - car.w) * Math.min(1, 4 * dt);
+    }
+    if (!chao) {
+      const reto = clamp(-anguloCurto(car.a) * K.nivela, -K.tilt * 0.45, K.tilt * 0.45);
+      const alvo = car.gas === car.freio ? reto : car.gas ? -K.tilt : K.tilt;
+      const k = car.gas || car.freio ? K.tiltResp : 4;
+      car.w += (alvo - car.w) * Math.min(1, k * dt);
+    }
+    // 4. arrasto do ar
+    const v = Math.hypot(car.vx, car.vy), dr = 1 - K.arrasto * v * dt;
+    car.vx *= dr; car.vy *= dr;
+    // 5. integra
+    car.x += car.vx * dt; car.y += car.vy * dt; car.a += car.w * dt;
+    // 6. pouso: perfeito (alinhado depois de um voo de verdade) dá um empurrão
+    if (!chao) car.ar += dt;
+    else if (car.chao === 0) {
+      const r = car.rodas.find(x => x.chao), s = r.seg;
+      const desvio = Math.abs(anguloCurto(car.a - Math.atan2(s.y1 - s.y0, s.x1 - s.x0)));
+      const perfeito = car.ar > 0.45 && desvio < 0.26;
+      if (perfeito) {
+        const tx = (s.x1 - s.x0) / s.len, ty = (s.y1 - s.y0) / s.len;
+        car.vx += tx * K.perfeito; car.vy += ty * K.perfeito;
+      }
+      car.ev.push({ tipo: 'pouso', ar: car.ar, perfeito });
+      car.ar = 0;
+    }
+    car.chao = chao;
+    // 7. flip: giro acumulado enquanto falta roda no chão; conta ao fechar a volta
+    if (chao === 2) {
+      car.estavel += dt;
+      if (car.estavel > 0.2) { car.giro = 0; car.flipsAr = 0; }
+    } else {
+      car.estavel = 0;
+      car.giro += car.w * dt;
+      const n = Math.floor((Math.abs(car.giro) + 0.1 * 2 * Math.PI) / (2 * Math.PI));
+      if (n > car.flipsAr) {
+        car.flipsAr = n; car.flips++;
+        car.ev.push({ tipo: 'flip', n, sentido: car.giro < 0 ? 'back' : 'front' });
+      }
+    }
+    // 8. itens: coleta (moeda, lata, chave), bandeira e sucata no caminho
+    for (const it of pista.itens) {
+      if (it.pego) continue;
+      if (it.tipo === 'bandeira') {
+        if (car.x < it.x) continue;
+        it.pego = true; car.cp = it; car.gasolina = K.tanque;
+        car.ev.push({ tipo: 'bandeira', x: it.x, y: it.y });
+        continue;
+      }
+      const o = OBST[it.tipo];
+      if (o) {
+        // Roda encostou na caixa de colisão: esmaga. Passou por cima no ar, escapou.
+        if (Math.abs(car.x - it.x) > it.w + 70) continue;
+        let toca = null;
+        for (const r of car.rodas) {
+          const qx = clamp(r.ax, it.x - it.w, it.x + it.w), qy = clamp(r.ay, it.y - it.h, it.y);
+          if ((r.ax - qx) ** 2 + (r.ay - qy) ** 2 < K.raio * K.raio) { toca = r; break; }
+        }
+        if (!toca) continue;
+        it.pego = true; car.destruidos++; car.sucata += o.moedas;
+        const vel = Math.hypot(car.vx, car.vy);
+        if (it.tipo === 'barril') ferir(car, 6, 'barril');
+        else if (it.tipo === 'muro') {
+          const fraco = vel < 380;
+          if (fraco) { car.vx *= 0.5; car.vy *= 0.5; }
+          ferir(car, fraco ? 12 : 3, 'muro');
+        }
+        car.vx *= o.freio; car.vy *= o.freio;
+        if (car.chao) { car.vy -= o.pulo; car.w += toca.lx > 0 ? -o.giro : o.giro * 0.6; }
+        car.ev.push({ tipo: 'esmaga', obj: it.tipo, x: it.x, y: it.y - it.h / 2, vel });
+        continue;
+      }
+      if ((car.x - it.x) ** 2 + (car.y - it.y) ** 2 >= K.pega * K.pega) continue;
+      it.pego = true;
+      if (it.tipo === 'lata') car.gasolina = Math.min(K.tanque, car.gasolina + K.lata);
+      else if (it.tipo === 'chave') car.saude = Math.min(K.saude, car.saude + K.conserto);
+      else car.moedas++;
+      car.ev.push({ tipo: it.tipo, x: it.x, y: it.y });
+    }
+    // 9. teto encostou = capotou; para-choque cravado no chão amassa a lataria
+    const gx = Math.cos(car.a), gy = Math.sin(car.a), hx = -gy, hy = gx;
+    for (const lx of K.tetoX) {
+      const px = car.x + gx * lx - hx * K.teto, py = car.y + gy * lx - hy * K.teto;
+      for (let i = i0; i <= i1 && !car.morto; i++) {
+        const s = segs[i];
+        const [cx, cy, t] = maisPerto(s, px, py);
+        const vx = px - cx, vy = py - cy, d = Math.hypot(vx, vy);
+        if (d < 3 || (d < 10 && t > 0 && t < 1 && vx * s.nx + vy * s.ny < 0)) car.morto = 'teto';
+      }
+    }
+    [K.choque, -K.choque].forEach((lx, j) => {
+      const px = car.x + gx * lx, py = car.y + gy * lx;
+      let dentro = false;
+      for (let i = i0; i <= i1 && !dentro; i++) {
+        const s = segs[i];
+        const [cx, cy, t] = maisPerto(s, px, py);
+        const vx = px - cx, vy = py - cy;
+        if (Math.hypot(vx, vy) < 4 || (t > 0 && t < 1 && vx * s.nx + vy * s.ny < 0 && Math.hypot(vx, vy) < 14)) dentro = true;
+      }
+      if (dentro && !car.choques[j]) ferir(car, 4 + Math.hypot(car.vx, car.vy) * 0.01, 'choque');
+      car.choques[j] = dentro;
+    });
+    // 10. progresso: segmento mais perto do centro, dentro da janela
+    let md = Infinity, base = -Infinity;
+    for (let i = i0; i <= i1; i++) {
+      base = Math.max(base, segs[i].y0, segs[i].y1);
+      const [cx, cy] = maisPerto(segs[i], car.x, car.y);
+      const d = (car.x - cx) ** 2 + (car.y - cy) ** 2;
+      if (d < md) { md = d; car.seg = i; }
+    }
+    if (car.y > Math.min(pista.fundo, base + 420)) car.morto = 'queda';
+  }
+
+  // Piloto automático: gás no chão; no ar mira a velocidade de giro que leva o
+  // chassi ao nível. Serve pra calcular o tempo-alvo de cada pista.
+  function piloto(car) {
+    const K = car.ajustes;
+    if (car.chao > 0) { car.gas = true; car.freio = false; return; }
+    const alvo = clamp(-anguloCurto(car.a) * 5, -K.tilt, K.tilt);
+    car.gas = alvo < car.w - 0.4;
+    car.freio = alvo > car.w + 0.4;
+  }
+
+  // Roda a pista inteira sem desenhar nada. O tempo-alvo da terceira estrela
+  // sai daqui, então nunca fica desatualizado quando a pista muda.
+  function correrSozinho(pista, segundos, modelo = 0, up = null) {
+    const car = novoCaminhao(pista, modelo, up);
+    const n = Math.round((segundos || 120) / STEP);
+    let t = 0;
+    for (let i = 0; i < n && !car.morto && car.x < pista.fim; i++) {
+      piloto(car);
+      passo(car, pista, STEP);
+      car.ev.length = 0;
+      t += STEP;
+    }
+    for (const it of pista.itens) it.pego = false;
+    return { t, morto: car.morto, x: car.x, gasolina: car.gasolina, saude: car.saude,
+      moedas: car.moedas, sucata: car.sucata, destruidos: car.destruidos };
+  }
+  // Câmera: o caminhão sempre na tela; o chão embaixo dele também, quando cabe junto.
+  function chaoSob(car, pista, ultimo) {
+    const segs = pista.segs;
+    let y = Infinity;
+    for (let i = Math.max(0, car.seg - 40); i <= Math.min(segs.length - 1, car.seg + 40); i++) {
+      const s = segs[i];
+      if (car.x < Math.min(s.x0, s.x1) || car.x > Math.max(s.x0, s.x1) || s.x0 === s.x1) continue;
+      const sy = s.y0 + (s.y1 - s.y0) * (car.x - s.x0) / (s.x1 - s.x0);
+      if (sy >= car.y - 40 && sy < y) y = sy;
+    }
+    if (y < Infinity) return y;
+    // sobre um vão: o chão que conta é o do outro lado, onde vai pousar
+    for (let i = car.seg; i < Math.min(segs.length, car.seg + 40); i++) {
+      const s = segs[i];
+      if (s.x0 > car.x && s.y0 >= car.y - 40) return s.y0;
+    }
+    return ultimo;
+  }
+  function alvoCamera(car, pista, cam, W, H) {
+    cam.chao = chaoSob(car, pista, cam.chao ?? car.y + 20);
+    const alt = clamp(cam.chao - car.y, 0, 600), v = Math.hypot(car.vx, car.vy);
+    const z = clamp(Math.min(1.3 - alt / 560 - v / 2800, H / (alt + 250)), 0.55, 1.3);
+    const x = car.x + car.vx * 0.22 + 90 / z;
+    let y = car.y - 60 / z + car.vy * 0.03;
+    y = Math.max(y, cam.chao - H / 2 / z + 90);
+    y = clamp(y, car.y - (H / 2 - 100) / z, car.y + (H / 2 - 90) / z);
+    return { x, y, z };
+  }
+  function passoCamera(cam, car, pista, dt, W, H) {
+    const alvo = alvoCamera(car, pista, cam, W, H);
+    const k = 1 - Math.exp(-5 * dt), kz = 1 - Math.exp(-(alvo.z < cam.z ? 6 : 2.5) * dt);
+    cam.z += (alvo.z - cam.z) * kz;
+    cam.x += (alvo.x - cam.x) * k; cam.y += (alvo.y - cam.y) * k;
+    cam.y = Math.max(cam.y, cam.chao - (H / 2 - 50) / cam.z);
+    cam.y = clamp(cam.y, car.y - (H / 2 - 100) / cam.z, car.y + (H / 2 - 90) / cam.z);
+  }
+  // ── fim da física ──
+
+  // ── save ──────────────────────────────────────────
+  // v pra migrar sem apagar o progresso. Nunca renomear a chave.
+  const SAVE_KEY = 'neon-monster-save';
+  const UP_VAZIO = () => ({ motor: 0, suspensao: 0, pneus: 0, blindagem: 0, tanque: 0 });
+  const saveVazio = () => ({ v: 1, aberta: 0, moedas: 0, pistas: {}, carro: 0, comprados: [], up: {} });
+  // O TOURO vem de fábrica; os outros só valem depois de comprados.
+  function modeloSalvo(s) {
+    const c = s.carro;
+    if (!Number.isInteger(c) || c < 0 || c >= CAMINHOES.length) return 0;
+    return c === 0 || (s.comprados || []).includes(c) ? c : 0;
+  }
+  function carregarSave() {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { s = null; }   // JSON corrompido não pode travar o jogo
+    if (!s || typeof s !== 'object') s = saveVazio();
+    const up = {};
+    for (let i = 0; i < CAMINHOES.length; i++) up[i] = { ...UP_VAZIO(), ...((s.up && s.up[i]) || {}) };
+    return { ...saveVazio(), ...s, up, pistas: s.pistas && typeof s.pistas === 'object' ? s.pistas : {},
+      moedas: Math.max(0, Math.floor(+s.moedas || 0)), aberta: clamp(s.aberta | 0, 0, PISTAS.length - 1),
+      comprados: Array.isArray(s.comprados) ? s.comprados.filter(i => Number.isInteger(i) && i > 0 && i < CAMINHOES.length) : [] };
+  }
+  let save = carregarSave();
+  save.carro = modeloSalvo(save);
+  const gravar = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* sem armazenamento o jogo segue */ } };
+  const estrelasDe = n => (save.pistas[n] && save.pistas[n].estrelas) || 0;
+  const totalEstrelas = () => PISTAS.reduce((s, p) => s + estrelasDe(p.n), 0);
+  const META = 0.8;   // fração da sucata que dá a segunda estrela
+
+  // ── estado ────────────────────────────────────────
+  const els = {
+    stage: Neon.$('stage'), hub: Neon.$('hub'), mundos: Neon.$('hubMundos'),
+    hubEstrelas: Neon.$('hubEstrelas'), hubMoedas: Neon.$('hubMoedas'),
+    estrelas: Neon.$('estrelas'), best: Neon.$('best'), fase: Neon.$('fase'), moedas: Neon.$('moedas'),
+    fsTempo: Neon.$('fsTempo'), fsMoedas: Neon.$('fsMoedas'), fsSucata: Neon.$('fsSucata'), fsLataria: Neon.$('fsLataria'),
+    finalStats: Neon.$('finalStats'),
+  };
+  let pistaN = 0, pista = null, alvo = 0, modeloCorrida = save.carro;
+  let car = null, state = 'menu', tempo = 0, acc = 0, fimT = 0, shake = 0, sfxT = 0, combo = 0, comboT = 0;
+  // extra: moedas de acrobacia e pouso perfeito; bonus: lataria que sobrou na chegada
+  let extra = 0, bonus = 0, voltas = 0, paradoT = 0, aba = 'pistas', fumacaT = 0, mundoNovo = null;
+  const ganhoDe = c => c.moedas + c.sucata + extra + bonus;
+  let pb = Neon.best.get('monster');
+  let lastFrame = performance.now();
+  const cam = { x: 0, y: 0, z: 1.3 };
+  const particles = new Neon.Particles();
+  const imersivo = on => document.body.classList.toggle('imersivo', on);
+  let dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  const shakeAt = p => { if (!Neon.motion.reduced) shake = Math.max(shake, p); };
+  const mundoDe = n => MUNDOS[PISTAS[n].mundo];
+  document.getElementById('hubMax').textContent = PISTAS.length * 3;
+
+  function pintarPainel() {
+    els.estrelas.textContent = totalEstrelas();
+    els.moedas.textContent = save.moedas;
+    els.best.textContent = pb;
+    els.fase.textContent = `${pistaN + 1}/${PISTAS.length}`;
+  }
+
+  // ── hub ───────────────────────────────────────────
+  function montarGaragem() {
+    const garagem = Neon.$('garagem');
+    garagem.innerHTML = '';
+    CAMINHOES.forEach((modelo, i) => {
+      const b = document.createElement('button'), aVenda = !!modelo.preco && !save.comprados.includes(i);
+      b.className = 'carro-opcao' + (aVenda ? ' a-venda' : ''); b.style.setProperty('--carro', modelo.neon);
+      b.setAttribute('aria-pressed', String(i === save.carro));
+      const situacao = aVenda ? `🪙 ${modelo.preco} · COMPRAR` : i === save.carro ? '✓ NA PISTA' : 'ESCOLHER';
+      b.setAttribute('aria-label', `${modelo.nome}. ${modelo.descricao} ${situacao}`);
+      const preview = document.createElement('canvas'); preview.width = 280; preview.height = 170;
+      preview.setAttribute('aria-hidden', 'true');
+      b.appendChild(preview);
+      for (const [tag, texto, classe] of [['b', modelo.nome, ''], ['span', modelo.descricao, ''], ['span', situacao, 'situacao']]) {
+        const el = document.createElement(tag); el.textContent = texto; el.className = classe; b.appendChild(el);
+      }
+      b.addEventListener('click', () => {
+        if (aVenda) {
+          if (save.moedas < modelo.preco) { Neon.audio.sfx.wrong(); Neon.toast(`FALTAM ${modelo.preco - save.moedas} MOEDAS`); return; }
+          save.moedas -= modelo.preco; save.comprados.push(i);
+          Neon.audio.sfx.record(); Neon.toast(`🛻 ${modelo.nome} NA GARAGEM!`);
+        } else Neon.audio.sfx.click();
+        save.carro = i; gravar(); montarHub(); garagem.children[i].focus();
+      });
+      garagem.appendChild(b);
+      const c = preview.getContext('2d'), e = 1.85;
+      c.translate(140, 166 - 36 * e); c.scale(e, e);
+      desenharCaminhao({ ...novoCaminhao({ y0: 0 }, i, save.up[i]), x: 0, y: 0 }, c, true);
+    });
+  }
+  function montarMelhorias() {
+    const caixa = Neon.$('melhorias'), modelo = CAMINHOES[save.carro], up = save.up[save.carro];
+    const titulo = Neon.$('oficinaTitulo');
+    titulo.style.setProperty('--carro', modelo.neon);
+    titulo.innerHTML = `MELHORIAS DO <b>${modelo.nome}</b>`;
+    caixa.innerHTML = '';
+    for (const m of MELHORIAS) {
+      const nivel = up[m.id] | 0, custo = CUSTOS[nivel], maximo = nivel >= CUSTOS.length;
+      const b = document.createElement('button');
+      b.className = 'melhoria' + (!maximo && save.moedas < custo ? ' caro' : '');
+      b.disabled = maximo;
+      b.innerHTML = `<span class="ic">${m.icone}</span><b>${m.nome}</b>`
+        + `<span class="pips">${'■'.repeat(nivel)}${'□'.repeat(CUSTOS.length - nivel)}</span>`
+        + `<span class="desc">${m.desc}</span>`
+        + `<span class="preco">${maximo ? 'MÁXIMO' : '🪙 ' + custo}</span>`;
+      b.setAttribute('aria-label', `${m.nome}, nível ${nivel} de ${CUSTOS.length}. ${m.desc}. ${maximo ? 'No máximo' : 'Custa ' + custo + ' moedas'}`);
+      b.addEventListener('click', () => {
+        if (save.moedas < custo) {
+          Neon.audio.sfx.wrong();
+          Neon.toast(`FALTAM ${custo - save.moedas} MOEDAS`);
+          return;
+        }
+        save.moedas -= custo; up[m.id] = nivel + 1; gravar();
+        Neon.audio.sfx.level();
+        Neon.toast(`${m.icone} ${m.nome} NÍVEL ${nivel + 1}!`);
+        montarHub();
+        Neon.$('melhorias').children[MELHORIAS.indexOf(m)].focus();
+      });
+      caixa.appendChild(b);
+    }
+  }
+  function mostrarAba(qual) {
+    aba = qual;
+    Neon.$('abaPistas').setAttribute('aria-pressed', String(qual === 'pistas'));
+    Neon.$('abaGaragem').setAttribute('aria-pressed', String(qual === 'garagem'));
+    els.mundos.classList.toggle('hidden', qual !== 'pistas');
+    Neon.$('oficina').classList.toggle('hidden', qual !== 'garagem');
+  }
+  Neon.$('abaPistas').addEventListener('click', () => { Neon.audio.sfx.click(); mostrarAba('pistas'); });
+  Neon.$('abaGaragem').addEventListener('click', () => { Neon.audio.sfx.click(); mostrarAba('garagem'); });
+  function montarHub() {
+    montarGaragem();
+    montarMelhorias();
+    mostrarAba(aba);
+    els.mundos.innerHTML = '';
+    for (const [mi, mundo] of MUNDOS.entries()) {
+      const bloco = document.createElement('div');
+      bloco.className = 'hub-mundo';
+      bloco.style.setProperty('--mundo', mundo.trilho);
+      bloco.style.setProperty('--mundo-borda', mundo.trilho + '8c');
+      bloco.style.setProperty('--mundo-fundo', mundo.trilho + '1f');
+      bloco.style.setProperty('--mundo-hover', mundo.trilho + '3d');
+      const rot = document.createElement('span');
+      rot.textContent = mundo.nome;
+      const grade = document.createElement('div');
+      grade.className = 'hub-grade';
+      for (const [pi, p] of mundo.pistas.entries()) {
+        const n = mi * 3 + pi, e = estrelasDe(n), travada = n > save.aberta;
+        const b = document.createElement('button');
+        b.className = 'fase' + (travada ? ' travada' : e === 3 ? ' feita' : '');
+        b.disabled = travada;
+        b.innerHTML = `<span class="n">${travada ? '🔒' : n + 1}</span>`
+          + `<span class="nome">${p.nome}</span>`
+          + `<span class="estrelas">${travada ? '' : '★'.repeat(e) + '☆'.repeat(3 - e)}</span>`;
+        b.setAttribute('aria-label', travada ? `Fase ${n + 1} trancada` : `Fase ${n + 1}, ${p.nome}, ${e} de 3 estrelas`);
+        if (!travada) b.addEventListener('click', () => { Neon.audio.ensure(); jogar(n); });
+        grade.appendChild(b);
+      }
+      bloco.append(rot, grade);
+      els.mundos.appendChild(bloco);
+    }
+    els.hubEstrelas.textContent = totalEstrelas();
+    els.hubMoedas.textContent = save.moedas;
+  }
+  function abrirHub(qual) {
+    if (typeof qual === 'string') aba = qual;
+    preso.clear(); toques.clear();
+    state = 'hub';
+    Neon.audio.music.stop();
+    Neon.overlay.hide();
+    montarHub();
+    els.hub.classList.remove('hidden');
+    imersivo(true);
+    pintarPainel();
+  }
+  const fecharHub = () => els.hub.classList.add('hidden');
+
+  // ── corrida ───────────────────────────────────────
+  function jogar(n) {
+    pistaN = n;
+    modeloCorrida = modeloSalvo(save);
+    fecharHub();
+    Neon.overlay.hide();
+    pista = compilar(PISTAS[n].pecas);
+    // Tempo-alvo calculado na hora pelo piloto automático, com 40% de folga,
+    // sempre com o caminhão de fábrica: as melhorias ajudam a bater o alvo.
+    alvo = correrSozinho(pista, 150, modeloCorrida).t * 1.4;
+    imersivo(true);
+    reiniciar();
+  }
+  function reiniciar() {
+    Neon.overlay.hide(); preso.clear(); toques.clear(); mundoNovo = null;
+    car = novoCaminhao(pista, modeloCorrida, save.up[modeloCorrida]);
+    for (const it of pista.itens) it.pego = false;
+    tempo = 0; acc = 0; fimT = 0; combo = 0; comboT = 0; extra = 0; bonus = 0; voltas = 0; paradoT = 0;
+    cam.x = car.x + 200; cam.y = car.y - 80; cam.z = 1.3;
+    particles.clear();
+    els.finalStats.style.display = 'none';
+    state = 'playing';
+    lastFrame = performance.now();
+    pintarPainel();
+    Neon.audio.music.start();
+  }
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    preso.clear(); toques.clear();
+    Neon.audio.sfx.pause(); Neon.audio.music.stop();
+    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para retomar. ESC volta às fases.', 'CONTINUAR');
+  }
+  function resumeGame() {
+    if (state !== 'paused') return;
+    state = 'playing'; lastFrame = performance.now();
+    Neon.overlay.hide(); Neon.audio.music.start();
+  }
+  // Volta na última bandeira, parado, de tanque cheio e com a lataria nova. O
+  // que já foi esmagado fica esmagado e o relógio não para.
+  function renascer() {
+    if (!car.cp) { reiniciar(); return; }
+    const velho = car;
+    car = novoCaminhao(pista, modeloCorrida, save.up[modeloCorrida], velho.cp);
+    for (const k of ['moedas', 'sucata', 'destruidos', 'flips']) car[k] = velho[k];
+    voltas++; combo = 0; comboT = 0; paradoT = 0; acc = 0;
+    preso.clear(); toques.clear();
+    cam.x = car.x + 200; cam.y = car.y - 80;
+    state = 'playing';
+    particles.wave(car.x, car.y, '#efce95', 120);
+    Neon.audio.sfx.boost();
+    Neon.audio.music.start();
+    Neon.toast('🔧 LATARIA NOVA NA BANDEIRA');
+  }
+  // Com motivo é pane (gasolina, travou): o caminhão fica na tela e só volta
+  // pra bandeira. Sem motivo é batida de verdade, e ele explode.
+  let explodiu = false;
+  function explodir(motivo) {
+    state = 'morto'; fimT = 0; explodiu = !motivo;
+    Neon.audio.music.down();
+    if (motivo) { Neon.audio.sfx.wrong(); Neon.toast(motivo); return; }
+    const m = CAMINHOES[car.modelo];
+    particles.burst(car.x, car.y, '#ffb347', 30, 280, 4.5);
+    particles.burst(car.x, car.y, m.neon, 18, 200, 3.5);
+    particles.wave(car.x, car.y, '#ed887f', 180);
+    for (let i = 0; i < 9; i++) {
+      particles.emit(car.x, car.y, (Math.random() - 0.3) * 340, -Math.random() * 400,
+        i % 3 ? m.cor : '#1a1d24', 6 + Math.random() * 6, 1.5);
+    }
+    shakeAt(16);
+    Neon.audio.sfx.boom();
+    const tema = mundoDe(pistaN).tema;
+    Neon.toast(car.morto === 'queda' ? (tema === 'vulcao' ? 'CAIU NA LAVA!' : tema === 'geleira' ? 'CAIU NA FENDA!' : 'CAIU!')
+      : car.morto === 'quebrou' ? 'LATARIA DESTRUÍDA!' : 'CAPOTOU!');
+  }
+  // ★ chegar · ★ esmagar 80% da sucata · ★ bater o tempo-alvo.
+  // As três podem vir em corridas diferentes: o save guarda o melhor de cada.
+  function chegou() {
+    state = 'chegou'; fimT = 0;
+    bonus = Math.round(car.saude / 10);
+    const esmagou = car.destruidos >= Math.ceil(pista.sucata * META);
+    const ganhas = 1 + (esmagou ? 1 : 0) + (tempo <= alvo ? 1 : 0);
+    const antes = save.pistas[pistaN] || { estrelas: 0, tempo: 0, sucata: 0 };
+    save.pistas[pistaN] = {
+      estrelas: Math.max(antes.estrelas, ganhas),
+      tempo: antes.tempo ? Math.min(antes.tempo, tempo) : tempo,
+      sucata: Math.max(antes.sucata || 0, car.destruidos),
+    };
+    save.moedas += ganhoDe(car);
+    // Liberar nunca volta atrás: a fase aberta é sempre a mais longe que já se chegou.
+    if (pistaN === save.aberta && pistaN + 1 < PISTAS.length) {
+      save.aberta = pistaN + 1;
+      if (PISTAS[pistaN + 1].mundo !== PISTAS[pistaN].mundo) mundoNovo = MUNDOS[PISTAS[pistaN + 1].mundo];
+    }
+    gravar();
+    const total = totalEstrelas();
+    pb = Neon.best.update('monster', total);
+    pintarPainel();
+    particles.burst(car.x, car.y - 30, '#a8dba0', 24, 200, 3);
+    Neon.audio.sfx.record();
+    if (ganhas === 3) Neon.audio.sfx.level();
+  }
+  function telaResultado() {
+    state = 'resultado';
+    Neon.audio.music.stop();
+    const g = save.pistas[pistaN].estrelas, agora = tempo, meta = Math.ceil(pista.sucata * META);
+    els.fsTempo.textContent = agora.toFixed(2) + 's';
+    els.fsMoedas.textContent = `+${ganhoDe(car)}`;
+    els.fsSucata.textContent = `${car.destruidos}/${pista.sucata}`;
+    els.fsLataria.textContent = `${Math.round(car.saude)}%`;
+    els.finalStats.style.display = '';
+    const linha = (ok, txt) => `<span class="key" style="opacity:${ok ? 1 : 0.4}">${ok ? '★' : '☆'} ${txt}</span>`;
+    const ultima = pistaN + 1 >= PISTAS.length;
+    // dica de garagem: o próximo caminhão à venda que já cabe no bolso
+    const pode = CAMINHOES.findIndex((c, i) => c.preco && !save.comprados.includes(i) && save.moedas >= c.preco);
+    const dica = pode > 0 ? ` Já dá pra comprar o ${CAMINHOES[pode].nome} na garagem!` : '';
+    Neon.overlay.show(
+      mundoNovo ? `MUNDO NOVO: ${mundoNovo.nome}!` : g === 3 ? 'TRÊS ESTRELAS!' : 'PISTA FECHADA',
+      `${PISTAS[pistaN].nome} · ${'★'.repeat(g)}${'☆'.repeat(3 - g)} · moedas ${car.moedas}/${pista.moedas}, sucata +${car.sucata}, acrobacias +${extra}, lataria +${bonus}`
+        + (voltas ? ` · voltou ${voltas}× na bandeira` : '') + dica,
+      ultima ? 'DE NOVO' : 'PRÓXIMA',
+      g === 3 ? 'record' : '',
+      linha(true, 'chegar')
+      + linha(car.destruidos >= meta, `esmagar ${meta} de ${pista.sucata} (você: ${car.destruidos})`)
+      + linha(agora <= alvo, `fechar em ${alvo.toFixed(1)}s`)
+      + '<br><span class="key" id="btnFases" style="cursor:pointer">← FASES</span>'
+      + '<span class="key" id="btnDeNovo" style="cursor:pointer">↻ DE NOVO</span>'
+      + `<span class="key" id="btnGaragem" style="cursor:pointer">🔧 GARAGEM · 🪙 ${save.moedas}</span>`);
+    const f = Neon.$('btnFases'), d = Neon.$('btnDeNovo'), o = Neon.$('btnGaragem');
+    if (f) f.addEventListener('click', () => abrirHub('pistas'));
+    if (o) o.addEventListener('click', () => abrirHub('garagem'));
+    if (d) d.addEventListener('click', reiniciar);
+  }
+  // cor da sucata pra os estilhaços: cada tipo solta o pedaço da cor dele
+  const CACO = { carro: '#c7d6e1', onibus: '#f2c230', caixa: '#c08a52', barril: '#ff5a1f', muro: '#b0614a' };
+  function tratar(ev) {
+    if (ev.tipo === 'flip') {
+      // cada flip do combo vale mais: 1, 2, 3...
+      combo++; comboT = 2; extra += combo;
+      Neon.audio.sfx.golden();
+      const nome = ev.sentido === 'back' ? 'BACKFLIP' : 'FRONTFLIP';
+      particles.float(car.x, car.y - 80, `${nome}${combo > 1 ? ' x' + combo : '!'} +${combo}🪙`, '#efce95', 24);
+    } else if (ev.tipo === 'pouso' && ev.perfeito) {
+      extra++;
+      Neon.audio.sfx.boost();
+      particles.float(car.x, car.y - 56, 'POUSO PERFEITO! +1🪙', '#9be7ce', 18);
+      particles.burst(car.x, car.y + 30, '#9be7ce', 12, 160, 2.5);
+      shakeAt(3);
+    } else if (ev.tipo === 'esmaga') {
+      const o = OBST[ev.obj], cor = CACO[ev.obj];
+      if (ev.obj === 'barril') {
+        Neon.audio.sfx.boom();
+        particles.burst(ev.x, ev.y, '#ffb347', 20, 260, 4);
+        particles.burst(ev.x, ev.y, '#ff3b1f', 12, 180, 5);
+        particles.wave(ev.x, ev.y, '#ff8a3c', 110);
+        shakeAt(9);
+      } else {
+        Neon.audio.sfx.crunch(ev.obj === 'onibus' || ev.obj === 'muro' ? 1 : 0);
+        particles.burst(ev.x, ev.y, cor, ev.obj === 'onibus' ? 22 : 12, 200, 3.5);
+        if (ev.obj === 'carro' || ev.obj === 'onibus') particles.burst(ev.x, ev.y - 6, '#d9f3ff', 6, 140, 1.8);   // vidro
+        shakeAt(ev.obj === 'onibus' || ev.obj === 'muro' ? 7 : 4);
+      }
+      particles.float(ev.x, ev.y - 30, `+${o.moedas}🪙`, '#efce95', 15);
+    } else if (ev.tipo === 'dano') {
+      if (ev.d >= 4) {
+        particles.float(car.x - 20, car.y - 60, `-${Math.round(ev.d)}`, '#ff6b5a', 16);
+        particles.burst(car.x, car.y, '#ffd36b', 8, 200, 2);   // faísca
+        if (performance.now() - sfxT > 150) { sfxT = performance.now(); Neon.audio.sfx.hit(); }
+      }
+      if (car.saude < 25 && car.saude + ev.d >= 25) Neon.toast('⚠️ LATARIA CRÍTICA · ACHE UMA 🔧');
+    } else if (ev.tipo === 'bandeira') {
+      Neon.audio.sfx.level();
+      Neon.toast('🚩 CHECKPOINT · TANQUE CHEIO');
+      particles.burst(ev.x, ev.y - 90, '#a8dba0', 22, 200, 3);
+    } else if (ev.tipo === 'moeda') {
+      Neon.audio.sfx.point();
+      particles.burst(ev.x, ev.y, '#efce95', 6, 90, 2.5);
+    } else if (ev.tipo === 'lata') {
+      Neon.audio.sfx.eat(1);
+      particles.burst(ev.x, ev.y, '#ed887f', 10, 120, 3);
+      particles.float(ev.x, ev.y - 20, '+GASOLINA', '#ed887f', 15);
+    } else if (ev.tipo === 'chave') {
+      Neon.audio.sfx.level();
+      particles.burst(ev.x, ev.y, '#a8dba0', 14, 140, 3);
+      particles.float(ev.x, ev.y - 22, '+LATARIA', '#a8dba0', 16);
+    } else if (ev.tipo === 'pouso' && ev.ar > 0.35) {
+      Neon.audio.sfx.drop();
+      particles.burst(car.x, car.y + 32, mundoDe(pistaN).terra, 10, 150, 3);
+      shakeAt(4);
+    } else if (ev.tipo === 'batida' && ev.forca > 200 && performance.now() - sfxT > 120) {
+      sfxT = performance.now();
+      Neon.audio.sfx.drop();
+      shakeAt(Math.min(10, ev.forca / 70));
+    }
+  }
+
+  // ── input ─────────────────────────────────────────
+  const preso = new Set(), toques = new Map();
+  const TEC = { arrowright: 'gas', d: 'gas', arrowup: 'gas', w: 'gas',
+                arrowleft: 'freio', a: 'freio', arrowdown: 'freio', s: 'freio' };
+  const correndo = () => state === 'playing' || state === 'morto' || state === 'chegou';
+  document.addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    if (e.target.closest?.('button, a') && (k === 'enter' || k === ' ')) return;
+    if (k === 'escape') { if (state !== 'menu') abrirHub(); return; }
+    if (k === 'p') { state === 'playing' ? pauseGame() : resumeGame(); return; }
+    if (k === 'r') { if (correndo() || state === 'resultado') reiniciar(); return; }
+    if (k in TEC) {
+      e.preventDefault();
+      preso.add(TEC[k]);
+      if (state === 'menu') abrirHub();
+      return;
+    }
+    if (k === 'enter' || k === ' ') {
+      e.preventDefault();
+      if (state === 'menu') abrirHub();
+      else if (state === 'paused') resumeGame();
+      else if (state === 'resultado') proxima();
+    }
+  });
+  document.addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k in TEC) preso.delete(TEC[k]); });
+
+  const paraQuadro = e => {
+    const r = els.stage.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
+  };
+  els.stage.addEventListener('pointerdown', e => {
+    if (e.target.closest?.('.sound-toggle, .pause-toggle, .overlay, .back-btn, .hub')) return;
+    e.preventDefault();
+    if (e.pointerType !== 'mouse') dedo = true;
+    if (!correndo()) return;
+    toques.set(e.pointerId, paraQuadro(e).x < W / 2 ? 'freio' : 'gas');
+  });
+  const soltar = e => toques.delete(e.pointerId);
+  window.addEventListener('pointerup', soltar);
+  window.addEventListener('pointercancel', soltar);
+  els.stage.addEventListener('contextmenu', e => e.preventDefault());
+
+  function proxima() {
+    if (pistaN + 1 < PISTAS.length && estrelasDe(pistaN) > 0) jogar(pistaN + 1);
+    else reiniciar();
+  }
+  Neon.$('startBtn').addEventListener('click', () => {
+    if (state === 'paused') resumeGame();
+    else if (state === 'resultado') proxima();
+    else abrirHub();
+  });
+  Neon.onHide(() => { if (state === 'playing') pauseGame(); });
+
+  // ── caminhões ─────────────────────────────────────
+  // Carrocerias desenhadas à mão em caminhos SVG (Path2D). Tudo em coordenadas
+  // do chassi: x pra frente, y pra baixo, centro de massa na origem, rodas em
+  // (±eixo/2, altura). A carroceria fica no alto, por cima dos pneus gigantes;
+  // o que passa do teto (chifre, cristal) fica fora dos pontos que a física testa.
+  const traco = (pts, fechar, contexto = ctx) => {
+    contexto.beginPath(); contexto.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) contexto.lineTo(pts[i][0], pts[i][1]);
+    if (fechar) contexto.closePath();
+  };
+  const _paths = new Map();
+  const P = d => { let p = _paths.get(d); if (!p) { p = new Path2D(d); _paths.set(d, p); } return p; };
+  const pinta = (c, d, fill, stroke, lw) => {
+    const p = P(d);
+    if (fill) { c.fillStyle = fill; c.fill(p); }
+    if (stroke) { c.strokeStyle = stroke; c.lineWidth = lw || 0.6; c.stroke(p); }
+  };
+  const linha = (c, d, cor, lw) => { c.strokeStyle = cor; c.lineWidth = lw; c.stroke(P(d)); };
+  const vgrad = (c, y0, y1, stops) => {
+    const g = c.createLinearGradient(0, y0, 0, y1);
+    for (const [t, cor] of stops) g.addColorStop(t, cor);
+    return g;
+  };
+  // pseudo-aleatório fixo por índice: amassado, prédio e estrela não mudam de lugar
+  const hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+  // lataria: cor com luz de cima, linha de cintura escura e brilho no topo
+  function lataria(c, d, m) {
+    const topo = d.topo, base = d.base;
+    pinta(c, d.corpo, vgrad(c, topo, base, [[0, m.claro], [0.2, m.cor], [0.58, m.cor], [0.6, m.escuro], [0.72, m.cor], [1, m.escuro]]));
+    c.save(); c.clip(P(d.corpo));
+    const g = c.createLinearGradient(0, topo, 0, topo + 7);
+    g.addColorStop(0, '#ffffff70'); g.addColorStop(1, '#ffffff00');
+    c.fillStyle = g; c.fillRect(-60, topo, 120, 7);
+    c.fillStyle = vgrad(c, base - 6, base, [[0, '#00000000'], [1, '#00000088']]);
+    c.fillRect(-60, base - 6, 120, 7);
+    c.restore();
+    pinta(c, d.corpo, null, '#06080d', 1);
+  }
+  function vidro(c, d, tom = '#3a6f8f') {
+    const p = P(d), b = c.createLinearGradient(-20, -36, 20, -20);
+    b.addColorStop(0, '#d9f3ff'); b.addColorStop(0.35, tom); b.addColorStop(1, '#070d18');
+    c.fillStyle = b; c.fill(p);
+    c.save(); c.clip(p);
+    c.fillStyle = '#ffffff38';
+    c.beginPath(); c.moveTo(-14, -20); c.lineTo(-4, -40); c.lineTo(0, -40); c.lineTo(-10, -20); c.fill();
+    c.beginPath(); c.moveTo(2, -20); c.lineTo(12, -40); c.lineTo(14, -40); c.lineTo(4, -20); c.fill();
+    c.restore();
+    c.strokeStyle = '#04070c'; c.lineWidth = 1; c.stroke(p);
+  }
+  function farol(c, x, y, w, h, cor, aceso) {
+    c.fillStyle = cor; if (aceso) Neon.glow(c, cor, 14);
+    c.beginPath(); c.ellipse(x, y, w, h, 0, 0, Math.PI * 2); c.fill(); c.shadowBlur = 0;
+    c.fillStyle = '#ffffffcc'; c.beginPath(); c.ellipse(x - w * 0.3, y - h * 0.3, w * 0.35, h * 0.3, 0, 0, Math.PI * 2); c.fill();
+  }
+  function lanterna(c, x, y, freando) {
+    c.fillStyle = freando ? '#ff5a4d' : '#a3202c'; if (freando) Neon.glow(c, '#ff5a4d', 14);
+    c.beginPath(); c.roundRect(x, y, 2.4, 4.4, 1); c.fill(); c.shadowBlur = 0;
+  }
+  // escapamento cromado vertical: tubo com brilho
+  function chamine(c, x, y0, y1, larg = 2.6) {
+    c.fillStyle = vgrad(c, y1, y0, [[0, '#ffffff'], [0.4, '#9aa4ad'], [1, '#e2e8ee']]);
+    c.fillRect(x - larg / 2, y1, larg, y0 - y1);
+    c.fillStyle = '#2a2f38'; c.fillRect(x - larg / 2 - 0.4, y1 - 1, larg + 0.8, 1.4);
+  }
+  // Caixas de roda centradas na roda de verdade: o desenho troca ARCOS pelos
+  // dois arcos, da frente pra trás.
+  function arcosDe(k, base) {
+    const r = k.raio + 3, dy = k.altura - base, dx = Math.sqrt(Math.max(0, r * r - dy * dy)), e = k.eixo / 2;
+    const f = v => v.toFixed(2);
+    return `L${f(e + dx)} ${base} A${r} ${r} 0 0 0 ${f(e - dx)} ${base} L${f(-e + dx)} ${base} A${r} ${r} 0 0 0 ${f(-e - dx)} ${base}`;
+  }
+
+  // Cada caminhão: corpo (silhueta), vidros e o resto em detalhes(c, m, s),
+  // onde s traz o estado do quadro (freando, acelerando, tempo).
+  const DESENHOS = [
+    { // TOURO BRAVO: picape clássica amarela, faixas azuis e chifres no teto
+      topo: -37, base: -2, aro: 'estrela', farolCor: '#fff3c5', farol: [51.5, -13], lanterna: [-52, -17],
+      escapes: [[-20, -33]], chama: '#ffb347',
+      corpo: 'M-50.5 -2 L-51.5 -17 C-51.5 -19.5 -50 -21 -47.5 -21 L-17 -21 L-16 -32.5 C-15.6 -35.6 -13.6 -37 -10.5 -37 L6.5 -37 C9.5 -37 11 -35.8 12.3 -33.4 L18.6 -22.2 C30 -21.6 41 -20.6 47.6 -18.6 C51 -17.6 52.6 -15 52.6 -11 L52 -2 ARCOS Z',
+      vidros: ['M-13.4 -22.6 L-12.8 -32 C-12.5 -34 -11.4 -34.8 -9.5 -34.8 L-2 -34.8 L-2 -22.6 Z', 'M0 -34.8 L6 -34.8 C8 -34.8 9.2 -34 10.2 -32.2 L15.6 -22.6 L0 -22.6 Z'],
+      detalhes(c, m) {
+        // faixas de corrida azuis de ponta a ponta
+        c.save(); c.clip(P(this.corpo));
+        pinta(c, 'M-56 -14.6 L56 -14.6 L56 -11.8 L-56 -11.8 Z', m.neon);
+        pinta(c, 'M-56 -10.6 L56 -10.6 L56 -9.4 L-56 -9.4 Z', m.neon);
+        linha(c, 'M-2 -22.6 L-2 -3 M16.6 -21.6 C17.2 -15 17 -9 16 -3', '#3a2206', 0.8);
+        c.restore();
+        linha(c, 'M-50.5 -20.6 L-17 -20.6', m.claro, 1.2);   // borda da caçamba
+        // número na porta
+        Neon.circle(c, 7, -16, 4.6, '#fff6e0'); c.strokeStyle = m.neon; c.lineWidth = 0.8; c.stroke();
+        c.fillStyle = '#1b2433'; c.font = 'italic 900 5.6px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('01', 7, -15.8);
+        c.fillStyle = m.escuro; c.font = '900 5px sans-serif'; c.fillText('TOURO', -33, -15.6);
+        // grade cromada e para-choque de tubo
+        for (let i = 0; i < 3; i++) linha(c, `M50.6 ${-9 + i * 2.4} L52.6 ${-9 + i * 2.4}`, '#e2e8ee', 1);
+        linha(c, 'M50 -1 L55 -1 L55.6 -10 M-50 -1 L-54.4 -1 L-54.4 -9', '#c7d6e1', 2.2);
+        // chifres no teto: a marca do touro
+        const marfim = vgrad(c, -50, -36, [[0, '#3a2a18'], [0.25, '#c9b48a'], [1, '#fff4d6']]);
+        pinta(c, 'M-7 -36.6 C-13 -38 -19 -40.5 -22 -48.5 C-16 -44.4 -10.6 -42.6 -4 -40 Z', marfim, '#2a1a0a', 0.6);
+        pinta(c, 'M3 -36.6 C9 -38 15 -40.5 18 -48.5 C12 -44.4 6.6 -42.6 0 -40 Z', marfim, '#2a1a0a', 0.6);
+        pinta(c, 'M-9 -36.4 C-6 -39 2 -39 5 -36.4 Z', '#3a2a18');
+        chamine(c, -20, -21, -33);
+      },
+    },
+    { // COVEIRO: furgão anos 50, preto, cemitério pintado e olhos verdes
+      topo: -37, base: -2, aro: 'caveira', farolCor: '#9dff8a', farol: [51.4, -12], lanterna: [-52.2, -15],
+      escapes: [[17, -31], [21, -31]], chama: '#7dff6a', tom: '#1d5a32',
+      corpo: 'M-50.5 -2 L-51.8 -16 C-52 -27 -47 -35.5 -35 -36.8 L5 -37 C10 -37 13.2 -34.6 15.6 -30 L19.6 -22.4 C31 -21.8 42 -20.4 48 -17.6 C51.4 -16 52.6 -13 52.6 -9 L52 -2 ARCOS Z',
+      vidros: ['M-1 -22.8 L-1 -34.8 L4.6 -34.8 C8.4 -34.8 10.6 -33 12.6 -29.6 L16.6 -22.8 Z'],
+      detalhes(c, m, s) {
+        c.save(); c.clip(P(this.corpo));
+        // céu roxo e lua no painel de trás
+        pinta(c, 'M-56 -34 L-4 -34 L-4 -8 L-56 -8 Z', vgrad(c, -34, -8, [[0, '#2a0f45'], [1, '#0b0e14']]));
+        Neon.circle(c, -40, -27, 3.6, '#e8f5d0');
+        Neon.circle(c, -38.6, -27.8, 3.2, '#2a0f45');
+        // lápides e cruz recortadas contra o céu
+        c.fillStyle = '#0b0e14';
+        for (const [x, h] of [[-46, 9], [-33, 12], [-20, 8], [-10, 10]]) {
+          c.beginPath(); c.moveTo(x - 3.2, -8); c.lineTo(x - 3.2, -8 - h + 3); c.arc(x, -8 - h + 3, 3.2, Math.PI, 0); c.lineTo(x + 3.2, -8); c.fill();
+        }
+        c.fillRect(-27.4, -26, 1.6, 14); c.fillRect(-30, -22.6, 6.8, 1.6);
+        c.fillStyle = '#7dff6a55';
+        c.font = '900 3.4px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('RIP', -33, -14); c.fillText('RIP', -10, -12.6);
+        // grama verde neon na base do cemitério
+        c.strokeStyle = m.neon; c.lineWidth = 0.9; Neon.glow(c, m.neon, 6);
+        c.beginPath();
+        for (let x = -52; x < -3; x += 2.4) { c.moveTo(x, -8); c.lineTo(x + 1, -10.4 - hash(x) * 1.6); }
+        c.stroke(); c.shadowBlur = 0;
+        // risco verde do nome, à mão
+        c.fillStyle = m.neon; c.font = 'italic 900 6px sans-serif'; Neon.glow(c, m.neon, 8);
+        c.fillText('COVEIRO', 28, -14); c.shadowBlur = 0;
+        linha(c, 'M-1 -22.8 L-1 -3 M17.6 -21.6 C18.2 -15 18 -9 17 -3', '#000000', 0.8);
+        c.restore();
+        // olhos verdes bravos no lugar dos faróis e sobrancelha
+        linha(c, 'M45.6 -16.6 L52.4 -14.6', '#000000', 1.6);
+        // para-choque cromado e escapes no capô
+        linha(c, 'M50 -1 L55 -1 L55.6 -9 M-50 -1 L-54.4 -1 L-54.4 -8', '#c7d6e1', 2.2);
+        chamine(c, 17, -22.4, -31, 2.2); chamine(c, 21, -22.2, -31, 2.2);
+        // aranha pendurada no retrovisor
+        linha(c, 'M15 -22.4 L15 -19', '#c7d6e1', 0.4);
+        Neon.circle(c, 15, -18.4, 0.9, '#0b0e14');
+        // neon roxo por baixo
+        c.strokeStyle = '#b06bff'; c.lineWidth = 1.6; Neon.glow(c, '#b06bff', 14);
+        c.beginPath(); c.moveTo(-10, -0.6); c.lineTo(10, -0.6); c.stroke(); c.shadowBlur = 0;
+        if (s.andando && !Neon.motion.reduced) {   // brilho dos olhos pulsando
+          c.globalAlpha = 0.35 + 0.25 * Math.sin(s.t * 6);
+          Neon.circle(c, 51.4, -12, 4, m.neon); c.globalAlpha = 1;
+        }
+      },
+    },
+    { // INFERNO: muscle car vermelho com chamas e compressor saindo do capô
+      topo: -37, base: -2, aro: 'chama', farolCor: '#ffe2a8', farol: [51.6, -11.5], lanterna: [-52, -16.5],
+      escapes: [[32, -38]], chama: '#ffb347', tom: '#5a1a10',
+      corpo: 'M-50.5 -2 L-51.6 -15 C-51.6 -19.5 -48.5 -21.6 -43 -22 L-27 -23.4 C-21 -29.6 -14 -36.4 -5 -37 L4.5 -37 C9 -37 12.4 -34 15.8 -28.6 L19.6 -22.4 C32 -21.6 43 -20.4 49 -17.2 C51.8 -15.6 52.8 -12.6 52.6 -8 L52 -2 ARCOS Z',
+      vidros: ['M-24 -23.6 C-18.6 -29.4 -12.8 -34.6 -6 -35 L-3 -35 L-3 -23.6 Z', 'M-1 -35 L4 -35 C7.6 -35 10.2 -32.6 12.8 -28.4 L16.4 -23.6 L-1 -23.6 Z'],
+      detalhes(c, m, s) {
+        // chamas pintadas do capô pra trás
+        c.save(); c.clip(P(this.corpo));
+        pinta(c, 'M54 -8 C42 -8 30 -11 18 -9.6 C22 -12 25 -14 21 -15 C28 -15.4 33 -13.8 38 -15 C33 -16.8 28 -17.6 23 -17.6 C32 -19.4 44 -18.6 54 -15.2 Z', '#ffd36b');
+        pinta(c, 'M52 -9.6 C42 -9.6 33 -11.6 24 -11.2 C28 -13 29.6 -14 26.6 -14.6 C31 -14.8 36 -13.6 41 -14.6 C37 -15.8 33 -16.4 29 -16.4 C36 -17.4 44 -16.6 52 -14 Z', '#ff7a1a');
+        pinta(c, 'M-4 -6 C-14 -6 -24 -8 -34 -7 C-30 -9 -28 -10.6 -31 -11.4 C-25 -11.6 -20 -10.4 -14 -11.2 C-18 -12.4 -22 -13 -26 -13 C-18 -14.4 -10 -13.4 -4 -11 Z', '#ffd36b');
+        linha(c, 'M-3 -23.6 L-3 -3 M17.6 -21.8 C18.2 -15 18 -9 17 -3', '#3a0804', 0.8);
+        c.restore();
+        // aerofólio traseiro
+        pinta(c, 'M-53 -21.6 L-51.4 -27.6 L-38 -27.6 L-39.4 -23 Z', '#2a0604', m.claro, 0.6);
+        pinta(c, 'M-47 -22 L-46 -27 L-44 -27 L-45 -22 Z', '#1a0302');
+        // compressor (blower) atravessando o capô, com a boca de lobo em cima
+        pinta(c, 'M26 -21.6 L38 -21.6 L37.4 -24 L26.6 -24 Z', '#2a2f38');
+        pinta(c, 'M27 -24 L37 -24 L36.4 -32 L27.6 -32 Z', vgrad(c, -32, -24, [[0, '#e2e8ee'], [0.5, '#8d97a3'], [1, '#c7d0d9']]), '#11161e', 0.5);
+        for (let i = 0; i < 4; i++) linha(c, `M${28.6 + i * 2.3} -25 L${28.6 + i * 2.3} -31`, '#4b5563', 0.5);
+        pinta(c, 'M26.4 -32 L37.6 -32 L36.6 -37 L27.4 -37 Z', m.escuro, '#11161e', 0.5);
+        pinta(c, 'M27.8 -36.4 L36.2 -36.4 L35.8 -33 L28.2 -33 Z', s.acelerando ? '#ffb347' : '#3a0804');
+        // escape lateral (zoomie) atrás da roda da frente
+        linha(c, 'M8 -3 L4 -8', '#c7d6e1', 2);
+        linha(c, 'M50 -1 L55 -1 L55.6 -9 M-50 -1 L-54.4 -1 L-54.4 -8', '#3a3f48', 2.2);
+      },
+    },
+    { // NEVASCA: carroceria facetada de cristal, pingentes de gelo e coroa no teto
+      topo: -37, base: -2, aro: 'cristal', farolCor: '#c8f4ff', farol: [51.8, -10], lanterna: [-52.6, -12],
+      escapes: [[-36, -27]], chama: '#c8f4ff', tom: '#2a6c96',
+      corpo: 'M-50.5 -2 L-52.4 -13 L-46 -21.6 L-24 -23 L-15.6 -37 L7.4 -37 L18.4 -23.4 L43 -21.2 L52.6 -13.4 L52 -2 ARCOS Z',
+      vidros: ['M-21.6 -23.8 L-14.6 -35 L-3 -35 L-3 -23.8 Z', 'M-1 -35 L6.6 -35 L15.6 -23.8 L-1 -23.8 Z'],
+      detalhes(c, m, s) {
+        // facetas: cada plano do cristal pega a luz de um jeito
+        c.save(); c.clip(P(this.corpo));
+        for (const [d, cor] of [
+          ['M-52 -13 L-24 -23 L-30 -2 L-52 -2 Z', '#ffffff30'],
+          ['M18.4 -23.4 L43 -21.2 L30 -8 Z', '#ffffff40'],
+          ['M43 -21.2 L52.6 -13.4 L30 -8 Z', '#00203a40'],
+          ['M-24 -23 L-3 -23.6 L-12 -6 Z', '#00203a30'],
+          ['M30 -8 L52.6 -13.4 L52 -2 L22 -2 Z', '#00305040'],
+        ]) pinta(c, d, cor);
+        linha(c, 'M-52 -13 L-24 -23 M18.4 -23.4 L30 -8 L52.6 -13.4 M-24 -23 L-12 -6 L-30 -2', '#ffffff66', 0.5);
+        linha(c, 'M-2 -23.8 L-2 -3 M17 -22 L15 -3', '#103050', 0.8);
+        c.restore();
+        // floco de neve na porta
+        c.strokeStyle = '#ffffff'; c.lineWidth = 0.8; Neon.glow(c, m.neon, 8);
+        c.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = i * Math.PI / 3, x = 6 + Math.cos(a) * 4.2, y = -14 + Math.sin(a) * 4.2;
+          c.moveTo(6, -14); c.lineTo(x, y);
+          c.moveTo(6 + Math.cos(a) * 2.4 + Math.cos(a + 0.8) * 1.2, -14 + Math.sin(a) * 2.4 + Math.sin(a + 0.8) * 1.2);
+          c.lineTo(6 + Math.cos(a) * 2.4, -14 + Math.sin(a) * 2.4);
+        }
+        c.stroke(); c.shadowBlur = 0;
+        // coroa de cristais no teto
+        const gelo = vgrad(c, -52, -37, [[0, '#ffffff'], [0.5, '#bff0ff'], [1, '#5cc8f0']]);
+        for (const d of ['M-13 -37 L-10 -45 L-7 -37 Z', 'M-6 -37 L-2 -51 L2 -37 Z', 'M2.6 -37 L5.6 -44 L8 -37 Z'])
+          pinta(c, d, gelo, '#ffffffcc', 0.5);
+        // pingentes de gelo pendurados na carroceria
+        c.fillStyle = '#dff8ffdd';
+        for (const [x, h] of [[-49, 5], [-47, 3], [-11, 4], [-7, 6], [-3, 3], [3, 5], [7, 3.4], [11, 4.6], [47, 4], [49.6, 6]]) {
+          c.beginPath(); c.moveTo(x - 1, -2.4); c.lineTo(x, -2.4 + h); c.lineTo(x + 1, -2.4); c.fill();
+        }
+        // faixa de LED gelado no para-choque
+        c.strokeStyle = m.neon; c.lineWidth = 1.4; Neon.glow(c, m.neon, 12);
+        c.beginPath(); c.moveTo(45, -6); c.lineTo(52.4, -7.4); c.stroke(); c.shadowBlur = 0;
+      },
+    },
+  ];
+  DESENHOS.forEach((d, i) => { d.corpo = d.corpo.replace('ARCOS', arcosDe(ajustesDe(i), d.base)); });
+
+  // Amassados: mais pancada, mais marcas. Posições fixas por caminhão, então a
+  // mesma batida não faz a lataria piscar de um quadro pro outro.
+  function amassados(c, d, dano, semente) {
+    if (dano < 0.06) return;
+    c.save(); c.clip(P(d.corpo));
+    const n = Math.ceil(dano * 10);
+    for (let i = 0; i < n; i++) {
+      const x = -46 + hash(i * 7.3 + semente) * 94, y = -32 + hash(i * 3.1 + semente + 5) * 26;
+      const r = 2.4 + hash(i + semente * 2) * 3.4, rot = hash(i + 9) * 3;
+      c.fillStyle = 'rgba(0,0,0,0.38)'; c.beginPath(); c.ellipse(x, y, r * 1.4, r, rot, 0, Math.PI * 2); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 0.5;
+      c.beginPath(); c.ellipse(x - 0.4, y - 0.4, r * 1.4, r, rot, Math.PI, Math.PI * 1.8); c.stroke();
+    }
+    // arranhões
+    c.strokeStyle = 'rgba(230,236,240,0.35)'; c.lineWidth = 0.4;
+    c.beginPath();
+    for (let i = 0; i < Math.floor(dano * 7); i++) {
+      let x = -44 + hash(i * 5.7 + semente) * 80, y = -30 + hash(i * 2.3 + semente) * 22;
+      c.moveTo(x, y);
+      for (let k = 0; k < 3; k++) { x += 3 + hash(i + k) * 4; y += (hash(i * k + 1) - 0.5) * 4; c.lineTo(x, y); }
+    }
+    c.stroke();
+    // fuligem: lataria judiada fica opaca
+    c.fillStyle = `rgba(16,10,6,${dano * 0.38})`; c.fillRect(-60, -60, 120, 62);
+    c.restore();
+  }
+  function vidroTrincado(c, d) {
+    const v = d.vidros[d.vidros.length - 1];
+    c.save(); c.clip(P(v));
+    c.strokeStyle = '#ffffffaa'; c.lineWidth = 0.4;
+    c.beginPath();
+    for (let i = 0; i < 7; i++) { const a = i * 0.9; c.moveTo(6, -29); c.lineTo(6 + Math.cos(a) * 12, -29 + Math.sin(a) * 12); }
+    c.stroke(); c.restore();
+  }
+
+  // Pneu de monster truck: cravos grossos em V que saltam do contorno e giram,
+  // flanco largo e aro com o estilo de cada caminhão.
+  function desenharRoda(r, carro, ctx) {
+    const R = carro.ajustes.raio, m = CAMINHOES[carro.modelo], d = DESENHOS[carro.modelo];
+    const giroRapido = Math.min(1, Math.abs(r.vt || 0) / 700);
+    ctx.save(); ctx.translate(r.lx, r.ly - r.comp);
+    ctx.save(); ctx.rotate(r.spin);
+    ctx.fillStyle = '#0a0c10';
+    for (let i = 0; i < 16; i++) {
+      ctx.rotate(Math.PI * 2 / 16);
+      ctx.beginPath(); ctx.moveTo(-3.6, -R + 3); ctx.lineTo(-2.8, -R - 1.8); ctx.lineTo(2.8, -R - 1.8); ctx.lineTo(3.6, -R + 3); ctx.fill();
+    }
+    ctx.restore();
+    const flanco = ctx.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.2, 0, 0, R);
+    flanco.addColorStop(0, '#3a414c'); flanco.addColorStop(0.7, '#161a21'); flanco.addColorStop(1, '#07090c');
+    Neon.circle(ctx, 0, 0, R, flanco);
+    // cravos em V no flanco, girando junto
+    ctx.save(); ctx.rotate(r.spin);
+    ctx.strokeStyle = '#2a3039'; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = i * Math.PI * 2 / 16, b = a + 0.12, cx = Math.cos(a), sx = Math.sin(a);
+      ctx.moveTo(Math.cos(a - 0.1) * R * 0.95, Math.sin(a - 0.1) * R * 0.95);
+      ctx.lineTo(cx * R * 0.8, sx * R * 0.8);
+      ctx.lineTo(Math.cos(b) * R * 0.95, Math.sin(b) * R * 0.95);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = '#262c35'; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.arc(0, 0, R * 0.72, 0, Math.PI * 2); ctx.stroke();
+    // aro
+    const ra = R * 0.56;
+    ctx.save(); ctx.rotate(r.spin);
+    ctx.globalAlpha = 1 - giroRapido * 0.5;
+    if (d.aro === 'estrela') {
+      const ouro = ctx.createLinearGradient(-ra, -ra, ra, ra);
+      ouro.addColorStop(0, '#fff4d0'); ouro.addColorStop(0.5, '#e0a93a'); ouro.addColorStop(1, '#6b4310');
+      Neon.circle(ctx, 0, 0, ra, ouro);
+      ctx.fillStyle = '#2a1a06';
+      for (let i = 0; i < 5; i++) {
+        ctx.save(); ctx.rotate(i * Math.PI * 2 / 5 + 0.63);
+        ctx.beginPath(); ctx.moveTo(-ra * 0.18, -ra * 0.32); ctx.lineTo(-ra * 0.3, -ra * 0.82); ctx.lineTo(ra * 0.3, -ra * 0.82); ctx.lineTo(ra * 0.18, -ra * 0.32); ctx.fill();
+        ctx.restore();
+      }
+    } else if (d.aro === 'caveira') {
+      Neon.circle(ctx, 0, 0, ra, '#0b0e14');
+      ctx.strokeStyle = m.neon; ctx.lineWidth = 1.4; Neon.glow(ctx, m.neon, 10);
+      ctx.beginPath(); ctx.arc(0, 0, ra * 0.86, 0, Math.PI * 2); ctx.stroke(); ctx.shadowBlur = 0;
+      for (let i = 0; i < 6; i++) { ctx.save(); ctx.rotate(i * Math.PI / 3); Neon.circle(ctx, 0, -ra * 0.62, ra * 0.1, m.neon); ctx.restore(); }
+      // caveirinha no cubo
+      Neon.circle(ctx, 0, -0.6, ra * 0.4, '#e8f5d0');
+      ctx.fillRect(-ra * 0.22, ra * 0.1, ra * 0.44, ra * 0.28);
+      Neon.circle(ctx, -ra * 0.15, -ra * 0.08, ra * 0.1, '#0b0e14'); Neon.circle(ctx, ra * 0.15, -ra * 0.08, ra * 0.1, '#0b0e14');
+    } else if (d.aro === 'chama') {
+      Neon.circle(ctx, 0, 0, ra, '#2a0604');
+      for (let i = 0; i < 4; i++) {
+        ctx.save(); ctx.rotate(i * Math.PI / 2);
+        ctx.fillStyle = i & 1 ? '#ffd36b' : '#ff7a1a';
+        ctx.beginPath(); ctx.moveTo(0, -ra * 0.2); ctx.quadraticCurveTo(ra * 0.8, -ra * 0.4, ra * 0.45, -ra * 0.95);
+        ctx.quadraticCurveTo(ra * 0.4, -ra * 0.5, -ra * 0.1, -ra * 0.25); ctx.fill();
+        ctx.restore();
+      }
+      ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.arc(0, 0, ra * 0.95, 0, Math.PI * 2); ctx.stroke();
+    } else {   // cristal: floco de neve
+      const gelo = ctx.createLinearGradient(-ra, -ra, ra, ra);
+      gelo.addColorStop(0, '#ffffff'); gelo.addColorStop(0.6, '#bff0ff'); gelo.addColorStop(1, '#3b8fbf');
+      Neon.circle(ctx, 0, 0, ra, gelo);
+      ctx.strokeStyle = '#1d5f8a'; ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = i * Math.PI / 3, c1 = Math.cos(a), s1 = Math.sin(a);
+        ctx.moveTo(0, 0); ctx.lineTo(c1 * ra * 0.85, s1 * ra * 0.85);
+        ctx.moveTo(c1 * ra * 0.5, s1 * ra * 0.5); ctx.lineTo(Math.cos(a + 0.5) * ra * 0.7, Math.sin(a + 0.5) * ra * 0.7);
+        ctx.moveTo(c1 * ra * 0.5, s1 * ra * 0.5); ctx.lineTo(Math.cos(a - 0.5) * ra * 0.7, Math.sin(a - 0.5) * ra * 0.7);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    if (giroRapido > 0.2) {   // borrão do giro
+      ctx.globalAlpha = giroRapido * 0.3; Neon.circle(ctx, 0, 0, ra, m.cor); ctx.globalAlpha = 1;
+    }
+    Neon.circle(ctx, 0, 0, ra * 0.18, '#1a2230'); Neon.circle(ctx, 0, 0, ra * 0.09, '#c7d6e1');
+    ctx.restore();
+  }
+
+  function desenharCaminhao(veiculo = car, contexto = ctx, preview = false) {
+    const car = veiculo, ctx = contexto, K = car.ajustes, m = CAMINHOES[car.modelo], d = DESENHOS[car.modelo];
+    const andando = !preview && state === 'playing';
+    const s = { freando: car.freio && andando, acelerando: car.gas && car.gasolina > 0 && andando, andando,
+      t: performance.now() / 1000 };
+    const dano = 1 - car.saude / K.saude;
+    ctx.save(); ctx.translate(car.x, car.y); ctx.rotate(car.a); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // sombra no chão, só com roda encostando
+    if (car.chao > 0 || preview) {
+      const y = K.altura + K.raio;
+      const g = ctx.createRadialGradient(0, y, 2, 0, y, K.eixo);
+      g.addColorStop(0, '#000000aa'); g.addColorStop(1, '#00000000');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, y, K.eixo, 5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    if (andando && car.saude > 15) {
+      const [fx, fy] = d.farol;
+      const cone = ctx.createLinearGradient(fx, 0, fx + 90, 0);
+      cone.addColorStop(0, d.farolCor + '38'); cone.addColorStop(1, d.farolCor + '00');
+      ctx.fillStyle = cone; ctx.beginPath(); ctx.moveTo(fx, fy - 1); ctx.lineTo(fx + 90, fy - 16); ctx.lineTo(fx + 90, fy + 26); ctx.lineTo(fx, fy + 2); ctx.fill();
+    }
+    // chassi tubular: longarina, braços até o cubo e amortecedores com mola neon
+    ctx.strokeStyle = '#3a414c'; ctx.lineWidth = 3;
+    traco([[-40, 1], [40, 1]], false, ctx); ctx.stroke();
+    ctx.lineWidth = 1.6; ctx.strokeStyle = '#59626e';
+    for (const r of car.rodas) {
+      const hy = r.ly - r.comp;
+      traco([[r.lx * 0.25, 4], [r.lx, hy]], false, ctx); ctx.stroke();
+      traco([[r.lx * 0.4, 0], [r.lx, hy - 3]], false, ctx); ctx.stroke();
+    }
+    for (const r of car.rodas) {
+      const hy = r.ly - r.comp, tx = r.lx * 0.72, ty = d.base - 2;
+      ctx.strokeStyle = '#9aa4ad'; ctx.lineWidth = 2.6; traco([[tx, ty], [r.lx, hy]], false, ctx); ctx.stroke();
+      ctx.strokeStyle = m.neon; ctx.lineWidth = 1.1; Neon.glow(ctx, m.neon, 6);
+      const pts = [[tx, ty]];
+      for (let i = 1; i < 7; i++) {
+        const u = i / 7, px = tx + (r.lx - tx) * u, py = ty + (hy - ty) * u;
+        pts.push([px + (i & 1 ? 2 : -2), py]);
+      }
+      pts.push([r.lx, hy]); traco(pts, false, ctx); ctx.stroke(); ctx.shadowBlur = 0;
+    }
+    // poço escuro dentro do para-lama, atrás da roda
+    ctx.save(); ctx.beginPath(); ctx.rect(-80, -60, 160, 60 + d.base); ctx.clip();
+    for (const r of car.rodas) Neon.circle(ctx, r.lx, r.ly, K.raio + 3, '#04060b');
+    ctx.restore();
+    for (const r of car.rodas) desenharRoda(r, car, ctx);
+    lataria(ctx, d, m);
+    for (const v of d.vidros) vidro(ctx, v, d.tom);
+    // piloto: silhueta escura atrás do vidro, com a faixa do capacete
+    {
+      const v = P(d.vidros[d.vidros.length - 1]);
+      ctx.save(); ctx.clip(v);
+      ctx.fillStyle = '#0a1220cc';
+      ctx.beginPath(); ctx.arc(4, -29, 3.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(-0.4, -26, 8, 7);
+      ctx.fillStyle = m.neon + 'aa'; ctx.fillRect(0.4, -30.6, 7.2, 1);
+      ctx.restore();
+    }
+    d.detalhes(ctx, m, s);
+    amassados(ctx, d, dano, car.modelo * 13 + 1);
+    if (dano > 0.5) vidroTrincado(ctx, d);
+    // farol pisca quando a lataria está no fim
+    const farolOk = car.saude > 25 || Math.sin(s.t * 23) > 0;
+    farol(ctx, d.farol[0], d.farol[1], 2, 1.6, d.farolCor, andando && farolOk);
+    lanterna(ctx, d.lanterna[0], d.lanterna[1], s.freando);
+    if (s.acelerando) {
+      const chama = Neon.motion.reduced ? 10 : 10 + Math.sin(s.t * 27) * 6;
+      for (const [ex, ey] of d.escapes) {
+        ctx.fillStyle = d.chama; Neon.glow(ctx, d.chama, 12);
+        traco([[ex - 1.6, ey], [ex - 0.4, ey - 4 - chama], [ex + 1.6, ey]], true, ctx); ctx.fill();
+        ctx.fillStyle = '#fff6d8'; traco([[ex - 0.8, ey], [ex - 0.2, ey - 2 - chama * 0.5], [ex + 0.8, ey]], true, ctx); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+    ctx.restore();
+  }
+  // ponto do chassi no mundo, pra fumaça, fogo e neve saírem do lugar certo
+  const noMundo = (c, lx, ly) => [c.x + Math.cos(c.a) * lx - Math.sin(c.a) * ly, c.y + Math.sin(c.a) * lx + Math.cos(c.a) * ly];
+  // Rastro de cada caminhão e fumaça de lataria judiada, a ~30 por segundo.
+  function rastros(dt) {
+    fumacaT += dt;
+    if (fumacaT < 1 / 30) return;
+    fumacaT = 0;
+    const m = CAMINHOES[car.modelo], d = DESENHOS[car.modelo], v = Math.hypot(car.vx, car.vy);
+    if (car.gas && car.gasolina > 0) {
+      for (const [ex, ey] of d.escapes) {
+        const [x, y] = noMundo(car, ex, ey - 6);
+        if (car.modelo === 1) particles.emit(x, y, -car.vx * 0.2 + Neon.rand(-20, 20), -60, '#7dff6a', 3.4, 0.7);
+        else if (car.modelo === 2) particles.emit(x, y, -car.vx * 0.15 + Neon.rand(-30, 30), -110, Math.random() < 0.5 ? '#ffb347' : '#ff5a1f', 4, 0.5);
+        else if (car.modelo === 3) particles.emit(x, y, -car.vx * 0.2, -40, '#e8faff', 2.6, 0.8);
+        else particles.emit(x, y, -car.vx * 0.2 + Neon.rand(-10, 10), -50, '#8a8f99', 3, 0.6);
+      }
+    }
+    // terra (ou neve) voando do pneu de trás
+    if (car.chao && v > 120) {
+      const r = car.rodas[0], [x, y] = noMundo(car, r.lx - 8, r.ly + 14);
+      const cor = mundoDe(pistaN).tema === 'geleira' || car.modelo === 3 ? '#e8faff' : mundoDe(pistaN).terra;
+      particles.emit(x, y, -car.vx * 0.4 + Neon.rand(-40, 40), -Neon.rand(60, 160), cor, 3, 0.45);
+    }
+    if (car.saude < 50) {
+      const [x, y] = noMundo(car, 36, -24);
+      particles.emit(x, y, -car.vx * 0.3 + Neon.rand(-15, 15), -70, car.saude < 25 ? '#3a3f48' : '#6b7280', 4.5, 0.9);
+      if (car.saude < 25 && Math.random() < 0.4) particles.emit(x, y, Neon.rand(-80, 80), -Neon.rand(60, 140), '#ffd36b', 1.6, 0.4);
+    }
+  }
+
+  // ── cenário ───────────────────────────────────────
+  // repete uma camada de parallax: desenha(i, x) pra cada bloco visível de largura passo
+  function camada(fator, passo, desenha) {
+    const px = cam.x * fator, i0 = Math.floor(px / passo) - 1;
+    for (let i = i0; i < i0 + W / passo + 3; i++) desenha(i, i * passo - px);
+  }
+  function estrelas(n, cor) {
+    const agora = performance.now();
+    ctx.fillStyle = cor;
+    for (let i = 0; i < n; i++) {
+      const x = ((hash(i) * 1400 - cam.x * 0.02) % 1400 + 1400) % 1400 - 220, y = hash(i + 500) * H * 0.6;
+      ctx.globalAlpha = 0.3 + 0.6 * Math.abs(Math.sin(agora / 900 + i));
+      ctx.fillRect(x, y, 1.6, 1.6);
+    }
+    ctx.globalAlpha = 1;
+  }
+  function sol(SX, SY, SR, c0, c1, faixa) {
+    const sg = ctx.createLinearGradient(0, SY - SR, 0, SY + SR);
+    sg.addColorStop(0, c0); sg.addColorStop(1, c1);
+    ctx.fillStyle = sg; Neon.glow(ctx, c1, 40);
+    Neon.circle(ctx, SX, SY, SR);
+    ctx.shadowBlur = 0;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(SX, SY, SR, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = faixa;
+    for (let i = 0; i < 6; i++) ctx.fillRect(SX - SR, SY + 6 + i * 15, SR * 2, 3 + i * 1.8);
+    ctx.restore();
+  }
+  function fundo() {
+    const m = mundoDe(pistaN), t = performance.now() / 1000;
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, m.ceu[0]); sky.addColorStop(0.55, m.ceu[1]); sky.addColorStop(1, m.ceu[2]);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+    if (m.tema === 'arena') {
+      estrelas(50, '#e8e4ff');
+      // arquibancada em degraus com a torcida piscando o celular
+      camada(0.1, 90, (i, x) => {
+        const topo = H * 0.36 + (i & 1) * 10;
+        ctx.fillStyle = m.serra; ctx.fillRect(x, topo, 91, H);
+        for (let row = 0; row < 9; row++) for (let col = 0; col < 11; col++) {
+          const k = i * 131 + row * 17 + col, h = hash(k);
+          if (h < 0.35) continue;
+          const pisca = hash(k + 0.5) > 0.97 && Math.sin(t * 7 + k) > 0.6;
+          ctx.fillStyle = pisca ? '#ffffff' : ['#3d3570', '#4a2f5e', '#2f3f6e', '#5a4a2a'][k & 3];
+          ctx.fillRect(x + 4 + col * 8, topo + 8 + row * 9, 4, 5);
+        }
+      });
+      // torres de refletor com o facho caindo na pista
+      camada(0.18, 520, (i, x) => {
+        const bx = x + 200, by = H * 0.12;
+        ctx.fillStyle = '#0d0b1e'; ctx.fillRect(bx - 3, by, 6, H);
+        const fx = ctx.createLinearGradient(0, by, 0, H * 0.85);
+        fx.addColorStop(0, 'rgba(255,248,220,0.16)'); fx.addColorStop(1, 'rgba(255,248,220,0)');
+        ctx.fillStyle = fx; ctx.beginPath(); ctx.moveTo(bx - 20, by + 8); ctx.lineTo(bx + 20, by + 8); ctx.lineTo(bx + 150, H * 0.85); ctx.lineTo(bx - 110, H * 0.85); ctx.fill();
+        ctx.fillStyle = '#fff8dc'; Neon.glow(ctx, '#fff3c5', 24);
+        for (let k = 0; k < 4; k++) ctx.fillRect(bx - 22 + k * 11, by - 6, 8, 8);
+        ctx.shadowBlur = 0;
+      });
+    } else if (m.tema === 'ferro') {
+      sol(W * 0.7, H * 0.42, 96, '#ffd36b', '#ff5a1f', m.ceu[1]);
+      // montanhas de sucata com carcaças empilhadas
+      camada(0.1, 260, (i, x) => {
+        const h = 90 + hash(i) * 90, base = H * 0.74;
+        ctx.fillStyle = m.serra;
+        ctx.beginPath(); ctx.moveTo(x - 40, base); ctx.quadraticCurveTo(x + 130, base - h * 2, x + 300, base); ctx.fill();
+        for (let k = 0; k < 3; k++) {
+          const cx = x + 60 + k * 50 + hash(i + k) * 20, cy = base - h * (0.55 + 0.2 * Math.sin(k * 1.7)) ;
+          ctx.save(); ctx.translate(cx, cy); ctx.rotate((hash(i * 3 + k) - 0.5) * 0.8);
+          ctx.fillStyle = '#3a1c1c'; ctx.fillRect(-18, -8, 36, 10); ctx.fillRect(-10, -14, 18, 7);
+          ctx.restore();
+        }
+      });
+      // guindaste com o eletroímã segurando um carro
+      camada(0.2, 1300, (i, x) => {
+        const bx = x + 500, base = H * 0.8, topo = H * 0.18;
+        ctx.strokeStyle = '#22101a'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(bx - 12, base); ctx.lineTo(bx - 12, topo); ctx.moveTo(bx + 12, base); ctx.lineTo(bx + 12, topo);
+        for (let y = base; y > topo; y -= 26) { ctx.moveTo(bx - 12, y); ctx.lineTo(bx + 12, y - 26); }
+        ctx.moveTo(bx - 60, topo); ctx.lineTo(bx + 230, topo); ctx.moveTo(bx, topo - 30); ctx.lineTo(bx + 230, topo);
+        ctx.moveTo(bx, topo - 30); ctx.lineTo(bx - 60, topo);
+        const balanco = Math.sin(t * 0.8 + i) * 10;
+        ctx.moveTo(bx + 200, topo); ctx.lineTo(bx + 200 + balanco, topo + 140);
+        ctx.stroke();
+        ctx.fillStyle = '#22101a';
+        ctx.beginPath(); ctx.ellipse(bx + 200 + balanco, topo + 146, 18, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillRect(bx + 182 + balanco, topo + 152, 36, 12); ctx.fillRect(bx + 190 + balanco, topo + 164, 20, 6);
+      });
+    } else if (m.tema === 'vulcao') {
+      // vulcão ao fundo cuspindo pedra, fumaça e um brilho na boca
+      const VX = W * 0.66 - (cam.x * 0.02) % 60, VY = H * 0.3;
+      for (let k = 0; k < 6; k++) {
+        ctx.fillStyle = `rgba(30,8,10,${0.5 - k * 0.07})`;
+        Neon.circle(ctx, VX + Math.sin(t * 0.3 + k) * 30 + k * 18, VY - 40 - k * 34, 40 + k * 14);
+      }
+      ctx.fillStyle = '#1e0508';
+      ctx.beginPath(); ctx.moveTo(VX - 330, H); ctx.lineTo(VX - 40, VY); ctx.lineTo(VX + 40, VY); ctx.lineTo(VX + 330, H); ctx.fill();
+      ctx.fillStyle = '#ff6a1a'; Neon.glow(ctx, '#ff3b1f', 30);
+      ctx.beginPath(); ctx.ellipse(VX, VY + 2, 40, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#ff5a1f'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(VX - 14, VY + 4); ctx.quadraticCurveTo(VX - 40, VY + 90, VX - 90, VY + 200);
+      ctx.moveTo(VX + 18, VY + 4); ctx.quadraticCurveTo(VX + 30, VY + 70, VX + 70, VY + 160); ctx.stroke();
+      for (let k = 0; k < 14; k++) {
+        const ph = (t * 0.45 + hash(k)) % 1, vx = (hash(k + 3) - 0.5) * 360;
+        ctx.globalAlpha = 1 - ph;
+        Neon.circle(ctx, VX + vx * ph, VY - 320 * ph + 380 * ph * ph, 3 + hash(k + 7) * 3, '#ffb347');
+      }
+      ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+      // serra de basalto na frente, com rachadura de lava
+      camada(0.16, 200, (i, x) => {
+        const h = 50 + hash(i) * 70, base = H * 0.82;
+        ctx.fillStyle = m.serra;
+        ctx.beginPath(); ctx.moveTo(x, base); ctx.lineTo(x + 70, base - h); ctx.lineTo(x + 110, base - h * 0.7); ctx.lineTo(x + 201, base); ctx.fill();
+        if (hash(i + 4) > 0.5) {
+          ctx.strokeStyle = '#ff4d2e88'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(x + 70, base - h + 8); ctx.lineTo(x + 80, base - h * 0.5); ctx.lineTo(x + 72, base - 10); ctx.stroke();
+        }
+      });
+      // brasa subindo
+      for (let k = 0; k < 40; k++) {
+        const y = H - ((hash(k) * H + t * (20 + hash(k + 1) * 40)) % H), x = (hash(k + 9) * W + Math.sin(t + k) * 20 - cam.x * 0.3 % W + W) % W;
+        ctx.fillStyle = k & 1 ? '#ff8a3c' : '#ffd36b'; ctx.globalAlpha = 0.6;
+        ctx.fillRect(x, y, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    } else {
+      estrelas(80, '#e8faff');
+      // aurora em três fitas
+      for (let k = 0; k < 3; k++) {
+        const g = ctx.createLinearGradient(0, H * 0.06, 0, H * 0.42);
+        g.addColorStop(0, ['#7dff6a00', '#8fe3ff00', '#b06bff00'][k]);
+        g.addColorStop(0.5, ['#7dff6a40', '#8fe3ff38', '#b06bff30'][k]);
+        g.addColorStop(1, '#00000000');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.moveTo(0, H * 0.45);
+        for (let x = 0; x <= W; x += 24) ctx.lineTo(x, H * (0.12 + k * 0.05) + Math.sin(x * 0.006 + t * 0.4 + k * 2 - cam.x * 0.0004) * 34);
+        ctx.lineTo(W, H * 0.45); ctx.fill();
+      }
+      // cordilheira de gelo em duas camadas, com neve no pico
+      for (const [fator, passo, alto, cor] of [[0.06, 260, 170, '#0b1d33'], [0.14, 180, 110, m.serra]]) {
+        camada(fator, passo, (i, x) => {
+          const h = alto * (0.6 + hash(i + fator * 100) * 0.4), base = H * 0.8, px = x + passo * 0.5;
+          ctx.fillStyle = cor;
+          ctx.beginPath(); ctx.moveTo(x - 40, base); ctx.lineTo(px, base - h); ctx.lineTo(x + passo + 40, base); ctx.fill();
+          ctx.fillStyle = '#dff6ff'; ctx.globalAlpha = fator < 0.1 ? 0.5 : 0.8;
+          ctx.beginPath(); ctx.moveTo(px - h * 0.22, base - h * 0.78); ctx.lineTo(px, base - h); ctx.lineTo(px + h * 0.22, base - h * 0.78);
+          ctx.lineTo(px + 6, base - h * 0.84); ctx.lineTo(px - 4, base - h * 0.76); ctx.fill();
+          ctx.globalAlpha = 1;
+        });
+      }
+    }
+  }
+  // neve caindo por cima de tudo na geleira
+  function neve() {
+    const t = performance.now() / 1000;
+    ctx.fillStyle = '#f1fcff';
+    for (let k = 0; k < 70; k++) {
+      const y = (hash(k) * H + t * (30 + hash(k + 1) * 50)) % H;
+      const x = ((hash(k + 5) * W + Math.sin(t * 0.8 + k) * 18 - cam.x * (0.4 + hash(k) * 0.3)) % W + W) % W;
+      ctx.globalAlpha = 0.4 + hash(k + 2) * 0.5;
+      ctx.fillRect(x, y, 2.2, 2.2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── sucata ────────────────────────────────────────
+  // Origem no chão, no meio do obstáculo, x pra frente. Inteiro e esmagado.
+  const CORES_SUCATA = ['#b8463a', '#3f6fa8', '#6f9a3f', '#7a5a9a', '#c99232', '#5d6a73', '#a8553a'];
+  function desenharSucata(it) {
+    ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.ang);
+    const cor = CORES_SUCATA[it.v % CORES_SUCATA.length];
+    if (it.tipo === 'carro') {
+      if (!it.pego) {
+        pinta(ctx, 'M-28 -5 L-28 -10 C-27 -12 -24 -12.6 -20 -13 L-12 -19 C-10 -20.5 -6 -21 0 -21 L8 -21 C11 -21 13 -19.5 15 -17 L18 -13 L25 -12 C27.5 -11.4 28 -9.5 28 -7 L28 -5 Z',
+          vgrad(ctx, -21, -5, [[0, '#ffffff55'], [0.15, cor], [1, '#1a1010']]), '#05070a', 0.8);
+        pinta(ctx, 'M-10 -13.4 L-5 -18.8 L0 -18.8 L0 -13.4 Z M2 -18.8 L8 -18.8 C10 -18.8 11.4 -17.6 12.8 -15.6 L14.4 -13.4 L2 -13.4 Z', '#1d3346');
+        ctx.fillStyle = '#00000040'; ctx.fillRect(-22, -9, 8, 3); ctx.fillRect(4, -10, 6, 2);   // ferrugem
+        for (const x of [-17, 17]) { Neon.circle(ctx, x, -5, 5.2, '#0a0c10'); Neon.circle(ctx, x, -5, 2.2, '#6b7280'); }
+      } else {
+        pinta(ctx, 'M-31 0 L-31 -3.5 L-22 -5.6 L-12 -7.4 L-2 -6.4 L8 -7.6 L20 -6 L31 -3.4 L31 0 Z',
+          vgrad(ctx, -8, 0, [[0, cor], [1, '#120a0a']]), '#05070a', 0.7);
+        linha(ctx, 'M-24 -4.4 L-16 -3 L-8 -5.6 L0 -3.4 L8 -5.4 L18 -3.6', '#00000099', 0.7);
+        ctx.fillStyle = '#d9f3ffaa';
+        for (let k = 0; k < 4; k++) ctx.fillRect(-12 + k * 7 + hash(it.v + k) * 3, -1.6 - hash(it.v * 2 + k) * 1.5, 1.6, 1.2);
+        for (const x of [-20, 19]) { ctx.fillStyle = '#0a0c10'; ctx.beginPath(); ctx.ellipse(x, -1.2, 6, 1.8, 0, 0, Math.PI * 2); ctx.fill(); }
+      }
+    } else if (it.tipo === 'onibus') {
+      if (!it.pego) {
+        ctx.fillStyle = vgrad(ctx, -34, -4, [[0, '#ffe58a'], [0.2, '#f2c230'], [1, '#8a6a10']]);
+        ctx.beginPath(); ctx.roundRect(-74, -34, 148, 28, 4); ctx.fill();
+        ctx.strokeStyle = '#05070a'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#1d3346';
+        for (let k = 0; k < 7; k++) ctx.fillRect(-64 + k * 17, -30, 13, 9);
+        ctx.fillStyle = '#05070a'; ctx.fillRect(-74, -18, 148, 2.4); ctx.fillRect(-74, -12, 148, 1.6);
+        ctx.font = '900 6px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('ESCOLAR', 0, -14.6);
+        ctx.fillStyle = '#ffd36b'; ctx.fillRect(70, -14, 3, 4);
+        for (const x of [-48, 50]) { Neon.circle(ctx, x, -6, 7, '#0a0c10'); Neon.circle(ctx, x, -6, 3, '#6b7280'); }
+      } else {
+        ctx.fillStyle = vgrad(ctx, -12, 0, [[0, '#d9a826'], [1, '#4a3606']]);
+        ctx.beginPath(); ctx.moveTo(-78, 0); ctx.lineTo(-77, -8); ctx.lineTo(-40, -12); ctx.lineTo(0, -9); ctx.lineTo(36, -12); ctx.lineTo(77, -8); ctx.lineTo(78, 0); ctx.fill();
+        ctx.strokeStyle = '#05070a'; ctx.lineWidth = 0.8; ctx.stroke();
+        linha(ctx, 'M-70 -6 L-50 -9 L-30 -7 L-10 -9.4 L10 -6.6 L30 -9.6 L50 -7 L70 -7.4', '#00000099', 0.8);
+        ctx.fillStyle = '#d9f3ffaa';
+        for (let k = 0; k < 8; k++) ctx.fillRect(-60 + k * 16, -2.4, 1.8, 1.2);
+      }
+    } else if (it.tipo === 'caixa') {
+      if (!it.pego) {
+        ctx.fillStyle = '#5a3a1e'; ctx.fillRect(-13, -26, 26, 26);
+        ctx.strokeStyle = '#c08a52'; ctx.lineWidth = 2; ctx.strokeRect(-12, -25, 24, 24);
+        ctx.beginPath(); ctx.moveTo(-12, -25); ctx.lineTo(12, -1); ctx.moveTo(12, -25); ctx.lineTo(-12, -1); ctx.stroke();
+      } else {
+        ctx.fillStyle = '#5a3a1e';
+        ctx.save(); ctx.rotate(0.15); ctx.fillRect(-16, -3, 22, 3); ctx.restore();
+        ctx.save(); ctx.rotate(-0.25); ctx.fillRect(-2, -4, 18, 3); ctx.restore();
+      }
+    } else if (it.tipo === 'barril') {
+      if (!it.pego) {
+        ctx.fillStyle = vgrad(ctx, -24, 0, [[0, '#ff8a5a'], [0.5, '#d6301a'], [1, '#5a0a04']]);
+        ctx.beginPath(); ctx.roundRect(-10, -24, 20, 24, 2); ctx.fill();
+        ctx.strokeStyle = '#2a0402'; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(-10, -16); ctx.lineTo(10, -16); ctx.moveTo(-10, -8); ctx.lineTo(10, -8); ctx.stroke();
+        ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(4.4, -9); ctx.lineTo(-4.4, -9); ctx.fill();
+        ctx.fillStyle = '#2a0402'; ctx.fillRect(-0.5, -14, 1, 3); ctx.fillRect(-0.5, -10.4, 1, 0.9);
+      } else {
+        ctx.fillStyle = '#00000088'; ctx.beginPath(); ctx.ellipse(0, -0.6, 22, 3, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3a0804'; ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-1, -3); ctx.lineTo(3, -6); ctx.lineTo(8, 0); ctx.fill();
+      }
+    } else if (it.tipo === 'muro') {
+      if (!it.pego) {
+        for (let row = 0; row < 8; row++) for (let col = 0; col < 2; col++) {
+          const x = -9 + col * 9 + (row & 1 ? -4.5 : 0), w = 9;
+          ctx.fillStyle = (row + col) & 1 ? '#a8553a' : '#8a4430';
+          ctx.fillRect(Math.max(-9, x), -58 + row * 7.25, Math.min(9, x + w) - Math.max(-9, x) - 0.6, 6.6);
+        }
+        ctx.strokeStyle = '#ffb38a66'; ctx.lineWidth = 1; ctx.strokeRect(-9, -58, 18, 58);
+      } else {
+        for (let k = 0; k < 7; k++) {
+          ctx.save(); ctx.translate(-20 + k * 7 + hash(it.v + k) * 4, -2 - (k % 3) * 3); ctx.rotate(hash(k + it.v) * 2);
+          ctx.fillStyle = k & 1 ? '#a8553a' : '#8a4430'; ctx.fillRect(-4, -2.5, 8, 5); ctx.restore();
+        }
+      }
+    }
+    ctx.restore();
+  }
+  function desenharChave(x, y) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-0.7);
+    ctx.fillStyle = 'rgba(168,219,160,0.25)'; Neon.glow(ctx, '#a8dba0', 16);
+    Neon.circle(ctx, 0, 0, 15);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#e2e8ee';
+    ctx.beginPath(); ctx.roundRect(-2, -3, 4, 15, 1.5); ctx.fill();
+    Neon.circle(ctx, 0, -6, 5.6, '#e2e8ee');
+    ctx.fillStyle = '#1b2a1b'; ctx.fillRect(-1.8, -12.4, 3.6, 6.6);
+    ctx.restore();
+  }
+  function desenharLata(x, y) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(237,136,127,0.3)'; Neon.glow(ctx, '#ed887f', 14);
+    Neon.circle(ctx, 0, 0, 15); ctx.shadowBlur = 0;
+    ctx.fillStyle = vgrad(ctx, -10, 10, [[0, '#ff8a7a'], [1, '#9a1f1a']]);
+    ctx.beginPath(); ctx.moveTo(-7, -6); ctx.lineTo(-3, -10); ctx.lineTo(7, -10); ctx.lineTo(7, 10); ctx.lineTo(-7, 10); ctx.fill();
+    ctx.fillStyle = '#2a0604'; ctx.fillRect(-5, -13, 4, 3);
+    ctx.fillStyle = '#fff'; ctx.font = '700 7px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('GAS', 0, 2);
+    ctx.restore();
+  }
+
+  // ── render ────────────────────────────────────────
+  function render() {
+    if (!pista) { ctx.fillStyle = '#080d1c'; ctx.fillRect(0, 0, W, H); return; }
+    fundo();
+    const m = mundoDe(pistaN), agora = performance.now();
+    ctx.save();
+    const sx = shake > 0 ? (Math.random() - 0.5) * shake : 0, sy = shake > 0 ? (Math.random() - 0.5) * shake : 0;
+    ctx.translate(W / 2 + sx, H / 2 + sy);
+    ctx.scale(cam.z, cam.z);
+    ctx.translate(-cam.x, -cam.y);
+    const esq = cam.x - W / 2 / cam.z - 60, dir = cam.x + W / 2 / cam.z + 60;
+    const topo = cam.y - H / 2 / cam.z - 60, baixo = cam.y + H / 2 / cam.z + 60;
+    const visivel = s => Math.max(s.x0, s.x1) > esq && Math.min(s.x0, s.x1) < dir;
+
+    // lava (vulcão) ou água gelada (geleira) no fundo de cada vão
+    if (m.tema === 'vulcao' || m.tema === 'geleira') {
+      for (let i = 0; i + 1 < pista.trechos.length; i++) {
+        const a = pista.trechos[i][pista.trechos[i].length - 1], b = pista.trechos[i + 1][0];
+        if (b[0] - a[0] < 2 || b[0] < esq || a[0] > dir) continue;
+        const y0 = Math.max(a[1], b[1]) + 90, lava = m.tema === 'vulcao';
+        const g = ctx.createLinearGradient(0, y0, 0, y0 + 160);
+        g.addColorStop(0, lava ? '#ffd36b' : '#bff0ff'); g.addColorStop(0.15, lava ? '#ff5a1f' : '#1d6a9a'); g.addColorStop(1, lava ? '#3a0505' : '#03101e');
+        ctx.fillStyle = g; Neon.glow(ctx, lava ? '#ff3b1f' : '#8fe3ff', 30);
+        ctx.beginPath(); ctx.moveTo(a[0] - 40, baixo + 200);
+        for (let x = a[0] - 40; x <= b[0] + 40; x += 12) ctx.lineTo(x, y0 + Math.sin(x * 0.05 + agora / 300) * 3);
+        ctx.lineTo(b[0] + 40, baixo + 200); ctx.fill(); ctx.shadowBlur = 0;
+        if (lava) {   // bolhas estourando
+          for (let k = 0; k < 5; k++) {
+            const ph = (agora / 1400 + hash(i * 9 + k)) % 1, bx = a[0] + (b[0] - a[0]) * hash(i * 5 + k * 3);
+            ctx.globalAlpha = 1 - ph; Neon.circle(ctx, bx, y0 - ph * 20, 2 + ph * 4, '#ffb347');
+          }
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    // chão maciço por baixo do traçado
+    ctx.fillStyle = m.chao;
+    ctx.beginPath();
+    for (const s of pista.segs) {
+      if (!visivel(s)) continue;
+      const [ax, ay, bx, by] = s.x1 >= s.x0 ? [s.x0, s.y0, s.x1, s.y1] : [s.x1, s.y1, s.x0, s.y0];
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(bx, Math.max(by, baixo)); ctx.lineTo(ax, Math.max(ay, baixo)); ctx.closePath();
+    }
+    ctx.fill();
+    const tracarPista = () => {
+      ctx.beginPath();
+      let fimAnt = null;
+      for (const s of pista.segs) {
+        if (!visivel(s)) { fimAnt = null; continue; }
+        if (!fimAnt || fimAnt[0] !== s.x0 || fimAnt[1] !== s.y0) ctx.moveTo(s.x0, s.y0);
+        ctx.lineTo(s.x1, s.y1);
+        fimAnt = [s.x1, s.y1];
+      }
+    };
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    // faixa de terra logo abaixo da superfície, com pedrinhas
+    ctx.save(); ctx.translate(0, 11);
+    ctx.strokeStyle = m.terra; ctx.lineWidth = 22; tracarPista(); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#00000040';
+    for (const s of pista.segs) {
+      if (!visivel(s)) continue;
+      for (let d = 0; d < s.len; d += 17) {
+        const k = Math.floor(s.x0 + d), u = d / s.len, prof = 6 + hash(k) * 16;
+        ctx.fillRect(s.x0 + (s.x1 - s.x0) * u, s.y0 + (s.y1 - s.y0) * u + prof, 3, 2);
+      }
+    }
+    // superfície em três camadas: brilho largo, trilho neon, fio branco
+    for (const [cor, larg, blur] of [[m.trilho + '38', 14, 0], [m.trilho, 5, 18], ['rgba(255,255,255,0.85)', 1.5, 0]]) {
+      ctx.strokeStyle = cor; ctx.lineWidth = larg; Neon.glow(ctx, m.trilho, blur);
+      tracarPista(); ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    // placas de gelo: a superfície vira branca e brilha
+    for (const z of pista.zonas) {
+      if (z.x1 < esq || z.x0 > dir) continue;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(z.x0, topo, z.x1 - z.x0, baixo - topo); ctx.clip();
+      ctx.strokeStyle = '#e8faff'; ctx.lineWidth = 7; Neon.glow(ctx, '#8fe3ff', 16);
+      tracarPista(); ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.shadowBlur = 0; ctx.stroke();
+      ctx.restore();
+      if (z.x0 > esq) {
+        ctx.fillStyle = '#c8f4ff'; ctx.font = '700 13px Orbitron, sans-serif'; ctx.textAlign = 'left';
+        const s = pista.segs.find(q => q.x1 >= z.x0) || pista.segs[0];
+        ctx.fillText('❄ GELO', z.x0 + 6, s.y0 - 70);
+      }
+    }
+    // nitro: setas correndo na direção da pista
+    const fase = (agora / 120) % 40;
+    for (const s of pista.segs) {
+      if (!s.boost || !visivel(s)) continue;
+      ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 3; Neon.glow(ctx, '#9be7ce', 12);
+      ctx.beginPath();
+      for (let d = fase; d < s.len - 10; d += 40) {
+        const bx = s.x0 + (s.x1 - s.x0) * d / s.len, by = s.y0 + (s.y1 - s.y0) * d / s.len;
+        ctx.moveTo(bx - 8, by - 14); ctx.lineTo(bx + 2, by - 7); ctx.lineTo(bx - 8, by);
+      }
+      ctx.stroke();
+      ctx.shadowBlur = 0; ctx.fillStyle = '#9be7ce'; ctx.font = '700 11px Orbitron, sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText('NITRO', s.x0 + 10, s.y0 - 26);
+    }
+    ctx.shadowBlur = 0;
+    // sucata e itens
+    const gm = Math.abs(Math.cos(agora / 260));
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const it of pista.itens) {
+      if (it.x < esq - 80 || it.x > dir + 80) continue;
+      if (OBST[it.tipo]) { desenharSucata(it); continue; }
+      if (it.tipo === 'bandeira') {
+        const cor = it.pego ? '#a8dba0' : '#efce95', onda = Math.sin(agora / 200 + it.x) * 4;
+        ctx.strokeStyle = '#c7d6e1'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(it.x, it.y); ctx.lineTo(it.x, it.y - 120); ctx.stroke();
+        ctx.fillStyle = cor; Neon.glow(ctx, cor, 14);
+        ctx.beginPath(); ctx.moveTo(it.x, it.y - 120); ctx.quadraticCurveTo(it.x + 24, it.y - 116 + onda, it.x + 46, it.y - 106 + onda);
+        ctx.lineTo(it.x, it.y - 90); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+        ctx.font = '700 9px Orbitron, sans-serif'; ctx.fillStyle = '#080d1c';
+        ctx.fillText('⛽', it.x + 14, it.y - 106);
+        continue;
+      }
+      if (it.pego) continue;
+      if (it.tipo === 'lata') desenharLata(it.x, it.y);
+      else if (it.tipo === 'chave') desenharChave(it.x, it.y + Math.sin(agora / 300) * 3);
+      else {
+        ctx.fillStyle = '#efce95'; Neon.glow(ctx, '#efce95', 14);
+        ctx.beginPath(); ctx.ellipse(it.x, it.y, 4 + 6 * gm, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    // chegada
+    const fy = pista.segs[pista.segs.length - 1].y1;
+    ctx.fillStyle = '#a8dba0'; Neon.glow(ctx, '#a8dba0', 14);
+    ctx.fillRect(pista.fim - 2, fy - 130, 4, 130);
+    ctx.shadowBlur = 0;
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+      ctx.fillStyle = (i + j) & 1 ? '#fff' : '#111';
+      ctx.fillRect(pista.fim + 2 + i * 9, fy - 128 + j * 9, 9, 9);
+    }
+
+    if (state !== 'morto' || !explodiu) desenharCaminhao();
+    particles.draw(ctx);
+    ctx.restore();
+    if (m.tema === 'geleira') neve();
+
+    hud();
+  }
+
+  function barra(x, rot, frac, cores, larg = 80) {
+    ctx.fillStyle = '#a8b9c8'; ctx.font = '700 9px Orbitron, sans-serif';
+    ctx.fillText(rot, x, 15);
+    const bx = x + ctx.measureText(rot).width + 6;
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(bx, 9, larg, 12);
+    ctx.fillStyle = frac > 0.5 ? cores[0] : frac > 0.25 ? cores[1] : cores[2];
+    Neon.glow(ctx, ctx.fillStyle, 10);
+    ctx.fillRect(bx, 9, larg * clamp(frac, 0, 1), 12);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx, 9, larg, 12);
+    return bx + larg + 14;
+  }
+  function hud() {
+    ctx.fillStyle = 'rgba(8,13,28, 0.92)'; ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = 'rgba(242,179,61, 0.3)'; ctx.fillRect(0, 30, W, 1);
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    const critica = car.saude < 25 && Math.sin(performance.now() / 120) > 0;
+    let hx = barra(58, 'GAS', car.gasolina / K.tanque, ['#a8dba0', '#efce95', '#ed887f'], 76);
+    hx = barra(hx, 'LATARIA', car.saude / K.saude, ['#9be7ce', '#efce95', critica ? '#ffffff' : '#ff5a4d'], 76);
+    const meta = Math.ceil(pista.sucata * META);
+    for (const [rot, val, cor] of [
+      ['TEMPO', tempo.toFixed(1), tempo <= alvo ? '#a8dba0' : '#efce95'],
+      ['ALVO', alvo.toFixed(1), 'rgba(237,244,240, 0.7)'],
+      ['🪙', ganhoDe(car), '#efce95'],
+      ['SUCATA', `${car.destruidos}/${pista.sucata}`, car.destruidos >= meta ? '#a8dba0' : '#ff8a3c'],
+      ['FASE', `${pistaN + 1} ${PISTAS[pistaN].nome}`, mundoDe(pistaN).trilho],
+    ]) {
+      ctx.fillStyle = '#a8b9c8'; ctx.font = '700 9px Orbitron, sans-serif';
+      ctx.fillText(rot, hx, 15); hx += ctx.measureText(rot).width + 6;
+      ctx.fillStyle = cor; ctx.font = '700 12px Orbitron, sans-serif';
+      ctx.fillText(String(val), hx, 15); hx += ctx.measureText(String(val)).width + 16;
+    }
+    ctx.textBaseline = 'alphabetic';
+    if (car.saude < 25 && state === 'playing') {
+      ctx.textAlign = 'center'; ctx.font = '700 13px Orbitron, sans-serif';
+      ctx.fillStyle = '#ff6b5a'; Neon.glow(ctx, '#ff3b1f', 10);
+      ctx.fillText('⚠ LATARIA CRÍTICA · MOTOR FRACO', W / 2, 52);
+      ctx.shadowBlur = 0; ctx.textAlign = 'left';
+    } else if (pista.zonas.some(z => car.x >= z.x0 && car.x < z.x1)) {
+      ctx.textAlign = 'center'; ctx.font = '700 13px Orbitron, sans-serif';
+      ctx.fillStyle = '#c8f4ff'; Neon.glow(ctx, '#8fe3ff', 10);
+      ctx.fillText(car.ajustes.cravo > 0.5 ? '❄ GELO · CRAVOS SEGURANDO' : '❄ GELO · PNEU PATINA', W / 2, 52);
+      ctx.shadowBlur = 0; ctx.textAlign = 'left';
+    }
+    const modelo = CAMINHOES[car.modelo];
+    ctx.fillStyle = 'rgba(8,13,28,.8)'; ctx.fillRect(12, H - 39, 160, 25);
+    ctx.fillStyle = modelo.neon; ctx.font = '700 11px Orbitron, sans-serif';
+    ctx.fillText('🛻 ' + modelo.nome, 22, H - 22);
+
+    // trilho do progresso da pista
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(0, H - 5, W, 5);
+    ctx.fillStyle = mundoDe(pistaN).trilho; ctx.fillRect(0, H - 5, W * clamp(car.x / pista.fim, 0, 1), 5);
+    for (const b of pista.bandeiras) {
+      ctx.fillStyle = b.pego ? '#a8dba0' : '#efce95';
+      ctx.fillRect(W * b.x / pista.fim - 2, H - 12, 4, 12);
+    }
+
+    // pedais: só aparecem pra quem toca
+    if (dedo && state === 'playing') {
+      for (const [x, nome, cor, on] of [[86, 'FREIO', '#ed887f', car.freio], [W - 86, 'GÁS', '#a8dba0', car.gas]]) {
+        ctx.globalAlpha = on ? 0.95 : 0.4;
+        ctx.strokeStyle = cor; ctx.lineWidth = 3; Neon.glow(ctx, cor, on ? 20 : 6);
+        ctx.beginPath(); ctx.arc(x, H - 86, 46, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = cor; ctx.globalAlpha = on ? 0.32 : 0.07; ctx.fill();
+        ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+        ctx.font = '700 13px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = cor;
+        ctx.fillText(nome, x, H - 81);
+      }
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // ── loop ──────────────────────────────────────────
+  function loop(now) {
+    const dt = Math.min(0.1, (now - lastFrame) / 1000);
+    lastFrame = now;
+    if (state === 'playing') {
+      const tv = [...toques.values()];
+      car.gas = preso.has('gas') || tv.includes('gas');
+      car.freio = preso.has('freio') || tv.includes('freio');
+      acc += dt;
+      let n = 0;
+      while (acc >= STEP && n < 8 && !car.morto) { passo(car, pista, STEP); acc -= STEP; tempo += STEP; n++; }
+      if (n === 8) acc = 0;   // quadro perdido: descarta em vez de acelerar depois
+      for (const ev of car.ev) tratar(ev);
+      car.ev.length = 0;
+      if (comboT > 0 && (comboT -= dt) <= 0) combo = 0;
+      rastros(dt);
+      Neon.audio.music.intensity(clamp(Math.hypot(car.vx, car.vy) / 900 + combo * 0.15, 0, 1));
+      // Sem gasolina e parado, ou preso de lado: volta na bandeira em vez de
+      // deixar o jogador olhando pro caminhão sem saber o que fazer.
+      const v = Math.hypot(car.vx, car.vy);
+      paradoT = v < 12 && (car.gasolina <= 0 || car.gas) ? paradoT + dt : 0;
+      if (car.morto) explodir();
+      else if (car.x > pista.fim) chegou();
+      else if (paradoT > (car.gasolina <= 0 ? 1.2 : 2.5)) explodir(car.gasolina <= 0 ? 'SEM GASOLINA!' : 'TRAVOU!');
+    } else if (state === 'morto' || state === 'chegou') {
+      fimT += dt;
+      if (fimT > (state === 'chegou' ? 1.5 : 1.2)) { if (state === 'chegou') telaResultado(); else renascer(); }
+    }
+    if (car && state !== 'paused' && state !== 'hub') passoCamera(cam, car, pista, dt, W, H);
+    particles.update(dt);
+    shake = Math.max(0, shake - dt * 40);
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // Gancho de diagnóstico: o Safari remoto lê o estado por aqui. Não muda nada do jogo.
+  window.__monster = () => ({ car, pista, state, tempo, alvo, pistaN, save, cam });
+
+  pintarPainel();
+  render();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

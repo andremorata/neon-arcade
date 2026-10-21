@@ -170,6 +170,8 @@ window.Neon = (function () {
     acid()        { if (!g()) return; tone(420, 260, 0, 0.12, 'triangle', 0.09); },
     // gluglu: sobe de tom conforme a garrafa de destino enche (k de 0 a 1)
     pour(k)       { if (!g()) return; const b = 260 + (k || 0) * 320; for (let i = 0; i < 4; i++) tone(b + i * 40, b + i * 40 + 120, i * 0.07, 0.06, 'sine', 0.12); },
+    // NEON MONSTER: lata amassando sob o pneu; forte = ônibus e muro
+    crunch(forte) { if (!g()) return; noise(0, forte ? 0.28 : 0.16, 0.28, null, 500); tone(170, 50, 0, 0.18, 'square', 0.16); if (forte) tone(90, 35, 0.04, 0.3, 'sawtooth', 0.18); },
   };
   const g = () => soundOn && AC;
 

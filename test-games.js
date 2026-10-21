@@ -419,6 +419,245 @@ for (const [aberta, n, esperado] of [[3, 3, 1], [7, 7, 2], [8, 0, null]]) {
   assert.strictEqual(result.persisted.moedas, 34, 'Wheels: chegada soma moedas, caixas e acrobacias ao saldo');
 }
 
+// ── NEON MONSTER ───────────────────────────────────
+// Mesma ideia do Wheels: o bloco de fisica roda aqui e prova que as 12 pistas
+// fecham, que a sucata da pra esmagar e que a lataria amassa do jeito certo.
+// o monster grava o total de estrelas dentro de chegou(), entao fica fora do BEST
+assert.match(games.monster, /pb = Neon\.best\.update\('monster', total\)/, 'O Monster precisa gravar o total de estrelas');
+{
+  const src = games.monster;
+  const ini = src.indexOf('  // ── física ──');
+  const fim = src.indexOf('  // ── fim da física ──');
+  assert.ok(ini > 0 && fim > ini, 'monster: marcadores do bloco de fisica nao encontrados');
+  const M = new Function(src.slice(ini, fim)
+    + '; return { K, STEP, OBST, PISTAS, MUNDOS, CAMINHOES, MELHORIAS, CUSTOS, ajustesDe, compilar, novoCaminhao, ferir, passo, piloto, correrSozinho, passoCamera, chaoSob };')();
+
+  assert.strictEqual(M.PISTAS.length, 12, 'O Monster tem 12 pistas');
+  assert.strictEqual(M.MUNDOS.length, 4, 'As 12 pistas vem em 4 mundos');
+  for (const m of M.MUNDOS) assert.strictEqual(m.pistas.length, 3, `O mundo ${m.nome} tem 3 pistas`);
+  assert.ok(M.CAMINHOES.length >= 4, 'Monster: pelo menos quatro caminhoes');
+  assert.ok(!M.CAMINHOES[0].preco && M.CAMINHOES.slice(1).every(c => c.preco > 0),
+    'Monster: o primeiro vem de fabrica, os outros se compram');
+  for (const nome of ['COVEIRO', 'INFERNO', 'NEVASCA']) {
+    assert.ok(M.CAMINHOES.some(c => c.nome === nome), `Monster: falta o ${nome} na garagem`);
+  }
+
+  const META = +src.match(/const META = ([\d.]+);/)[1];
+  const UP_MAX = Object.fromEntries(M.MELHORIAS.map(m => [m.id, M.CUSTOS.length]));
+  // corre a pista inteira; controle 'piloto' nivela no ar, 'solto' so acelera no chao
+  const correr = (pd, modelo = 0, up = null, controle = 'piloto', aCada = null) => {
+    const p = M.compilar(pd.pecas), car = M.novoCaminhao(p, modelo, up);
+    let t = 0, maiorVoo = 0;
+    const marcos = [0];
+    for (let i = 0; i < 150 * 240 && !car.morto && car.x < p.fim; i++) {
+      if (controle === 'piloto') M.piloto(car); else { car.gas = car.chao > 0; car.freio = false; }
+      M.passo(car, p, M.STEP); t += M.STEP;
+      for (const e of car.ev) {
+        if (e.tipo === 'bandeira') marcos.push(t);
+        if (e.tipo === 'pouso') maiorVoo = Math.max(maiorVoo, e.ar);
+      }
+      car.ev.length = 0;
+      if (aCada) aCada(car, p, i);
+    }
+    marcos.push(t);
+    return { car, p, t, marcos, maiorVoo };
+  };
+
+  // Toda pista fecha com o piloto, de fabrica e com tudo no maximo, com os
+  // quatro caminhoes. E o piloto esmaga a meta da segunda estrela: se nem ele
+  // consegue, a estrela e impossivel naquela pista.
+  for (const pd of M.PISTAS) {
+    for (let modelo = 0; modelo < M.CAMINHOES.length; modelo++) {
+      for (const up of [null, UP_MAX]) {
+        const { car, p } = correr(pd, modelo, up);
+        const quem = `${pd.nome} com ${M.CAMINHOES[modelo].nome}${up ? ' no maximo' : ''}`;
+        assert.ok(!car.morto && car.x >= p.fim, `Monster: ${quem} nao chega (${car.morto || 'parou'} em x=${car.x.toFixed(0)})`);
+        assert.ok(car.destruidos >= Math.ceil(p.sucata * META),
+          `Monster: ${quem} esmaga ${car.destruidos}/${p.sucata}, a estrela pede ${Math.ceil(p.sucata * META)}`);
+      }
+    }
+  }
+
+  // Duracao por mundo, bandeira a cada trecho curto e camera sempre no caminhao.
+  const FAIXA = { ARENA: [24, 34], 'FERRO-VELHO': [30, 38], 'VULCÃO': [33, 40], GELEIRA: [32, 42] };
+  const arNecessario = (() => {
+    let w = 0, giro = 0, t = 0;
+    while (t < 5) {
+      w += (-M.K.tilt - w) * Math.min(1, M.K.tiltResp * M.STEP);
+      giro += w * M.STEP; t += M.STEP;
+      if (Math.abs(giro) >= 2 * Math.PI * 0.9) return t;
+    }
+    assert.fail('monster: com esse tilt nao da pra fechar um flip');
+  })();
+  for (const pd of M.PISTAS) {
+    const cam = { x: 0, y: 0, z: 1.3 };
+    const r = correr(pd, 0, null, 'piloto', (car, p, i) => {
+      if (i === 0) { cam.x = car.x + 200; cam.y = car.y - 80; }
+      if (i % 4) return;
+      M.passoCamera(cam, car, p, 1 / 60, 960, 540);
+      const sy = (car.y - cam.y) * cam.z + 270;
+      assert.ok(sy > 30 && sy < 510, `Monster ${pd.nome}: caminhao fora da tela em x=${car.x.toFixed(0)} (y ${sy.toFixed(0)})`);
+      const ch = M.chaoSob(car, p, null);
+      if (ch != null && ch - car.y < 300) {
+        assert.ok((ch - cam.y) * cam.z + 270 < 540, `Monster ${pd.nome}: chao fora da tela em x=${car.x.toFixed(0)}`);
+      }
+    });
+    const [min, max] = FAIXA[M.MUNDOS[pd.mundo].nome];
+    assert.ok(r.t >= min && r.t <= max, `Monster ${pd.nome}: ${r.t.toFixed(1)}s, o mundo pede entre ${min} e ${max}s`);
+    assert.strictEqual(r.marcos.length - 2, r.p.bandeiras.length, `Monster ${pd.nome}: o piloto passou por bandeira de menos`);
+    for (let i = 1; i < r.marcos.length; i++) {
+      assert.ok(r.marcos[i] - r.marcos[i - 1] <= 16, `Monster ${pd.nome}: trecho de ${(r.marcos[i] - r.marcos[i - 1]).toFixed(1)}s sem bandeira`);
+    }
+    for (const b of r.p.bandeiras) {
+      const s = r.p.segs[b.seg];
+      assert.ok(Math.abs(s.y1 - s.y0) < 1e-6, `Monster ${pd.nome}: bandeira fora do plano em x=${b.x.toFixed(0)}`);
+    }
+    assert.ok(r.maiorVoo >= arNecessario, `Monster ${pd.nome}: maior voo ${r.maiorVoo.toFixed(2)}s, um flip pede ${arNecessario.toFixed(2)}s`);
+    // controle que perdoa: so acelerar no chao e soltar no ar tambem fecha
+    const solto = correr(pd, 0, null, 'solto').car;
+    assert.ok(!solto.morto && solto.x >= r.p.fim, `Monster ${pd.nome}: soltando os pedais no ar o caminhao bate (${solto.morto || 'parou'} em x=${solto.x.toFixed(0)})`);
+  }
+
+  // Jogador lento gasta mais gasolina de base: com dreno 80% maior ainda chega.
+  const drenoNormal = M.K.dreno;
+  M.K.dreno = drenoNormal * 1.8;
+  for (const pd of M.PISTAS) {
+    const { car, p } = correr(pd);
+    assert.ok(car.x >= p.fim && !car.morto, `Monster ${pd.nome}: com dreno de jogador lento nao chega (${car.morto || 'sem gasolina'} em x=${car.x.toFixed(0)})`);
+  }
+  M.K.dreno = drenoNormal;
+
+  // A fase 1 e o tutorial: so segurando o gas, ate no ar, chega na primeira bandeira.
+  {
+    const p = M.compilar(M.PISTAS[0].pecas), car = M.novoCaminhao(p);
+    for (let i = 0; i < 120 * 240 && !car.morto && car.x < p.fim; i++) {
+      car.gas = true; car.freio = false; M.passo(car, p, M.STEP); car.ev.length = 0;
+    }
+    assert.ok(car.cp, `Monster: na fase 1, so-gas para em x=${car.x.toFixed(0)}, antes da primeira bandeira (x=${p.bandeiras[0].x.toFixed(0)})`);
+  }
+
+  // Lataria: queda alta amassa, queda baixa nao; blindagem e suspensao aliviam.
+  const plano = M.compilar([['reta', 4000], ['chegada']]);
+  const cair = (altura, modelo = 0, up = null) => {
+    const c = M.novoCaminhao(plano, modelo, up);
+    c.x = 600; c.y -= altura; c.vx = 300;
+    for (let i = 0; i < 3 * 240 && !c.morto; i++) { M.passo(c, plano, M.STEP); c.ev.length = 0; }
+    return c;
+  };
+  assert.strictEqual(cair(100).saude, M.K.saude, 'Monster: pulinho nao amassa a lataria');
+  const tombo = cair(450);
+  assert.ok(tombo.saude < 85 && !tombo.morto, `Monster: queda de 450px tem que amassar sem matar (sobrou ${tombo.saude.toFixed(0)})`);
+  const coveiro = M.CAMINHOES.findIndex(c => c.nome === 'COVEIRO');
+  assert.ok(cair(450, coveiro).saude > tombo.saude, 'Monster: o COVEIRO blindado amassa menos');
+  assert.ok(cair(450, 0, { blindagem: 5 }).saude > tombo.saude, 'Monster: blindagem comprada amassa menos');
+  assert.ok(cair(450, 0, { suspensao: 5 }).saude > tombo.saude, 'Monster: suspensao comprada amassa menos');
+  {
+    const c = M.novoCaminhao(plano);
+    M.ferir(c, 1000, 'teste');
+    assert.strictEqual(c.saude, 0, 'Monster: lataria nao fica negativa');
+    assert.strictEqual(c.morto, 'quebrou', 'Monster: lataria zerada quebra o caminhao');
+  }
+  // lataria amassada deixa o motor fraco
+  {
+    const arrancar = saude => {
+      const c = M.novoCaminhao(plano); c.saude = saude;
+      for (let i = 0; i < 2 * 240; i++) { c.gas = true; M.passo(c, plano, M.STEP); c.ev.length = 0; }
+      return c.x;
+    };
+    assert.ok(arrancar(20) < arrancar(100) * 0.92, 'Monster: com a lataria judiada o caminhao anda menos');
+  }
+
+  // Sucata: passar por cima esmaga e paga; voar por cima escapa.
+  {
+    const p = M.compilar([['reta', 400], ['carros', 3], ['reta', 300], ['onibus'], ['reta', 400], ['caixas', 2], ['reta', 1200], ['chegada']]);
+    assert.strictEqual(p.sucata, 6, 'Monster: as pecas de sucata geram os obstaculos pedidos');
+    const c = M.novoCaminhao(p);
+    for (let i = 0; i < 8 * 240 && c.x < p.fim && !c.morto; i++) { c.gas = true; M.passo(c, p, M.STEP); c.ev.length = 0; }
+    assert.strictEqual(c.destruidos, 6, `Monster: o caminhao esmaga tudo no caminho (esmagou ${c.destruidos})`);
+    assert.strictEqual(c.sucata, 3 * M.OBST.carro.moedas + M.OBST.onibus.moedas + 2 * M.OBST.caixa.moedas, 'Monster: cada sucata paga o seu');
+    assert.strictEqual(c.saude, M.K.saude, 'Monster: carro, onibus e caixa nao amassam a lataria');
+    for (const it of p.itens) it.pego = false;
+    const voa = M.novoCaminhao(p);
+    voa.x = 300; voa.y -= 260; voa.vx = 900; voa.vy = -200;
+    for (let i = 0; i < 120 && !voa.morto; i++) { M.passo(voa, p, M.STEP); voa.ev.length = 0; }
+    assert.ok(voa.x > p.itens.find(i => i.tipo === 'carro').x + 40 && voa.destruidos === 0, 'Monster: voar por cima nao esmaga');
+  }
+  {
+    const p = M.compilar([['reta', 400], ['barris', 1], ['reta', 300], ['muro'], ['reta', 400], ['chave'], ['reta', 600], ['chegada']]);
+    const c = M.novoCaminhao(p);
+    let barril = null, muro = null, chave = null;
+    for (let i = 0; i < 10 * 240 && c.x < p.fim && !c.morto; i++) {
+      c.gas = true; M.passo(c, p, M.STEP);
+      for (const e of c.ev) {
+        if (e.tipo === 'esmaga' && e.obj === 'barril') barril = c.saude;
+        if (e.tipo === 'esmaga' && e.obj === 'muro') muro = c.saude;
+        if (e.tipo === 'chave') chave = c.saude;
+      }
+      c.ev.length = 0;
+    }
+    assert.ok(barril !== null && barril < M.K.saude, 'Monster: barril explode e amassa');
+    assert.ok(muro !== null && muro < barril, 'Monster: muro amassa a lataria');
+    assert.ok(chave !== null && chave > muro, 'Monster: a chave conserta a lataria');
+    assert.ok(c.saude <= M.K.saude, 'Monster: conserto nao passa da lataria nova');
+  }
+
+  // Gelo: o pneu patina, e o NEVASCA com cravo patina menos.
+  {
+    const arranque = (pecas, modelo) => {
+      const p = M.compilar(pecas), c = M.novoCaminhao(p, modelo);
+      for (let i = 0; i < 1.5 * 240; i++) { c.gas = true; M.passo(c, p, M.STEP); c.ev.length = 0; }
+      return c.x;
+    };
+    const seco = [['reta', 4000], ['chegada']], gelo = [['gelo', 0.3], ['reta', 4000], ['gelo', 1], ['chegada']];
+    const nevasca = M.CAMINHOES.findIndex(c => c.nome === 'NEVASCA');
+    assert.ok(arranque(gelo, 0) < arranque(seco, 0) * 0.9, 'Monster: no gelo o caminhao patina e arranca menos');
+    assert.ok(arranque(gelo, nevasca) > arranque(gelo, 0), 'Monster: o NEVASCA com cravo arranca melhor no gelo');
+  }
+
+  // Melhorias so ajudam, e nivel acima do maximo nao vale.
+  {
+    const base = M.ajustesDe(0, null), cheio = M.ajustesDe(0, UP_MAX);
+    assert.ok(cheio.motor > base.motor && cheio.grip > base.grip && cheio.limiar > base.limiar, 'Monster: melhoria tem que melhorar');
+    assert.ok(cheio.blindagem > base.blindagem && cheio.dreno < base.dreno, 'Monster: blindagem protege e tanque economiza');
+    assert.deepStrictEqual(M.ajustesDe(0, { motor: 99 }), M.ajustesDe(0, { motor: M.CUSTOS.length }), 'Monster: nivel acima do maximo nao vale');
+    assert.strictEqual(M.K.tilt, 6, 'Monster: escolher caminhao nao altera a fisica base');
+  }
+
+  // tempo-alvo deterministico e itens devolvidos ao estado inicial
+  const p0 = M.compilar(M.PISTAS[0].pecas);
+  const a = M.correrSozinho(p0), b = M.correrSozinho(p0);
+  assert.strictEqual(a.t, b.t, 'Monster: o tempo-alvo tem que ser deterministico');
+  assert.ok(p0.itens.every(i => !i.pego), 'Monster: correrSozinho devolve moedas e sucata');
+
+  // Save: so vale caminhao comprado; a chegada soma moedas, guarda o melhor e abre a proxima.
+  const modeloSalvo = new Function('CAMINHOES', block(src, '  function modeloSalvo(s)') + '; return modeloSalvo;')(M.CAMINHOES);
+  assert.strictEqual(modeloSalvo({ carro: 2, comprados: [2] }), 2, 'Monster: caminhao comprado vale');
+  assert.strictEqual(modeloSalvo({ carro: 2, comprados: [1] }), 0, 'Monster: caminhao nao comprado volta pro TOURO');
+  for (const carro of [-1, 9, '2', null]) assert.strictEqual(modeloSalvo({ carro, comprados: [1, 2, 3] }), 0, 'Monster: selecao invalida tem retorno seguro');
+  const finalizar = new Function('save', 'pistaN', 'PISTAS', 'MUNDOS', 'pista', 'META', `
+    let state, fimT, bonus = 0, mundoNovo = null, pb, persisted;
+    const car = { saude: 64, moedas: 5, sucata: 20, destruidos: 9, x: 0, y: 0 }, tempo = 10, alvo = 20, extra = 2;
+    ${src.match(/  const ganhoDe = .*;/)[0]}
+    const gravar = () => { persisted = JSON.parse(JSON.stringify(save)); };
+    const totalEstrelas = () => Object.values(save.pistas).reduce((n, p) => n + p.estrelas, 0);
+    const pintarPainel = () => {}, particles = { burst() {} };
+    const Neon = { best: { update: (_, n) => n }, audio: { sfx: { record() {}, level() {} } } };
+    ${block(src, '  function chegou()')}
+    chegou(); return { persisted, mundoNovo, pb };
+  `);
+  {
+    const save = { v: 1, aberta: 2, moedas: 10, carro: 0, comprados: [], up: {}, pistas: { 0: { estrelas: 3, tempo: 9, sucata: 12 } } };
+    const r = finalizar(save, 2, M.PISTAS, M.MUNDOS, { sucata: 10 }, META);
+    // 10 de saldo + 5 moedas + 20 de sucata + 2 de acrobacia + 6 da lataria (64%)
+    assert.strictEqual(r.persisted.moedas, 43, 'Monster: chegada soma moedas, sucata, acrobacia e bonus de lataria');
+    assert.strictEqual(r.persisted.pistas[2].estrelas, 3, 'Monster: chegar, esmagar 80% e bater o tempo dao tres estrelas');
+    assert.strictEqual(r.persisted.aberta, 3, 'Monster: chegar abre a proxima pista');
+    assert.strictEqual(r.mundoNovo, M.MUNDOS[1], 'Monster: fechar a ultima pista do mundo anuncia o proximo');
+    assert.deepStrictEqual(r.persisted.pistas[0], { estrelas: 3, tempo: 9, sucata: 12 }, 'Monster: chegada preserva recordes antigos');
+    assert.strictEqual(r.pb, 6, 'Monster: o recorde e o total de estrelas');
+  }
+}
+
 // geometria do alvo do Darts: setor/anel precisam bater com o desenho, senao o dardo
 // crava num lugar e pontua outro. Usa as constantes do proprio arquivo pra nao dessincronizar.
 const darts = games.darts;
