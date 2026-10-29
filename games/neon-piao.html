@@ -2381,7 +2381,10 @@
   }
 
   // ── partida ───────────────────────────────────────
+  // botão de hub ou overlay que levou até aqui larga o foco: espaço agora é do jogo
+  const largarFoco = () => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); };
   function iniciarPartida(k) {
+    largarFoco();
     luta = k; rounds = []; placar = [0, 0]; roundN = 0; golpeMax = 0;
     els.hub.classList.add('hidden');
     Neon.overlay.hide();
@@ -2538,6 +2541,7 @@
   }
   function continuar() {
     if (state !== 'pausado') return;
+    largarFoco();
     state = pausadoDe; pausadoDe = null;
     ultimoQuadro = performance.now();
     Neon.overlay.hide(); Neon.audio.music.start();
@@ -2741,7 +2745,11 @@
     A.ctl.x = n > 1 ? x / n : x; A.ctl.y = n > 1 ? y / n : y;
   }
 
+  // O botão fica com o foco depois do clique, e o overlay ainda some por 0,3s:
+  // sem esta guarda, o espaço que pula o VS ou puxa a cordinha clicava o botão
+  // escondido de novo e mandava o jogador de volta pro hub.
   Neon.$('startBtn').addEventListener('click', () => {
+    if (!Neon.overlay.visible()) return;
     Neon.audio.ensure();
     if (state === 'pausado') continuar();
     else if (state === 'resultado') proximo();
