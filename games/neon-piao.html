@@ -121,8 +121,17 @@
     .vitrine { gap: 4px; }
     .opcao canvas { width: 32px; height: 32px; }
     .opcao .situacao { display: none; }
-    .ficha { padding: 6px; gap: 8px; }
-    .ficha canvas { width: 78px; height: 78px; }
+    .ficha { padding: 6px; gap: 8px; grid-template-columns: auto minmax(0, 0.9fr) minmax(0, 1.3fr); }
+    .ficha canvas { width: 64px; height: 64px; }
+    .ficha-info { gap: 3px; }
+    .ficha-nome { font-size: 13px; }
+    .ficha-tipo { font-size: 8px; line-height: 1.3; }
+    .barras { gap: 1px 6px; }
+    .barras span { font-size: 6.5px; }
+    .barras i { height: 4px; }
+    .ficha .btn { padding: 6px 10px; min-height: 30px; font-size: 9px; }
+    .melhoria { padding: 4px 2px; gap: 2px; }
+    .melhoria .ic { font-size: 15px; }
   }
   /* em pé o quadro é estreito: um estádio por linha e a ficha empilhada */
   @media (max-width: 560px) and (orientation: portrait) {
@@ -184,12 +193,12 @@
 
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">NEON PIÃO</h2>
-      <p id="overlayText">Quatro estádios, doze adversários. Puxe a cordinha e solte na hora certa: quanto mais forte o lançamento, mais giro. Na arena, guie o pião, arranque contra o rival e solte o especial. Vence o round quem tirar o outro do prato, estourar a trava dele ou girar por mais tempo. Moedas compram piões e melhorias na oficina.</p>
+      <p id="overlayText">Quatro estádios, doze adversários. Puxe a cordinha e solte na hora certa: quanto mais forte o lançamento, mais giro. Na arena, guie o pião, arranque contra o rival e solte o especial. Tirar o rival do prato vale 2 (3 na boca do EXTREMO), estourar a trava dele vale 2 e girar por mais tempo vale 1: quem fizer 4 leva a partida. Moedas compram piões e melhorias na oficina.</p>
       <div class="sub" id="overlaySub"></div>
-      <div class="final-stats" id="finalStats" style="display:none;">
+      <div class="final-stats" id="finalStats" style="display:none; grid-template-columns: repeat(4, 1fr);">
         <div class="fstat"><span>Placar</span><b id="fsPlacar">0</b></div>
         <div class="fstat"><span>Rounds</span><b id="fsRounds">0</b></div>
-        <div class="fstat"><span>Golpe</span><b id="fsGolpe" class="pink">0</b></div>
+        <div class="fstat"><span>Maior golpe</span><b id="fsGolpe" class="pink">0</b></div>
         <div class="fstat"><span>Moedas</span><b id="fsMoedas" class="gold">0</b></div>
       </div>
       <button class="btn" id="startBtn">JOGAR</button>
@@ -199,7 +208,7 @@
     </div>
   </div>
 
-  <footer>// <a href="../index.html">← arcade</a> · FORA vale 2 · ESTOURO vale 2 · EXTREMO vale 3 · GIRO vale 1 · quem fizer 3 pontos leva a partida</footer>
+  <footer>// <a href="../index.html">← arcade</a> · FORA vale 2 · ESTOURO vale 2 · EXTREMO vale 3 · GIRO vale 1 · quem fizer 4 pontos leva a partida</footer>
 </div>
 
 <script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
@@ -235,6 +244,7 @@
     arrasto: 0.012,      // giro/s por unidade de giro: o ar
     perdaMov: 1.4,       // giro/s por 1000 px/s de deslize (× ponta)
     tracao: 230,         // ponta chata empurra ao longo do prato (px/s²)
+    flor: 0.75,          // quanto da tração segue a velocidade em vez da volta do prato
     atritoChao: 0.8,     // freio do chão na velocidade (1/s, × ponta)
     vmax: 1100,
     lanceVel: 300,       // velocidade de um lançamento cheio
@@ -313,8 +323,9 @@
     { nome: 'LOBO', tipo: 'ataque', sentido: -1, preco: 860, codigo: 'NA-12', emblema: '🐺', especial: 'UIVO LUNAR',
       cor: '#2b6bff', cor2: '#ff3b3b', metal: 'cobalto', forma: { n: 5, rb: 0.74, rt: 1, w: 0.55, gancho: 0.75, ponta: 2.8 },
       plastico: { n: 5, rb: 0.54, rt: 0.76, w: 0.6, gancho: 0.5, ponta: 2, fase: 0.5 } },
-    { nome: 'DRAGÃO', tipo: 'ataque', sentido: -1, preco: 1200, codigo: 'NA-13', emblema: '🐉', especial: 'TEMPESTADE DO DRAGÃO',
-      cor: '#1e9bff', cor2: '#00e1ff', metal: 'prata', ajuste: { ataque: 0.1, resist: -0.06 },
+    // o rei do giro: equilíbrio com tudo um pouco acima, e gira ao contrário
+    { nome: 'DRAGÃO', tipo: 'equilibrio', sentido: -1, preco: 1200, codigo: 'NA-13', emblema: '🐉', especial: 'TEMPESTADE DO DRAGÃO',
+      cor: '#1e9bff', cor2: '#00e1ff', metal: 'prata', ajuste: { ataque: 0.15, defesa: 0.05, resist: -0.04 },
       forma: { n: 4, rb: 0.72, rt: 1, w: 0.58, gancho: 0.75, ponta: 2.6 },
       plastico: { n: 4, rb: 0.54, rt: 0.84, w: 0.5, gancho: 0.6, ponta: 2.4, fase: 0.5 } },
   ];
@@ -332,7 +343,7 @@
     { nome: 'DAMA DE FERRO', apelido: 'campeã do cristal', estadio: 2, piao: 9, up: 3, habil: 0.72, chefe: true },
     { nome: 'FAÍSCA', apelido: 'pura pancada', estadio: 3, piao: 10, up: 4, habil: 0.75 },
     { nome: 'SOMBRA', apelido: 'gira ao contrário', estadio: 3, piao: 11, up: 5, habil: 0.85 },
-    { nome: 'ÔMEGA', apelido: 'rei do giro', estadio: 3, piao: 12, up: 5, habil: 0.95, chefe: true },
+    { nome: 'ÔMEGA', apelido: 'rei do giro', estadio: 3, piao: 12, up: 5, habil: 0.9, chefe: true },
   ];
   const upTudo = n => ({ ataque: n, defesa: n, resist: n, giro: n, trava: n });
 
@@ -453,8 +464,12 @@
     ax -= ux * dec; ay -= uy * dec;
     // ponta chata agarra o chão e leva o pião em volta, contra o próprio giro
     const tip = p.s.ponta * E.ponta;
+    // parte da força segue a própria velocidade: lançado reto, ele cruza o
+    // centro e volta em pétalas (a flor do ataque); lançado de lado, vira órbita
     const tracao = K.tracao * Math.max(0, tip - 0.25) / 0.75 * Math.sqrt(f) * Math.min(1, 0.15 + rho * 2.5);
-    ax -= p.sentido * tx * tracao; ay -= p.sentido * ty * tracao;
+    const v0 = Math.hypot(p.vx, p.vy), kv = v0 > 20 ? K.flor : 0;
+    ax += tracao * ((1 - kv) * -p.sentido * tx + (kv ? kv * p.vx / v0 : 0));
+    ay += tracao * ((1 - kv) * -p.sentido * ty + (kv ? kv * p.vy / v0 : 0));
     // manche: empurra, mas custa giro
     const cm = Math.hypot(p.ctl.x, p.ctl.y);
     if (cm > 0.02) {
@@ -772,7 +787,7 @@
     }
     return ar;
   }
-  function partida(e, a, b, seed, alvo = 3) {
+  function partida(e, a, b, seed, alvo = 4) {
     const rng = rngDe(seed), pts = [0, 0], rounds = [];
     while (pts[0] < alvo && pts[1] < alvo && rounds.length < 12) {
       const ar = rodada(e, a, b, rng);
@@ -837,7 +852,7 @@
   const estrelasDe = k => (save.lutas[k] && save.lutas[k].estrelas) || 0;
   const totalEstrelas = () => BLADERS.reduce((n, b, k) => n + estrelasDe(k), 0);
   const vitoriasTotais = () => BLADERS.reduce((n, b, k) => n + ((save.lutas[k] && save.lutas[k].vitorias) || 0), 0);
-  const ALVO = 3;   // pontos pra levar a partida
+  const ALVO = 4;   // pontos pra levar a partida: com 3, um EXTREMO de sorte já fechava
   let pb = Neon.best.get('piao');
 
   // ── estado ────────────────────────────────────────
@@ -1429,10 +1444,14 @@
   function estadioPronto(e) {
     const res = Math.min(2.6, pxTela() * LAY.z * 1.15), D = Math.ceil(2 * (K.R + BORDA + 4) * res);
     if (cacheEst && cacheEst.e === e && cacheEst.D === D) return cacheEst;
-    const cv = novoCanvas(D), c = cv.getContext('2d');
+    // limpo: o estádio novo. cv: o que vai pra tela, com as marcas já em cima,
+    // pra o quadro pagar uma imagem grande só. marcas fica à parte pra esmaecer.
+    const limpo = novoCanvas(D), c = limpo.getContext('2d');
     c.setTransform(res, 0, 0, res, D / 2, D / 2);
     pintarEstadio(c, e);
-    cacheEst = { e, D, res, cv };
+    const cv = novoCanvas(D);
+    cv.getContext('2d').drawImage(limpo, 0, 0);
+    cacheEst = { e, D, res, cv, limpo };
     marcas = novoCanvas(D);
     marcas.res = res;
     return cacheEst;
@@ -1550,39 +1569,47 @@
 
   // marcas no chão: a ponta risca, o choque queima. Ficam a partida inteira e
   // esmaecem a cada round novo, como um estádio de verdade depois de umas lutas.
-  function riscar(p) {
-    if (!marcas) return;
-    const c = marcas.getContext('2d'), res = marcas.res, D = marcas.width;
-    if (p.mx === undefined) { p.mx = p.x; p.my = p.y; return; }
-    const v = Math.hypot(p.vx, p.vy), tip = p.s.ponta * ar.est.ponta;
-    if (p.estado === 'girando' && v > 120 && tip > 0.3) {
+  // desenha no chão: na camada das marcas e direto no estádio que vai pra tela
+  function noChao(desenha) {
+    if (!marcas || !cacheEst) return;
+    for (const cv of [marcas, cacheEst.cv]) {
+      const c = cv.getContext('2d'), res = marcas.res, D = cv.width;
       c.setTransform(res, 0, 0, res, D / 2, D / 2);
-      c.strokeStyle = `rgba(0,0,0,${0.05 + tip * 0.07})`; c.lineWidth = 2.2; c.lineCap = 'round';
-      c.beginPath(); c.moveTo(p.mx, p.my); c.lineTo(p.x, p.y); c.stroke();
-      c.strokeStyle = `rgba(255,255,255,${0.02 + tip * 0.03})`; c.lineWidth = 0.8;
-      c.beginPath(); c.moveTo(p.mx + 1, p.my + 1); c.lineTo(p.x + 1, p.y + 1); c.stroke();
+      desenha(c);
     }
+  }
+  function riscar(p) {
+    if (p.mx === undefined) { p.mx = p.x; p.my = p.y; return; }
+    const v = Math.hypot(p.vx, p.vy), tip = p.s.ponta * ar.est.ponta, x0 = p.mx, y0 = p.my;
+    if (p.estado === 'girando' && v > 120 && tip > 0.3) noChao(c => {
+      c.strokeStyle = `rgba(0,0,0,${0.05 + tip * 0.07})`; c.lineWidth = 2.2; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(x0, y0); c.lineTo(p.x, p.y); c.stroke();
+      c.strokeStyle = `rgba(255,255,255,${0.02 + tip * 0.03})`; c.lineWidth = 0.8;
+      c.beginPath(); c.moveTo(x0 + 1, y0 + 1); c.lineTo(p.x + 1, p.y + 1); c.stroke();
+    });
     p.mx = p.x; p.my = p.y;
   }
   function queimar(x, y, raio, forca) {
-    if (!marcas) return;
-    const c = marcas.getContext('2d'), res = marcas.res, D = marcas.width;
-    c.setTransform(res, 0, 0, res, D / 2, D / 2);
-    const g = c.createRadialGradient(x, y, 0, x, y, raio);
-    g.addColorStop(0, `rgba(0,0,0,${0.35 * forca})`); g.addColorStop(1, 'rgba(0,0,0,0)');
-    c.fillStyle = g; c.beginPath(); c.arc(x, y, raio, 0, TAU); c.fill();
-    c.strokeStyle = `rgba(0,0,0,${0.3 * forca})`; c.lineWidth = 1;
-    for (let k = 0; k < 7; k++) {
-      const a = rnd(0, TAU), l = raio * rnd(0.6, 1.5);
-      c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke();
-    }
+    const riscos = Array.from({ length: 7 }, () => [rnd(0, TAU), raio * rnd(0.6, 1.5)]);
+    noChao(c => {
+      const g = c.createRadialGradient(x, y, 0, x, y, raio);
+      g.addColorStop(0, `rgba(0,0,0,${0.35 * forca})`); g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(x, y, raio, 0, TAU); c.fill();
+      c.strokeStyle = `rgba(0,0,0,${0.3 * forca})`; c.lineWidth = 1;
+      for (const [a, l] of riscos) { c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke(); }
+    });
   }
   function esmaecerMarcas(k) {
-    if (!marcas) return;
+    if (!marcas || !cacheEst) return;
     const c = marcas.getContext('2d');
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalCompositeOperation = 'destination-out'; c.fillStyle = `rgba(0,0,0,${k})`; c.fillRect(0, 0, marcas.width, marcas.height);
     c.globalCompositeOperation = 'source-over';
+    // refaz o estádio da tela: limpo por baixo, marcas que sobraram por cima
+    const t = cacheEst.cv.getContext('2d');
+    t.setTransform(1, 0, 0, 1, 0, 0);
+    t.clearRect(0, 0, cacheEst.D, cacheEst.D);
+    t.drawImage(cacheEst.limpo, 0, 0); t.drawImage(marcas, 0, 0);
   }
 
   // ── mundo: prato, piões e câmera ──────────────────
@@ -1796,7 +1823,6 @@
     ctx.translate(-cam.x, -cam.y);
     const lado = est.D / est.res;
     ctx.drawImage(est.cv, -lado / 2, -lado / 2, lado, lado);
-    if (marcas) ctx.drawImage(marcas, -lado / 2, -lado / 2, lado, lado);
     desenharEstadioVivo(e);
     desenharPecas();
     if (ar) {
@@ -2038,7 +2064,8 @@
     b.t += dt;
     if (b.t > b.dur) { banner = null; return; }
     const entra = Math.min(1, b.t / 0.22), sai = clamp((b.dur - b.t) / 0.3, 0, 1);
-    ctx.save(); ctx.globalAlpha = sai; ctx.translate(W / 2, H * (retrato ? 0.45 : 0.44));
+    // terço de cima: o nocaute acontece no prato, a faixa não pode tapar
+    ctx.save(); ctx.globalAlpha = sai; ctx.translate(W / 2, retrato ? Math.max(UI.A.y + UI.A.h + 70, H * 0.36) : H * 0.3);
     if (b.grande && !reduzido()) {
       // linhas de velocidade de mangá atrás do letreiro
       ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.rotate(b.t * 0.3);
@@ -2337,6 +2364,7 @@
     FX.pecas.length = 0; FX.cacos.length = 0;
     if (roundN > 1) esmaecerMarcas(0.4);
     foco = null; acc = 0; pousoT = 0; lento = 0; congela = 0; demo = null;
+    cam.x = cam.y = 0; cam.z = 1;   // a mira precisa do prato inteiro e parado
     if (state !== 'vs') state = 'mira';
     soltarTudo();
   }

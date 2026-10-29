@@ -3240,7 +3240,7 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
     const p1 = F.partida(3, a, b, 4242), p2 = F.partida(3, a, b, 4242);
     assert.deepStrictEqual(p1, p2, 'piao: a mesma semente tem que dar a mesma partida');
     for (const r of p1.rounds) assert.ok(r.t <= F.K.tempoMax + F.STEP, 'piao: round passou do tempo máximo');
-    assert.ok(Math.max(...p1.pts) >= 3, 'piao: a partida vai até alguém fazer 3 pontos');
+    assert.ok(Math.max(...p1.pts) >= 4, 'piao: a partida vai até alguém fazer 4 pontos');
   }
 
   // O torneio fecha: contra cada adversário, um dos primeiros piões vence pelo
@@ -3266,11 +3266,11 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
 
   // moedas e estrelas: ★ vencer, ★ sem levar ponto, ★ ganhar um round sem ser no giro
   {
-    const limpo = F.apurar(3, [R(0, 'fora'), R(0, 'giro')], true);
-    assert.deepStrictEqual([limpo.venceu, limpo.estrelas, ...limpo.pts], [true, 3, 3, 0], 'piao: 3 × 0 com um FORA dá três estrelas');
-    assert.strictEqual(limpo.moedas, F.premioDe(3) * 2 + 8 + 4 + 15, 'piao: primeira vitória paga dobrado, mais o bônus de cada round e do placar limpo');
-    const suado = F.apurar(3, [R(1, 'giro'), R(0, 'giro'), R(-1, 'empate'), R(0, 'giro'), R(0, 'giro')], false);
-    assert.deepStrictEqual([suado.venceu, suado.estrelas, suado.moedas], [true, 1, F.premioDe(3) + 12], 'piao: vitória só no giro, levando ponto, dá uma estrela');
+    const limpo = F.apurar(3, [R(0, 'fora'), R(0, 'giro'), R(0, 'giro')], true);
+    assert.deepStrictEqual([limpo.venceu, limpo.estrelas, ...limpo.pts], [true, 3, 4, 0], 'piao: 4 × 0 com um FORA dá três estrelas');
+    assert.strictEqual(limpo.moedas, F.premioDe(3) * 2 + 8 + 4 + 4 + 15, 'piao: primeira vitória paga dobrado, mais o bônus de cada round e do placar limpo');
+    const suado = F.apurar(3, [R(1, 'giro'), R(0, 'giro'), R(-1, 'empate'), R(0, 'giro'), R(0, 'giro'), R(0, 'giro')], false);
+    assert.deepStrictEqual([suado.venceu, suado.estrelas, suado.moedas], [true, 1, F.premioDe(3) + 16], 'piao: vitória só no giro, levando ponto, dá uma estrela');
     const perdeu = F.apurar(3, [R(1, 'extremo'), R(0, 'giro')], true);
     assert.deepStrictEqual([perdeu.venceu, perdeu.estrelas, perdeu.moedas], [false, 0, 8], 'piao: derrota paga um consolo pelos pontos feitos');
     assert.ok(F.premioDe(11) > F.premioDe(0), 'piao: adversário mais forte paga mais');
@@ -3309,7 +3309,7 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
       ${block(src, '  function fimDaPartida()')}
       fimDaPartida(); return { gravado, novidades, pb };`)(F, save, luta, rounds);
     const novo = () => ({ moedas: 10, aberta: 2, lutas: { 0: { estrelas: 3, vitorias: 1 }, 1: { estrelas: 1, vitorias: 1 } }, piao: 0, comprados: [], up: {} });
-    const vitoria = [R(0, 'fora'), R(0, 'giro')];
+    const vitoria = [R(0, 'fora'), R(0, 'fora')];
     const r = terminar(novo(), 2, vitoria);
     assert.strictEqual(r.gravado.aberta, 3, 'piao: vencer o campeão abre o adversário seguinte');
     assert.ok(r.novidades.some(n => n.includes(F.ESTADIOS[1].nome)), 'piao: vencer o campeão anuncia o estádio novo');
@@ -3319,7 +3319,7 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
     assert.strictEqual(r.pb, 3 + 1 + 3, 'piao: o recorde é o total de estrelas');
     const perdeu = terminar(novo(), 2, [R(1, 'extremo')]);
     assert.deepStrictEqual([perdeu.gravado.aberta, perdeu.gravado.lutas[2]], [2, undefined], 'piao: perder não abre nada');
-    const revanche = terminar({ ...novo(), aberta: 6, lutas: { ...novo().lutas, 2: { estrelas: 3, vitorias: 1 } } }, 2, [R(0, 'giro'), R(0, 'giro'), R(0, 'giro')]);
+    const revanche = terminar({ ...novo(), aberta: 6, lutas: { ...novo().lutas, 2: { estrelas: 3, vitorias: 1 } } }, 2, [R(0, 'giro'), R(0, 'giro'), R(0, 'giro'), R(0, 'giro')]);
     assert.deepStrictEqual([revanche.gravado.aberta, revanche.gravado.lutas[2].estrelas, revanche.novidades.length], [6, 3, 0],
       'piao: revanche vencida não fecha o que já estava aberto nem apaga estrela');
   }
