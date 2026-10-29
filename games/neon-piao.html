@@ -2591,7 +2591,9 @@
       faiscas(ev.x, ev.y, 1, 0, 30, 300, ['#ffffff', P.cor, P.cor2], Math.PI);
       if (mudo) return;
       som('zap'); som('level');
-      mostrarBanner(P.especial + '!', P.cor, ev.p.lado === 0 ? 'ESPECIAL' : `ESPECIAL DE ${BLADERS[luta].nome}`, 1.3);
+      // a faixa grande é do jogador; o especial do rival só ganha faixa se ela estiver livre
+      if (ev.p.lado === 0 || !banner) mostrarBanner(P.especial + '!', P.cor, ev.p.lado === 0 ? 'ESPECIAL' : `ESPECIAL DE ${BLADERS[luta].nome}`, 1.3);
+      else flutuar(ev.x, ev.y - 46, P.especial + '!', P.cor, 15);
       lento = Math.max(lento, reduzido() ? 0 : 0.35);
     } else if (ev.tipo === 'clique') {
       faiscas(ev.x, ev.y, 1, 0, 10, 200, ['#ff6b5a', '#ffffff'], Math.PI);
