@@ -172,6 +172,13 @@ window.Neon = (function () {
     pour(k)       { if (!g()) return; const b = 260 + (k || 0) * 320; for (let i = 0; i < 4; i++) tone(b + i * 40, b + i * 40 + 120, i * 0.07, 0.06, 'sine', 0.12); },
     // NEON MONSTER: lata amassando sob o pneu; forte = ônibus e muro
     crunch(forte) { if (!g()) return; noise(0, forte ? 0.28 : 0.16, 0.28, null, 500); tone(170, 50, 0, 0.18, 'square', 0.16); if (forte) tone(90, 35, 0.04, 0.3, 'sawtooth', 0.18); },
+    // NEON PIÃO: metal contra metal (k de 0 a 1), cordinha do lançador, zumbido
+    // do giro (k = quanto ainda gira), estouro da trava e engrenagem no trilho
+    clash(k)      { if (!g()) return; k = clamp(+k || 0, 0, 1); noise(0, 0.05 + k * 0.1, 0.1 + k * 0.24, null, 3800 - k * 2200); [1, 2.76, 5.4].forEach((m, i) => tone((480 + k * 160) * m + rand(-25, 25), 0, 0, 0.1 + k * 0.3 - i * 0.03, 'sine', (0.06 + k * 0.1) / (i + 1))); if (k > 0.6) tone(120, 45, 0, 0.25, 'triangle', 0.2 * k); },
+    rip()         { if (!g()) return; noise(0, 0.34, 0.2, null, 1400); tone(160, 1500, 0, 0.32, 'sawtooth', 0.06); for (let i = 0; i < 7; i++) tone(820 + i * 150, 0, i * 0.04, 0.025, 'square', 0.035); },
+    whirr(k)      { if (!g()) return; k = clamp(+k || 0, 0, 1.2); const f = 130 + k * 560; tone(f, f * 0.96, 0, 0.17, 'triangle', 0.016 + k * 0.02); tone(f * 2.02, 0, 0, 0.12, 'sine', 0.007); },
+    burst()       { if (!g()) return; noise(0, 0.55, 0.36, null, 500); tone(260, 40, 0, 0.65, 'sawtooth', 0.22); [1, 2.4, 3.9].forEach((m, i) => tone(760 * m, 0, 0.03 + i * 0.06, 0.32, 'sine', 0.08)); },
+    grind(k)      { if (!g()) return; noise(0, 0.1, 0.04 + (+k || 0) * 0.08, null, 5200); tone(1900, 1500, 0, 0.08, 'square', 0.02); },
   };
   const g = () => soundOn && AC;
 

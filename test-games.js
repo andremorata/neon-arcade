@@ -3044,4 +3044,285 @@ const emVoo = (x, y, z, v, objs) => { const s = GL.novoVoo(1, false); s.fase = '
   assert.ok(T.ALVOS.includes('primeiro') && T.ALVOS.length >= 2, 'torres: modos de alvo');
 }
 
+// ── NEON PIÃO ──────────────────────────────────────
+// A física, a IA e a economia saem do fonte e rodam aqui: cada tipo gira o
+// tempo que promete, o estádio é justo pros dois lados, boca derruba e parede
+// segura, e o torneio fecha com o pião certo e as melhorias que dá pra juntar.
+// o pião grava o total de estrelas dentro de fimDaPartida(), então fica fora do BEST
+assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião precisa gravar o total de estrelas');
+{
+  const src = games.piao;
+  const ini = src.indexOf('  // ── física ──'), fim = src.indexOf('  // ── fim da física ──');
+  assert.ok(ini > 0 && fim > ini, 'piao: marcadores do bloco de fisica nao encontrados');
+  const fisica = src.slice(ini, fim);
+  const F = new Function(fisica + '; return { K, STEP, PONTOS, TIPOS, PIOES, BLADERS, ESTADIOS, MELHORIAS, CUSTOS, statsDe, upTudo, novoPiao, lancar, novaArena, passo, especial, rngDe, partida, apurar, premioDe, trilhoEm };')();
+  const difAng = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  const R = (vencedor, tipo) => ({ vencedor, tipo, pontos: F.PONTOS[tipo] });
+
+  // elenco: um pião de fábrica, um por adversário, e o adversário k libera o pião k + 1
+  assert.strictEqual(F.BLADERS.length, 12, 'piao: doze adversários');
+  assert.strictEqual(F.PIOES.length, F.BLADERS.length + 1, 'piao: um pião de fábrica e um por adversário');
+  assert.ok(F.PIOES[0].preco === 0 && F.PIOES.slice(1).every(p => p.preco > 0), 'piao: o primeiro vem de fábrica, o resto se compra');
+  for (const campo of ['nome', 'codigo']) {
+    assert.strictEqual(new Set(F.PIOES.map(p => p[campo])).size, F.PIOES.length, `piao: ${campo} de pião repetido`);
+  }
+  for (const P of F.PIOES) {
+    assert.ok(F.TIPOS[P.tipo], `piao: ${P.nome} tem um tipo que não existe`);
+    assert.ok(P.sentido === 1 || P.sentido === -1, `piao: ${P.nome} sem sentido de giro`);
+    assert.ok(P.emblema && P.especial && /^#[0-9a-f]{6}$/i.test(P.cor) && /^#[0-9a-f]{6}$/i.test(P.cor2), `piao: ${P.nome} incompleto`);
+    for (const f of [P.forma, P.plastico]) {
+      assert.ok(f.n >= 2 && f.rb > 0 && f.rb < f.rt && f.rt <= 1 && f.w > 0 && f.w <= 1, `piao: o desenho do ${P.nome} sai das medidas`);
+    }
+    // plástico maior que o metal esconde a lâmina, e é ela que diz o tipo
+    assert.ok(P.plastico.rt < P.forma.rt, `piao: o plástico do ${P.nome} cobre a lâmina`);
+  }
+  assert.ok(F.PIOES.some(p => p.sentido < 0), 'piao: precisa de pelo menos um pião de giro esquerdo');
+  for (const t of Object.keys(F.TIPOS)) assert.ok(F.BLADERS.some(b => F.PIOES[b.piao].tipo === t), `piao: nenhum adversário usa ${t}`);
+  F.BLADERS.forEach((b, k) => {
+    assert.strictEqual(b.piao, k + 1, `piao: vencer ${b.nome} tem que pôr o pião seguinte na loja`);
+    assert.strictEqual(b.estadio, Math.floor(k / 3), `piao: ${b.nome} está no estádio errado`);
+    assert.strictEqual(!!b.chefe, k % 3 === 2, `piao: o campeão é o terceiro de cada estádio (${b.nome})`);
+    if (k) assert.ok(b.up >= F.BLADERS[k - 1].up && b.habil >= F.BLADERS[k - 1].habil, `piao: ${b.nome} vem mais fraco que o anterior`);
+  });
+  const precos = e => F.BLADERS.filter(b => b.estadio === e).map(b => F.PIOES[b.piao].preco);
+  for (let e = 1; e < F.ESTADIOS.length; e++) {
+    assert.ok(Math.min(...precos(e)) > Math.max(...precos(e - 1)), `piao: pião do estádio ${e + 1} custa menos que um do estádio ${e}`);
+  }
+
+  // Meia volta leva um lançamento no outro sem trocar o sentido do giro, então
+  // todo estádio tem que ficar igual girado 180°. Espelho não serve: inverte o
+  // giro, e com bocas espelhadas o lado de baixo ganhava 9 de 10 partidas.
+  {
+    const A = F.novoPiao(0, null, 0), B = F.novoPiao(0, null, 1);
+    assert.ok(Math.abs(A.x + B.x) < 1e-9 && Math.abs(A.y + B.y) < 1e-9, 'piao: os dois lançamentos ficam opostos pelo centro');
+    for (const E of F.ESTADIOS) {
+      for (const b of E.bolsos) {
+        assert.ok(E.bolsos.some(o => o.tipo === b.tipo && o.w === b.w && difAng(o.a, b.a + Math.PI) < 1e-9),
+          `piao: ${E.nome} não fica igual girado meia volta na boca em ${b.a.toFixed(2)}`);
+        assert.ok(difAng(b.a, Math.PI / 2) > b.w + 0.3, `piao: ${E.nome} tem boca colada no lançamento`);
+        for (const o of E.bolsos) if (o !== b) assert.ok(difAng(o.a, b.a) > o.w + b.w + 0.2, `piao: ${E.nome} tem bocas encostadas`);
+      }
+      for (const q of E.pilares || []) {
+        assert.ok(E.pilares.some(o => o.d === q.d && o.r === q.r && difAng(o.a, q.a + Math.PI) < 1e-9), `piao: os pilares de ${E.nome} não ficam iguais girados`);
+        const x = Math.cos(q.a) * q.d * F.K.R, y = Math.sin(q.a) * q.d * F.K.R;
+        assert.ok(Math.hypot(x - A.x, y - A.y) > A.r + q.r + 10, `piao: pilar de ${E.nome} em cima do lançamento`);
+      }
+    }
+  }
+
+  // sozinho no prato, cada tipo gira o que promete: resistência dura mais, ataque menos
+  const sozinho = (i, e, ang = -Math.PI / 2, forca = 1, segundos = 120) => {
+    const A = F.novoPiao(i, null, 0), B = F.novoPiao(i, null, 1);
+    B.estado = 'parado'; B.x = 1e4;
+    const ar = F.novaArena(e, A, B, F.rngDe(3));
+    F.lancar(A, ang, forca, false);
+    let t = 0;
+    while (A.estado === 'girando' && t < segundos) { F.passo(ar, F.STEP); ar.ev.length = 0; t += F.STEP; }
+    return { t, A };
+  };
+  const idx = t => F.PIOES.findIndex(p => p.tipo === t);
+  const dura = {};
+  for (const [tipo, [min, max]] of Object.entries({ ataque: [18, 32], defesa: [28, 44], resistencia: [40, 62], equilibrio: [26, 42] })) {
+    const { t, A } = sozinho(idx(tipo), 0);
+    assert.strictEqual(A.estado, 'caindo', `piao: ${tipo} sozinho tem que parar de girar, não sair do prato`);
+    assert.ok(t >= min && t <= max, `piao: ${tipo} sozinho gira ${t.toFixed(1)}s, o tipo pede entre ${min} e ${max}s`);
+    dura[tipo] = t;
+  }
+  assert.ok(dura.resistencia > dura.defesa && dura.resistencia > dura.equilibrio && dura.ataque < dura.equilibrio, 'piao: a ordem de fôlego dos tipos virou');
+  // lançamento pro centro nunca joga o pião pra fora sozinho, em nenhum estádio
+  for (let e = 0; e < F.ESTADIOS.length; e++) {
+    for (let i = 0; i < F.PIOES.length; i++) {
+      for (const desvio of [-0.6, 0, 0.6]) {
+        const { A } = sozinho(i, e, -Math.PI / 2 + desvio, 1, 6);
+        assert.ok(A.estado === 'girando', `piao: ${F.PIOES[i].nome} lançado pro centro (${desvio}) cai sozinho no ${F.ESTADIOS[e].nome}`);
+      }
+    }
+  }
+
+  // parede segura e boca derruba: o mesmo tiro reto pra borda volta ou cai conforme o lugar
+  const tiro = (e, a, v = 700) => {
+    const A = F.novoPiao(4, null, 0), B = F.novoPiao(4, null, 1);
+    B.estado = 'parado'; B.x = 1e4;
+    const ar = F.novaArena(e, A, B);
+    F.lancar(A, 0, 1, false);
+    A.x = Math.cos(a) * 150; A.y = Math.sin(a) * 150; A.vx = Math.cos(a) * v; A.vy = Math.sin(a) * v;
+    for (let k = 0; k < 2 * 120 && A.estado === 'girando'; k++) { F.passo(ar, F.STEP); ar.ev.length = 0; }
+    return A;
+  };
+  F.ESTADIOS.forEach((E, e) => {
+    for (const b of E.bolsos) {
+      const A = tiro(e, b.a);
+      assert.strictEqual(A.estado, 'fora', `piao: tiro reto na boca de ${E.nome} em ${b.a.toFixed(2)} não derruba`);
+      assert.strictEqual(A.bolso, b.tipo, `piao: a boca de ${E.nome} em ${b.a.toFixed(2)} tem que valer ${b.tipo}`);
+    }
+    assert.strictEqual(tiro(e, Math.PI / 2).estado, 'girando', `piao: a parede de ${E.nome} não segura um tiro reto`);
+  });
+  assert.deepStrictEqual([F.PONTOS.giro, F.PONTOS.fora, F.PONTOS.estouro, F.PONTOS.extremo, F.PONTOS.empate], [1, 2, 2, 3, 0], 'piao: placar de cada finalização');
+
+  // trilho: encostado na parede, a engrenagem arranca; no Dojô, sem trilho, ele perde velocidade
+  const naParede = e => {
+    const A = F.novoPiao(1, null, 0), B = F.novoPiao(1, null, 1);
+    B.estado = 'parado'; B.x = 1e4;
+    const ar = F.novaArena(e, A, B);
+    F.lancar(A, 0, 1, false);
+    A.x = 0; A.y = F.K.R - A.r - 1; A.vx = 380 * A.sentido; A.vy = 0;
+    let trilhos = 0;
+    for (let k = 0; k < 0.3 * 120; k++) { F.passo(ar, F.STEP); trilhos += ar.ev.filter(v => v.tipo === 'trilho').length; ar.ev.length = 0; }
+    return { trilhos, v: Math.hypot(A.vx, A.vy) };
+  };
+  assert.ok(F.trilhoEm(F.ESTADIOS[1], Math.PI / 2) && !F.trilhoEm(F.ESTADIOS[0], Math.PI / 2), 'piao: só a Estação tem trilho embaixo');
+  const comTrilho = naParede(1), semTrilho = naParede(0);
+  assert.ok(comTrilho.trilhos >= 1, 'piao: encostar no trilho tem que avisar o efeito');
+  assert.ok(comTrilho.v > 420 && comTrilho.v > semTrilho.v + 100, `piao: o trilho não arranca (${comTrilho.v.toFixed(0)} contra ${semTrilho.v.toFixed(0)} px/s sem trilho)`);
+  for (const E of F.ESTADIOS) for (const b of E.bolsos) {
+    assert.ok(!F.trilhoEm(E, b.a) && !F.trilhoEm(E, b.a + b.w + 0.1), `piao: o trilho de ${E.nome} chega na boca e joga o pião dentro`);
+  }
+
+  // choque de frente: giro igual raspa as bordas de frente e dá mais coice que giro contrário
+  const choque = (iA, iB, sentidoB, v = 200, montar = () => {}) => {
+    const A = F.novoPiao(iA, null, 0), B = F.novoPiao(iB, null, 1);
+    F.lancar(A, 0, 1, false); F.lancar(B, 0, 1, false);
+    B.sentido = sentidoB;
+    A.x = -A.r - 4; A.y = 0; A.vx = v; A.vy = 0; B.x = B.r + 4; B.y = 0; B.vx = -v; B.vy = 0;
+    montar(A, B);
+    const ar = F.novaArena(0, A, B, F.rngDe(11));
+    for (let k = 0; k < 8; k++) { F.passo(ar, F.STEP); ar.ev.length = 0; }
+    return { A, B, coice: Math.hypot(A.vx, A.vy) + Math.hypot(B.vx, B.vy) };
+  };
+  assert.ok(choque(0, 0, 1).coice > choque(0, 0, -1).coice * 1.15, 'piao: giro igual tem que dar mais coice que giro contrário');
+  // quem leva o golpe de ataque voa mais longe que quem leva o de defesa
+  assert.ok(choque(1, 0, 1).B.vx > choque(2, 0, 1).B.vx, 'piao: a lâmina de ataque tem que empurrar mais que a de defesa');
+  // trava: encostar devagar não gira dente; pancada de frente repetida estoura
+  assert.strictEqual(choque(1, 1, 1, 30).B.cliques, 0, 'piao: toque leve não pode girar a trava');
+  {
+    let estourou = false, comEscudo = 0;
+    for (let k = 0; k < 24 && !estourou; k++) estourou = choque(3, 1, 1, 420, (A, B) => { B.cliques = k % 3; }).B.cliques >= F.statsDe(1).trava;
+    for (let k = 0; k < 24; k++) comEscudo += choque(3, 1, 1, 420, (A, B) => { B.escudo = 4; }).B.cliques;
+    assert.ok(estourou, 'piao: pancada de frente repetida tem que estourar a trava do ataque');
+    assert.strictEqual(comEscudo, 0, 'piao: o escudo da defesa segura a trava');
+  }
+
+  // especiais: cada tipo faz o que o hub promete
+  {
+    const ar = F.novaArena(0, F.novoPiao(0, null, 0), F.novoPiao(0, null, 1));
+    const com = (i, montar) => { const p = F.novoPiao(i, null, 0), o = F.novoPiao(0, null, 1); F.lancar(p, 0, 1, false); F.lancar(o, 0, 1, false); p.carga = 1; montar && montar(p); return [p, o]; };
+    const [s] = com(idx('resistencia'), p => { p.g = 40; });
+    assert.ok(F.especial(ar, s, F.novoPiao(0, null, 1)) && s.g > 60 && s.folego > 0, 'piao: o especial de resistência devolve giro');
+    const [d, o1] = com(idx('defesa'));
+    assert.ok(F.especial(ar, d, o1) && d.escudo > 0, 'piao: o especial de defesa liga o escudo');
+    const [a, o2] = com(idx('ataque'));
+    const v0 = Math.hypot(a.vx, a.vy);
+    assert.ok(F.especial(ar, a, o2) && a.furia > 0 && Math.hypot(a.vx, a.vy) > v0 + 200, 'piao: o especial de ataque arranca com fúria');
+    const [q] = com(idx('equilibrio'));
+    q.carga = 0.99;
+    assert.ok(!F.especial(ar, q, o2), 'piao: especial sem a carga cheia não sai');
+    // contra-golpe: quem está com ele leva menos e devolve mais
+    const levado = (ligado) => choque(1, 0, 1, 200, (A, B) => { if (ligado) B.contra = 3; }).B.vx;
+    assert.ok(levado(true) < levado(false), 'piao: o contra-golpe do equilíbrio tem que segurar o golpe');
+  }
+
+  // melhorias só ajudam, o preço só sobe e nível acima do máximo não vale
+  for (let k = 1; k < F.CUSTOS.length; k++) assert.ok(F.CUSTOS[k] > F.CUSTOS[k - 1], 'piao: melhoria ficou mais barata');
+  {
+    const base = F.statsDe(0, null), cheio = F.statsDe(0, F.upTudo(F.CUSTOS.length));
+    assert.ok(cheio.ataque > base.ataque && cheio.massa > base.massa && cheio.defesa > base.defesa && cheio.resist < base.resist
+      && cheio.giro0 > base.giro0 && cheio.trava > base.trava && cheio.travaForca > base.travaForca, 'piao: melhoria tem que melhorar');
+    assert.deepStrictEqual(F.statsDe(0, { ataque: 99 }), F.statsDe(0, { ataque: F.CUSTOS.length }), 'piao: nível acima do máximo não vale');
+    assert.deepStrictEqual(F.MELHORIAS.map(m => m.id).sort(), Object.keys(F.upTudo(0)).sort(), 'piao: toda melhoria tem nível no save');
+    let v = 0;
+    for (let s = 1; s <= 12; s++) if (F.partida(0, { i: 0, up: F.upTudo(5), habil: 0.6 }, { i: 0, up: null, habil: 0.6 }, s * 97).venceu === 0) v++;
+    assert.ok(v >= 9, `piao: o FARAÓ no máximo vence o de fábrica só ${v} de 12`);
+  }
+
+  // partida: mesma semente, mesmo resultado; todo round acaba dentro do tempo
+  {
+    const a = { i: 3, up: F.upTudo(1), habil: 0.5 }, b = { i: 5, up: F.upTudo(2), habil: 0.7 };
+    const p1 = F.partida(3, a, b, 4242), p2 = F.partida(3, a, b, 4242);
+    assert.deepStrictEqual(p1, p2, 'piao: a mesma semente tem que dar a mesma partida');
+    for (const r of p1.rounds) assert.ok(r.t <= F.K.tempoMax + F.STEP, 'piao: round passou do tempo máximo');
+    assert.ok(Math.max(...p1.pts) >= 3, 'piao: a partida vai até alguém fazer 3 pontos');
+  }
+
+  // O torneio fecha: contra cada adversário, um dos primeiros piões vence pelo
+  // menos um terço das partidas no nível de melhoria que dá pra ter juntado até
+  // ali. E a escada sobe: o FARAÓ de fábrica vai bem no Dojô e mal no Vórtice.
+  {
+    const taxa = (k, i, nivel, n = 12) => {
+      const b = F.BLADERS[k], adv = { i: b.piao, up: F.upTudo(b.up), habil: b.habil };
+      let v = 0;
+      for (let s = 1; s <= n; s++) if (F.partida(b.estadio, { i, up: F.upTudo(nivel), habil: 0.6 }, adv, s * 131 + k).venceu === 0) v++;
+      return v / n;
+    };
+    F.BLADERS.forEach((b, k) => {
+      const nivel = Math.round(k * 5 / 11);
+      const melhor = Math.max(...[0, 1, 2, 4].filter(i => i <= k).map(i => taxa(k, i, nivel)));
+      assert.ok(melhor >= 0.35, `piao: ${b.nome} é invencível no nível ${nivel}: o melhor pião ganha ${(melhor * 100).toFixed(0)}%`);
+    });
+    const fabrica = [0, 1, 2, 9, 10, 11].map(k => taxa(k, 0, 0, 8));
+    assert.ok(fabrica[0] >= 0.7, `piao: o ZECA é o tutorial, o FARAÓ de fábrica ganha só ${(fabrica[0] * 100).toFixed(0)}%`);
+    const media = l => l.reduce((x, y) => x + y, 0) / l.length;
+    assert.ok(media(fabrica.slice(0, 3)) > media(fabrica.slice(3)) + 0.4, 'piao: o Vórtice tem que ser bem mais difícil que o Dojô');
+  }
+
+  // moedas e estrelas: ★ vencer, ★ sem levar ponto, ★ ganhar um round sem ser no giro
+  {
+    const limpo = F.apurar(3, [R(0, 'fora'), R(0, 'giro')], true);
+    assert.deepStrictEqual([limpo.venceu, limpo.estrelas, ...limpo.pts], [true, 3, 3, 0], 'piao: 3 × 0 com um FORA dá três estrelas');
+    assert.strictEqual(limpo.moedas, F.premioDe(3) * 2 + 8 + 4 + 15, 'piao: primeira vitória paga dobrado, mais o bônus de cada round e do placar limpo');
+    const suado = F.apurar(3, [R(1, 'giro'), R(0, 'giro'), R(-1, 'empate'), R(0, 'giro'), R(0, 'giro')], false);
+    assert.deepStrictEqual([suado.venceu, suado.estrelas, suado.moedas], [true, 1, F.premioDe(3) + 12], 'piao: vitória só no giro, levando ponto, dá uma estrela');
+    const perdeu = F.apurar(3, [R(1, 'extremo'), R(0, 'giro')], true);
+    assert.deepStrictEqual([perdeu.venceu, perdeu.estrelas, perdeu.moedas], [false, 0, 8], 'piao: derrota paga um consolo pelos pontos feitos');
+    assert.ok(F.premioDe(11) > F.premioDe(0), 'piao: adversário mais forte paga mais');
+  }
+
+  // save: JSON quebrado não trava, nada sai das medidas e pião não comprado não entra na arena
+  {
+    const sIni = src.indexOf('  // ── save ──'), sFim = src.indexOf('  // ── estado ──');
+    assert.ok(sIni > 0 && sFim > sIni, 'piao: marcadores do save nao encontrados');
+    const ler = json => new Function('localStorage', 'Neon', fisica + src.slice(sIni, sFim) + '; return { save, liberado };')(
+      { getItem: () => json, setItem() {} }, { best: { get: () => 0 } });
+    assert.deepStrictEqual(ler('{quebrado').save.lutas, {}, 'piao: save corrompido começa do zero');
+    const s = ler(JSON.stringify({ moedas: -50, aberta: 99, piao: 5, comprados: [5, 5, 0, 77, 'x'],
+      up: { 5: { ataque: 9, defesa: -2 } }, lutas: { 0: { estrelas: 7, vitorias: 2 }, 40: { estrelas: 3 } } })).save;
+    assert.deepStrictEqual([s.moedas, s.aberta, s.piao], [0, F.BLADERS.length - 1, 5], 'piao: moeda, adversário aberto e pião saem das medidas');
+    assert.deepStrictEqual(s.comprados, [5], 'piao: comprados sem repetição nem índice inválido');
+    assert.deepStrictEqual([s.up[5].ataque, s.up[5].defesa, s.up[0].ataque], [F.CUSTOS.length, 0, 0], 'piao: nível de melhoria fica entre 0 e o máximo');
+    assert.deepStrictEqual([s.lutas[0].estrelas, s.lutas[40]], [3, undefined], 'piao: estrela por luta vai até 3 e luta que não existe some');
+    assert.strictEqual(ler(JSON.stringify({ piao: 3, comprados: [] })).save.piao, 0, 'piao: pião não comprado volta pro FARAÓ');
+    const { liberado } = ler(null);
+    assert.ok(liberado({ lutas: {} }, 0) && !liberado({ lutas: {} }, 2) && liberado({ lutas: { 1: { vitorias: 1 } } }, 2),
+      'piao: o pião só vai pra loja depois de vencer o dono');
+  }
+
+  // fim da partida: a primeira vitória abre o próximo e põe o pião do rival na loja;
+  // revanche e derrota não mexem no que já foi aberto
+  {
+    const terminar = (save, luta, rounds) => new Function('F', 'save', 'luta', 'rounds', `
+      const { BLADERS, ESTADIOS, PIOES, apurar } = F;
+      let apuracao = null, novidades = [], pb = 0, gravado = null;
+      const venceuJa = (s, k) => !!(s.lutas[k] && s.lutas[k].vitorias > 0);
+      const gravar = () => { gravado = JSON.parse(JSON.stringify(save)); };
+      const totalEstrelas = () => Object.values(save.lutas).reduce((n, l) => n + l.estrelas, 0);
+      const pintarPainel = () => {}, telaResultado = () => {};
+      const Neon = { best: { update: (_, n) => n } };
+      ${block(src, '  function fimDaPartida()')}
+      fimDaPartida(); return { gravado, novidades, pb };`)(F, save, luta, rounds);
+    const novo = () => ({ moedas: 10, aberta: 2, lutas: { 0: { estrelas: 3, vitorias: 1 }, 1: { estrelas: 1, vitorias: 1 } }, piao: 0, comprados: [], up: {} });
+    const vitoria = [R(0, 'fora'), R(0, 'giro')];
+    const r = terminar(novo(), 2, vitoria);
+    assert.strictEqual(r.gravado.aberta, 3, 'piao: vencer o campeão abre o adversário seguinte');
+    assert.ok(r.novidades.some(n => n.includes(F.ESTADIOS[1].nome)), 'piao: vencer o campeão anuncia o estádio novo');
+    assert.ok(r.novidades.some(n => n.includes(F.PIOES[3].nome)), 'piao: vencer o dono põe o pião dele na loja');
+    assert.strictEqual(r.gravado.moedas, 10 + F.apurar(2, vitoria, true).moedas, 'piao: as moedas da partida entram no saldo');
+    assert.deepStrictEqual(r.gravado.lutas[2], { estrelas: 3, vitorias: 1 }, 'piao: a luta guarda estrelas e vitórias');
+    assert.strictEqual(r.pb, 3 + 1 + 3, 'piao: o recorde é o total de estrelas');
+    const perdeu = terminar(novo(), 2, [R(1, 'extremo')]);
+    assert.deepStrictEqual([perdeu.gravado.aberta, perdeu.gravado.lutas[2]], [2, undefined], 'piao: perder não abre nada');
+    const revanche = terminar({ ...novo(), aberta: 6, lutas: { ...novo().lutas, 2: { estrelas: 3, vitorias: 1 } } }, 2, [R(0, 'giro'), R(0, 'giro'), R(0, 'giro')]);
+    assert.deepStrictEqual([revanche.gravado.aberta, revanche.gravado.lutas[2].estrelas, revanche.novidades.length], [6, 3, 0],
+      'piao: revanche vencida não fecha o que já estava aberto nem apaga estrela');
+  }
+}
+
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);
