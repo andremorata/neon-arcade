@@ -218,10 +218,12 @@
   const Neon = window.Neon;
   const canvas = Neon.$('game');
   // Girar o aparelho no meio da partida não recarrega: o quadro fica no
-  // formato em que a luta começou. Fora da luta, recarrega no formato novo.
+  // formato em que a luta começou e troca na volta pro hub. Fora da luta,
+  // recarrega na hora. O save já está gravado, nada se perde.
+  let girouNaLuta = false;
   function girou() {
     if (state === 'menu' || state === 'hub' || state === 'resultado') location.reload();
-    else Neon.toast('QUADRO TRAVADO ATÉ O FIM DA LUTA');
+    else { girouNaLuta = true; Neon.toast('QUADRO TRAVADO ATÉ O FIM DA LUTA'); }
   }
   const { W, H, retrato } = Neon.world(canvas, [960, 600], [600, 960], { aoGirar: girou });
   const ctx = canvas.getContext('2d');
@@ -246,7 +248,7 @@
     tracao: 230,         // ponta chata empurra ao longo do prato (px/s²)
     flor: 0.75,          // quanto da tração segue a velocidade em vez da volta do prato
     atritoChao: 0.8,     // freio do chão na velocidade (1/s, × ponta)
-    vmax: 1100,
+    vmax: 1100,          // teto: a 1/120 s nem o mais rápido atravessa outro pião
     lanceVel: 300,       // velocidade de um lançamento cheio
     controle: 520,       // aceleração do manche (px/s², × controle)
     gastoControle: 0.5,  // giro/s com o manche no fundo
@@ -279,7 +281,7 @@
   // aguenta mais que defesa, defesa segura ataque; equilíbrio fica no meio.
   const TIPOS = {
     ataque:      { nome: 'ATAQUE',      icone: '💥', massa: 1.0,  raio: 31, ataque: 1.6,  defesa: 0.1,  resist: 1.0,  ponta: 1.0,  atrito: 0.85, trava: 3, controle: 1.15, angulo: 0.8 },
-    defesa:      { nome: 'DEFESA',      icone: '🛡️', massa: 1.2,  raio: 32, ataque: 0.55, defesa: 0.3,  resist: 1.0,  ponta: 0.35, atrito: 0.30, trava: 5, controle: 0.85, angulo: 0.35 },
+    defesa:      { nome: 'DEFESA',      icone: '🛡️', massa: 1.15, raio: 32, ataque: 0.55, defesa: 0.25, resist: 1.0,  ponta: 0.35, atrito: 0.30, trava: 5, controle: 0.85, angulo: 0.35 },
     resistencia: { nome: 'RESISTÊNCIA', icone: '🌀', massa: 0.85, raio: 30, ataque: 0.5,  defesa: 0.1,  resist: 0.68, ponta: 0.15, atrito: 0.35, trava: 4, controle: 0.9,  angulo: 0.45 },
     equilibrio:  { nome: 'EQUILÍBRIO',  icone: '⚖️', massa: 1.05, raio: 30, ataque: 1.1,  defesa: 0.28, resist: 0.9,  ponta: 0.55, atrito: 0.55, trava: 4, controle: 1.0,  angulo: 0.6 },
   };
@@ -549,7 +551,7 @@
       p.x = qx + nx * min; p.y = qy + ny * min;
       if (vn < 0) {
         p.vx += (-(1 + K.pilarE) * vn + K.pilarChute) * nx; p.vy += (-(1 + K.pilarE) * vn + K.pilarChute) * ny;
-        p.g -= -vn * 0.004;
+        p.g += vn * 0.004;   // vn < 0: a pancada no cristal come giro
         ar.ev.push({ tipo: 'pilar', p, q, x: qx + nx * q.r, y: qy + ny * q.r, forca: -vn });
       }
     }
@@ -592,8 +594,8 @@
     if (golpeia) {
       // cada lâmina bate pra onde a própria borda corre
       // arrancada que acaba no rival bate mais forte: é o golpe de quem mira
-      const golpe = (P, Q, fP) => K.smash * P.s.ataque * Math.sqrt(fP) * (P.furia > 0 ? 1.9 : 1) * (P.dashT < 0.4 ? 1.4 : 1)
-        * Math.max(0.05, 1 - Q.s.defesa - (Q.escudo > 0 ? 0.3 : 0));
+      const golpe = (P, O, fP) => K.smash * P.s.ataque * Math.sqrt(fP) * (P.furia > 0 ? 1.9 : 1) * (P.dashT < 0.4 ? 1.4 : 1)
+        * Math.max(0.05, 1 - O.s.defesa - (O.escudo > 0 ? 0.3 : 0));
       sAB = golpe(A, B, fA); sBA = golpe(B, A, fB);
       // contra-golpe devolve boa parte do que chega
       if (B.contra > 0) { sBA += sAB * 0.8; sAB *= 0.4; }
@@ -681,7 +683,7 @@
     }
   }
 
-  // ── IA ─────────────
+  // ── IA ────────────────────────────────────────────
   // Cada estilo usa os mesmos comandos do jogador: manche, arrancada e
   // especial. Habilidade de 0 a 1 mexe no reflexo, na mira e no cuidado.
   function pensar(ar, p, o, dt, rng) {
@@ -698,7 +700,6 @@
       p.ctl.x = Math.cos(a) * k; p.ctl.y = Math.sin(a) * k;
     };
     let estilo = m.estilo;
-    // equilíbrio: com giro sobrando segura; atrás no giro, vai pra cima
     // equilíbrio: com giro sobrando foge; rival perto da borda, caça; senão segura o centro
     if (estilo === 'equilibrio') estilo = p.g > o.g + 6 ? 'resistencia' : odist > R * 0.5 ? 'ataque' : 'defesa';
     const fecha = -((o.vx - p.vx) * dx + (o.vy - p.vy) * dy) / Math.max(1, d);
@@ -868,9 +869,9 @@
   let state = 'menu', pausadoDe = null;
   let luta = 0, ar = null, rounds = [], placar = [0, 0], roundN = 0, golpeMax = 0;
   let mira = null, pousoT = 0, fimT = 0, vsT = 0, acc = 0, lento = 0, congela = 0;
-  let apuracao = null, novidades = [], aba = 'torneio', escolhido = save.piao, demo = null, demoT = 0;
+  let apuracao = null, novidades = [], aba = 'torneio', escolhido = save.piao, demo = null;
   let relogio = 0, ultimoQuadro = performance.now(), shake = 0, flash = 0, banner = null, foco = null;
-  const cam = { x: 0, y: 0, z: 1, alvoX: 0, alvoY: 0, alvoZ: 1 };
+  const cam = { x: 0, y: 0, z: 1 };
   const particles = new Neon.Particles();
   const imersivo = on => document.body.classList.toggle('imersivo', on);
   let dedo = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
@@ -1122,7 +1123,7 @@
   }
 
   // prévia parada no hub: mesmo desenho, sem borrão
-  function previa(cv, i, ang = 0.4, apagado = false) {
+  function previa(cv, i, ang = 0.4) {
     const c = cv.getContext('2d'), L = cv.width, esc = L / (raioDe(i) * 2.35);
     const S = spritesDe(i, esc), b = bufDe('previa@' + S.T, S.T);
     comporPiao(b, S, PIOES[i], ang, 0);
@@ -1131,9 +1132,7 @@
     const sx = L / 2 + L * 0.03, sy = L / 2 + L * 0.04, g = c.createRadialGradient(sx, sy, L * 0.1, sx, sy, L * 0.47);
     g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = g; c.fillRect(0, 0, L, L);
-    if (apagado) c.filter = 'brightness(0)';
     c.drawImage(b.o, (L - S.T) / 2, (L - S.T) / 2);
-    c.filter = 'none';
   }
 
   // ── estádios: desenho ─────────────────────────────
@@ -1470,8 +1469,8 @@
   // ── efeitos ───────────────────────────────────────
   // Tudo em coordenadas do mundo. Faísca é traço somado (lighter), fumaça é
   // disco translúcido, caco desliza no chão, peça é o pedaço de um pião estourado.
-  const FX = { faiscas: [], fumaca: [], brilhos: [], cacos: [], pecas: [] };
-  const TETO = { faiscas: 520, fumaca: 140, brilhos: 48, cacos: 180, pecas: 12 };
+  const FX = { faiscas: [], fumaca: [], brilhos: [], cacos: [], pecas: [], ar: [] };
+  const TETO = { faiscas: 520, fumaca: 140, brilhos: 48, cacos: 180, pecas: 12, ar: 46 };
   const rnd = Neon.rand;
   const por = (lista, o) => { if (FX[lista].length < TETO[lista]) FX[lista].push(o); };
   function faiscas(x, y, nx, ny, n, vel, cores, abertura = 1.1) {
@@ -1503,6 +1502,32 @@
         a: p.ang, va: rnd(10, 22) * p.sentido * (k === 1 ? -1 : 1), tam: S.T / S.escala, tilt: rnd(0.3, 0.7), dir: a });
     });
     cacos(p.x, p.y, 26, 360, [P.cor, P.cor2, '#dfe6f0', '#9aa4b4'], 3.4);
+  }
+  // poeira no ar de cada estádio: cisco na luz do dojô, brasa da oficina,
+  // gelo caindo na caverna, poeira de estrela sendo sugada pro vórtice
+  function ambiente(dt, e) {
+    const tema = ESTADIOS[e].tema, L = FX.ar, R = K.R;
+    while (L.length < TETO.ar) {
+      const a = rnd(0, TAU), d = Math.sqrt(Math.random()) * (R + 30);
+      L.push({ x: Math.cos(a) * d, y: Math.sin(a) * d, vx: rnd(-6, 6), vy: rnd(-6, 6), fase: rnd(0, TAU), vida: rnd(3, 9), tam: rnd(0.6, 1.8) });
+    }
+    for (let i = L.length - 1; i >= 0; i--) {
+      const q = L[i];
+      if (tema === 'trilho') { q.vy -= 8 * dt; q.vx *= 0.99; }
+      else if (tema === 'cristal') { q.vy = 9 + 4 * Math.sin(q.fase); q.vx = 6 * Math.sin(relogio * 0.7 + q.fase); }
+      else if (tema === 'vortice') { const d = Math.hypot(q.x, q.y) || 1; q.vx = -q.y / d * 22 - q.x / d * 5; q.vy = q.x / d * 22 - q.y / d * 5; }
+      q.x += q.vx * dt; q.y += q.vy * dt;
+      if ((q.vida -= dt) <= 0 || Math.hypot(q.x, q.y) > R + 60 || Math.hypot(q.x, q.y) < 8) L.splice(i, 1);
+    }
+  }
+  function desenharAmbiente(e) {
+    const T = temaDe(e), tema = ESTADIOS[e].tema, cor = tema === 'trilho' ? '#ffb347' : tema === 'cristal' ? '#e6fbff' : tema === 'vortice' ? '#ffc6f0' : '#fff1d6';
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = cor;
+    for (const q of FX.ar) {
+      ctx.globalAlpha = (0.12 + 0.14 * Math.sin(relogio * 2 + q.fase) ** 2) * Math.min(1, q.vida);
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.tam, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
   }
   function atualizarFx(dt) {
     const L = FX;
@@ -1729,6 +1754,14 @@
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 1.45, 0, TAU); ctx.fill();
       ctx.restore();
     }
+    // giro alto: dois arcos de velocidade correndo em volta, como no desenho animado
+    if (p.estado === 'girando' && f > 0.55) {
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.lineCap = 'round';
+      ctx.strokeStyle = rgba(misturar(P.cor, '#ffffff', 0.5), Math.min(0.55, (f - 0.55) * 1.6)); ctx.lineWidth = 1.6;
+      const a0 = p.ang * 0.35;
+      for (const k of [0, Math.PI]) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 1.22, a0 + k, a0 + k + 0.8 * p.sentido, p.sentido < 0); ctx.stroke(); }
+      ctx.restore();
+    }
     ctx.save(); ctx.globalAlpha = alfa;
     const off = p.r * 0.5 * Math.sin(tilt);
     ctx.translate(p.x + Math.cos(p.prec) * off, p.y + Math.sin(p.prec) * off - alt);
@@ -1834,8 +1867,17 @@
       // quem caiu no buraco fica por baixo de quem ainda gira
       const ordem = [...ps].sort((a, b) => (b.estado === 'fora') - (a.estado === 'fora') || (a.estado === 'girando') - (b.estado === 'girando'));
       for (const p of ordem) if (p.estado !== 'estourado') desenharPiao(p, alt);
+      // quem levou o round ganha um anel dourado que pulsa durante a câmera lenta
+      if (state === 'fimRound' && ar.fim && ar.fim.vencedor >= 0) {
+        const v = ps[ar.fim.vencedor], k = (fimT * 1.6) % 1;
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = rgba('#ffd36b', 0.7 * (1 - k)); ctx.lineWidth = 3 * (1 - k) + 1;
+        ctx.beginPath(); ctx.arc(v.x, v.y, v.r * (1.3 + k * 0.9), 0, TAU); ctx.stroke();
+        ctx.restore();
+      }
     }
     desenharFx();
+    desenharAmbiente(e);
     particles.draw(ctx);
     ctx.restore();
   }
@@ -2170,7 +2212,7 @@
     ataque: 'arranca no rival e o próximo golpe sai quase dobrado',
     defesa: 'fica duas vezes e meia mais pesado e a trava não gira por 4s',
     resistencia: 'recupera um quarto do giro e gasta metade por 5s',
-    equilibrio: 'devolve boa parte dos golpes que levar por 3s',
+    equilibrio: 'finca no chão e devolve boa parte dos golpes que levar por 3s',
   };
   function montarTorneio() {
     els.torneio.innerHTML = '';
@@ -2293,6 +2335,7 @@
     pintarPainel();
   }
   function abrirHub(qual) {
+    if (girouNaLuta) { location.reload(); return; }
     if (typeof qual === 'string') aba = qual;
     soltarTudo();
     state = 'hub';
@@ -2566,8 +2609,10 @@
       if (mudo) return;
       som('boom'); shakeAt(ev.bolso === 'extremo' ? 14 : 9); flashAt(ev.bolso === 'extremo' ? 0.4 : 0.2);
     } else if (ev.tipo === 'tombou') {
+      // caiu de lado: a lâmina raspa o chão antes de parar
       fumaca(ev.x, ev.y, 'rgba(200,220,235,1)', 8, 70, 8);
-      if (!mudo) som('drop');
+      faiscas(ev.x, ev.y, ev.p.vx, ev.p.vy, 12, 180, ['#ffffff', '#ffe9a8', P.cor], 0.9);
+      if (!mudo) { som('drop'); som('clash', 0.25); }
     }
   }
 
@@ -2744,6 +2789,7 @@
       if (state === 'fimRound' && (fimT += dt) > 2.4) depoisDoRound();
     }
     atualizarFx(dt);
+    if (ar) ambiente(dt, ar.e);
     particles.update(dt);
     atualizarCamera(dt);
   }
