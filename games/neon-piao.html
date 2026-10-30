@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>NEON PIÃO — Arcade</title>
+<title>NEON SPINNERS — Arcade</title>
 <link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
 <link rel="manifest" href="../manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -36,6 +36,11 @@
     border-radius: 10px; border: 1px solid #ffffff22; background: #ffffff08; color: var(--text-dim);
   }
   .aba[aria-pressed="true"] { color: var(--title); border-color: #7fd8ff; box-shadow: inset 0 -2px #7fd8ff; }
+  /* a derrota pediu uma melhoria que já dá pra comprar: a aba chama */
+  .aba.alerta { position: relative; border-color: var(--neon-yellow); animation: chama 1s ease-in-out infinite; }
+  .aba.alerta::after { content: '!'; position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--neon-yellow); color: #120a00; font-size: 11px; line-height: 16px; text-align: center; }
+  @keyframes chama { 50% { box-shadow: 0 0 14px #ffd36b88; } }
   .torneio.hidden, .oficina.hidden { display: none; }
 
   /* torneio: um bloco por estádio, três adversários em cada */
@@ -107,6 +112,27 @@
   .melhoria.caro .preco { color: var(--text-dim); }
   .melhoria:disabled { opacity: .5; cursor: default; }
   .melhorias.bloqueadas .melhoria { opacity: .35; pointer-events: none; }
+  .melhoria { position: relative; }
+  .melhoria.sugerida { border-color: var(--neon-yellow); animation: chama 1s ease-in-out infinite; }
+  .melhoria.sugerida::before { content: '👉'; position: absolute; top: -10px; left: -4px; font-size: 18px; animation: aponta .8s ease-in-out infinite; }
+  @keyframes aponta { 50% { transform: translateX(4px); } }
+  /* fichas da tela de resultado e do menu: ícone em vez de frase */
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+  .chips .key { font-size: 15px; padding: 8px 14px; }
+  .chips .key i { font-style: normal; color: var(--neon-yellow); letter-spacing: 2px; }
+  .chips .key.novo { border-color: var(--neon-yellow); color: var(--neon-yellow); }
+  #overlayText.grande { font-size: clamp(26px, 7vw, 40px); letter-spacing: .12em; color: var(--neon-yellow); margin: 4px 0; }
+  .dica { display: inline-flex; align-items: center; gap: 10px; margin-top: 4px; padding: 10px 16px; border-radius: 14px;
+    border: 2px solid #ffffff33; background: #ffffff0a; font-family: 'Orbitron', sans-serif; }
+  .dica.pode { border-color: var(--neon-yellow); box-shadow: 0 0 18px #ffd36b44; animation: chama 1.2s ease-in-out infinite; }
+  .dica .causa, .dica .ic { font-size: 30px; line-height: 1; }
+  .dica .seta { font-size: 20px; color: var(--text-dim); }
+  .dica b { font-size: 13px; letter-spacing: .08em; color: var(--neon-cyan); }
+  .dica .preco { font-size: 13px; color: var(--neon-yellow); }
+  .dica:not(.pode) .preco { color: var(--text-dim); }
+  @media (pointer: coarse) { .controls-hint { display: none; } }
+  /* menos letra: descrições ficam no leitor de tela, não no quadro */
+  .arena-nome small, .luta .apelido, .melhoria .desc { display: none; }
   @media (hover: hover) { .melhoria:not(:disabled):hover, .opcao:hover { background: #ffffff10; } }
   .aba:focus-visible, .luta:focus-visible, .opcao:focus-visible, .melhoria:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
 
@@ -137,7 +163,10 @@
   @media (max-width: 560px) and (orientation: portrait) {
     .hub { padding: 62px 8px 10px; gap: 8px; }
     .hub-topo { position: absolute; top: 14px; left: 54px; right: 60px; width: auto; padding: 0; gap: 4px; }
-    .aba { padding: 6px 8px; }
+    .aba { padding: 6px 12px; font-size: 18px; }
+    .aba .rot { display: none; }
+    .hub-topo { flex-wrap: nowrap; }
+    .hub-topo .placar { white-space: nowrap; }
     .torneio { grid-template-columns: minmax(0, 1fr); gap: 8px; }
     .vitrine { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .ficha { grid-template-columns: auto minmax(0, 1fr); }
@@ -149,7 +178,7 @@
 <div class="app">
   <header>
     <div class="brand">
-      <a href="../index.html"><h1>NEON PIÃO</h1></a>
+      <a href="../index.html"><h1>NEON SPINNERS</h1></a>
       <div class="tag">// | Batalha de piões em estádio de neon | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
     </div>
   </header>
@@ -170,8 +199,8 @@
     <div class="hub hidden" id="hub">
       <div class="hub-topo">
         <div class="abas">
-          <button class="aba" id="abaTorneio" aria-pressed="true">🏟️ TORNEIO</button>
-          <button class="aba" id="abaOficina" aria-pressed="false">🔧 OFICINA</button>
+          <button class="aba" id="abaTorneio" aria-pressed="true" aria-label="Torneio">🏟️<span class="rot"> TORNEIO</span></button>
+          <button class="aba" id="abaOficina" aria-pressed="false" aria-label="Oficina">🔧<span class="rot"> OFICINA</span></button>
         </div>
         <span class="placar">★ <b id="hubEstrelas">0</b>/<span id="hubMax">36</span> · 🪙 <b id="hubMoedas">0</b></span>
       </div>
@@ -192,23 +221,23 @@
     </div>
 
     <div class="overlay" id="overlay">
-      <h2 id="overlayTitle">NEON PIÃO</h2>
-      <p id="overlayText">Quatro estádios, doze adversários. Puxe a cordinha e solte na hora certa: quanto mais forte o lançamento, mais giro. Na arena, guie o pião, arranque contra o rival e solte o especial. Tirar o rival do prato vale 2 (3 na boca do EXTREMO), estourar a trava dele vale 2 e girar por mais tempo vale 1: quem fizer 4 leva a partida. Moedas compram piões e melhorias na oficina.</p>
-      <div class="sub" id="overlaySub"></div>
-      <div class="final-stats" id="finalStats" style="display:none; grid-template-columns: repeat(4, 1fr);">
+      <h2 id="overlayTitle">NEON SPINNERS</h2>
+      <p id="overlayText">Lance o pião e tire o rival do prato!</p>
+      <div class="sub" id="overlaySub" style="display:block"><div class="chips legenda" aria-label="Pontos: fora vale 2, estouro vale 2, giro vale 1, quem fizer 4 vence">
+        <span class="key">🕳️ <i>●●</i></span><span class="key">💥 <i>●●</i></span><span class="key">💤 <i>●</i></span><span class="key">🏆 <i>●●●●</i></span>
+      </div></div>
+      <div class="final-stats" id="finalStats" style="display:none; grid-template-columns: repeat(2, 1fr);">
         <div class="fstat"><span>Placar</span><b id="fsPlacar">0</b></div>
-        <div class="fstat"><span>Rounds</span><b id="fsRounds">0</b></div>
-        <div class="fstat"><span>Maior golpe</span><b id="fsGolpe" class="pink">0</b></div>
-        <div class="fstat"><span>Moedas</span><b id="fsMoedas" class="gold">0</b></div>
+        <div class="fstat"><span>🪙</span><b id="fsMoedas" class="gold">0</b></div>
       </div>
-      <button class="btn" id="startBtn">JOGAR</button>
+      <button class="btn" id="startBtn">▶ JOGAR</button>
       <div class="controls-hint">
         <span class="key">SEGURE · SOLTE lança</span><span class="key">← → mira</span><span class="key">SETAS guiam</span><span class="key">ESPAÇO arranca</span><span class="key">E especial</span><span class="key">P pausa</span>
       </div>
     </div>
   </div>
 
-  <footer>// <a href="../index.html">← arcade</a> · FORA vale 2 · ESTOURO vale 2 · EXTREMO vale 3 · GIRO vale 1 · quem fizer 4 pontos leva a partida</footer>
+  <footer>// <a href="../index.html">← arcade</a> · FORA 2 · ESTOURO 2 · EXTREMO 3 · GIRO 1 · quem fizer 4 vence</footer>
 </div>
 
 <script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
@@ -238,8 +267,7 @@
     R: 260,              // raio do prato até a parede
     curva: 2.0,          // o declive aperta perto da borda (termo cúbico)
     rampa: 0.9,          // quanto a borda afunda na frente das bocas
-    giro: 100,           // giro de um lançamento cheio; o painel mostra × rpm
-    rpm: 80,
+    giro: 100,           // giro de um lançamento cheio
     queda: 12,           // abaixo disso o pião tomba: fim por giro
     bambo: 40,           // abaixo disso ele começa a bambear
     perdaBase: 2.45,     // giro/s que a ponta come (× resist do pião)
@@ -337,15 +365,15 @@
     { nome: 'ZECA', apelido: 'o novato', estadio: 0, piao: 1, up: 0, habil: 0.15 },
     { nome: 'DUDA', apelido: 'parede de aço', estadio: 0, piao: 2, up: 0, habil: 0.25 },
     { nome: 'TIGRÃO', apelido: 'campeão do dojô', estadio: 0, piao: 3, up: 1, habil: 0.4, chefe: true },
-    { nome: 'NINA', apelido: 'a paciente', estadio: 1, piao: 4, up: 1, habil: 0.45 },
-    { nome: 'BETO BRITA', apelido: 'o pesado', estadio: 1, piao: 5, up: 2, habil: 0.5 },
-    { nome: 'MAESTRO', apelido: 'campeão do trilho', estadio: 1, piao: 6, up: 2, habil: 0.6, chefe: true },
-    { nome: 'LÍVIA', apelido: 'lâmina de gelo', estadio: 2, piao: 7, up: 3, habil: 0.6 },
-    { nome: 'MADRUGA', apelido: 'a coruja', estadio: 2, piao: 8, up: 3, habil: 0.65 },
-    { nome: 'DAMA DE FERRO', apelido: 'campeã do cristal', estadio: 2, piao: 9, up: 3, habil: 0.72, chefe: true },
-    { nome: 'FAÍSCA', apelido: 'pura pancada', estadio: 3, piao: 10, up: 4, habil: 0.75 },
-    { nome: 'SOMBRA', apelido: 'gira ao contrário', estadio: 3, piao: 11, up: 5, habil: 0.85 },
-    { nome: 'ÔMEGA', apelido: 'rei do giro', estadio: 3, piao: 12, up: 5, habil: 0.9, chefe: true },
+    { nome: 'NINA', apelido: 'a paciente', estadio: 1, piao: 4, up: 1, habil: 0.42 },
+    { nome: 'BETO BRITA', apelido: 'o pesado', estadio: 1, piao: 5, up: 1, habil: 0.47 },
+    { nome: 'MAESTRO', apelido: 'campeão do trilho', estadio: 1, piao: 6, up: 2, habil: 0.55, chefe: true },
+    { nome: 'LÍVIA', apelido: 'lâmina de gelo', estadio: 2, piao: 7, up: 2, habil: 0.55 },
+    { nome: 'MADRUGA', apelido: 'a coruja', estadio: 2, piao: 8, up: 2, habil: 0.6 },
+    { nome: 'DAMA DE FERRO', apelido: 'campeã do cristal', estadio: 2, piao: 9, up: 3, habil: 0.66, chefe: true },
+    { nome: 'FAÍSCA', apelido: 'pura pancada', estadio: 3, piao: 10, up: 4, habil: 0.72 },
+    { nome: 'SOMBRA', apelido: 'gira ao contrário', estadio: 3, piao: 11, up: 5, habil: 0.82 },
+    { nome: 'ÔMEGA', apelido: 'rei do giro', estadio: 3, piao: 12, up: 5, habil: 0.88, chefe: true },
   ];
   const upTudo = n => ({ ataque: n, defesa: n, resist: n, giro: n, trava: n });
 
@@ -803,16 +831,23 @@
   // ★ vencer · ★ sem levar ponto · ★ ganhar um round por FORA, ESTOURO ou EXTREMO.
   // Moedas: prêmio do adversário (dobrado na primeira vitória) e bônus por
   // finalização. Perder ainda paga um pouco: dá pra melhorar e voltar.
-  const BONUS = { giro: 4, fora: 8, estouro: 8, extremo: 15, empate: 0 };
-  const premioDe = k => 40 + 20 * k;
+  const BONUS = { giro: 6, fora: 12, estouro: 12, extremo: 20, empate: 0 };
+  const premioDe = k => 60 + 30 * k;
   function apurar(k, rounds, primeira) {
     const pts = [0, 0];
     for (const r of rounds) if (r.vencedor >= 0) pts[r.vencedor] += r.pontos;
     const venceu = pts[0] > pts[1];
-    if (!venceu) return { venceu, pts, estrelas: 0, moedas: 5 + 3 * pts[0] };
+    if (!venceu) return { venceu, pts, estrelas: 0, moedas: 15 + 5 * k + 6 * pts[0] };
     const limpo = pts[1] === 0, forte = rounds.some(r => r.vencedor === 0 && r.tipo !== 'giro');
-    const bonus = rounds.reduce((n, r) => n + (r.vencedor === 0 ? BONUS[r.tipo] : 0), 0) + (limpo ? 15 : 0);
+    const bonus = rounds.reduce((n, r) => n + (r.vencedor === 0 ? BONUS[r.tipo] : 0), 0) + (limpo ? 25 : 0);
     return { venceu, pts, estrelas: 1 + (limpo ? 1 : 0) + (forte ? 1 : 0), moedas: premioDe(k) * (primeira ? 2 : 1) + bonus };
+  }
+  // Cada derrota seguida contra o mesmo rival tira um pouco da mão dele (até
+  // três): quem está empacado passa sem precisar decorar a luta. Vencer zera.
+  const AJUDA_MAX = 3;
+  function rivalDe(k, tropecos = 0) {
+    const b = BLADERS[k], d = clamp(tropecos | 0, 0, AJUDA_MAX);
+    return { i: b.piao, up: upTudo(Math.max(0, b.up - d)), habil: b.habil * (1 - 0.15 * d) };
   }
   // ── fim da física ──
 
@@ -821,7 +856,7 @@
   // v pra migrar sem apagar o progresso. Nunca renomear a chave.
   const SAVE_KEY = 'neon-piao-save';
   const UP_VAZIO = () => ({ ataque: 0, defesa: 0, resist: 0, giro: 0, trava: 0 });
-  const saveVazio = () => ({ v: 1, moedas: 0, aberta: 0, lutas: {}, piao: 0, comprados: [], up: {} });
+  const saveVazio = () => ({ v: 1, moedas: 0, aberta: 0, lutas: {}, piao: 0, comprados: [], up: {}, tropecos: {} });
   const venceuJa = (s, k) => !!(s.lutas[k] && s.lutas[k].vitorias > 0);
   // o pião k + 1 vai pra loja quando o dono dele, o adversário k, perde pra você
   const liberado = (s, i) => i === 0 || venceuJa(s, i - 1);
@@ -834,7 +869,7 @@
     let s = null;
     try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { s = null; }   // JSON corrompido não pode travar o jogo
     if (!s || typeof s !== 'object') s = saveVazio();
-    const up = {}, lutas = {};
+    const up = {}, lutas = {}, tropecos = {};
     for (let i = 0; i < PIOES.length; i++) {
       const u = (s.up && s.up[i]) || {};
       up[i] = UP_VAZIO();
@@ -843,8 +878,10 @@
     for (let k = 0; k < BLADERS.length; k++) {
       const l = s.lutas && s.lutas[k];
       if (l && typeof l === 'object') lutas[k] = { estrelas: clamp(l.estrelas | 0, 0, 3), vitorias: Math.max(0, l.vitorias | 0) };
+      const t = s.tropecos && s.tropecos[k] | 0;
+      if (t > 0) tropecos[k] = Math.min(t, AJUDA_MAX);
     }
-    const r = { ...saveVazio(), up, lutas, piao: s.piao,
+    const r = { ...saveVazio(), up, lutas, tropecos, piao: s.piao,
       moedas: Math.max(0, Math.floor(+s.moedas || 0)), aberta: clamp(s.aberta | 0, 0, BLADERS.length - 1),
       comprados: Array.isArray(s.comprados) ? [...new Set(s.comprados.filter(i => Number.isInteger(i) && i > 0 && i < PIOES.length))] : [] };
     r.piao = piaoSalvo(r);
@@ -865,11 +902,12 @@
     fichaNome: Neon.$('fichaNome'), fichaTipo: Neon.$('fichaTipo'), fichaBarras: Neon.$('fichaBarras'), fichaAcao: Neon.$('fichaAcao'),
     hubEstrelas: Neon.$('hubEstrelas'), hubMoedas: Neon.$('hubMoedas'),
     estrelas: Neon.$('estrelas'), best: Neon.$('best'), vitorias: Neon.$('vitorias'), moedas: Neon.$('moedas'),
-    finalStats: Neon.$('finalStats'), fsPlacar: Neon.$('fsPlacar'), fsRounds: Neon.$('fsRounds'), fsGolpe: Neon.$('fsGolpe'), fsMoedas: Neon.$('fsMoedas'),
+    finalStats: Neon.$('finalStats'), fsPlacar: Neon.$('fsPlacar'), fsMoedas: Neon.$('fsMoedas'), overlayText: Neon.$('overlayText'),
+    abaOficina: Neon.$('abaOficina'),
   };
   // menu · hub · vs · mira · luta · fimRound · resultado · pausado
   let state = 'menu', pausadoDe = null;
-  let luta = 0, ar = null, rounds = [], placar = [0, 0], roundN = 0, golpeMax = 0;
+  let luta = 0, ar = null, rounds = [], placar = [0, 0], roundN = 0;
   let mira = null, pousoT = 0, fimT = 0, vsT = 0, acc = 0, lento = 0, congela = 0;
   let apuracao = null, novidades = [], aba = 'torneio', escolhido = save.piao, demo = null;
   let relogio = 0, ultimoQuadro = performance.now(), shake = 0, flash = 0, banner = null, foco = null;
@@ -1929,7 +1967,6 @@
   const fonte = (tam, peso = 700) => `${peso} ${tam}px Orbitron, sans-serif`;
   const caixa = (x, y, w, h, r) => { ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h); };
   const corGiro = f => f > 0.5 ? '#7fd8ff' : f > 0.25 ? '#efce95' : '#ff5a4d';
-  const rpm = g => Math.round(Math.max(0, g) * K.rpm).toLocaleString('pt-BR');
   const voltaDe = t => 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2);   // passa e volta
 
   function bolinhas(x, y, pts, cor) {
@@ -1953,11 +1990,8 @@
     if (b) ctx.drawImage(b.o, 5, 5, 34, 34);
     ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
     // nome comprido aperta em vez de invadir as bolinhas do placar
-    ctx.fillStyle = '#edf4f0'; ctx.font = fonte(10, 800); ctx.fillText(quem, 43, 13, w - 43 - 9 - ALVO * 12 - 4);
-    ctx.fillStyle = P.cor; ctx.font = fonte(8);
-    const larguraNome = Math.min(ctx.measureText(P.nome).width, faixa ? 90 : 70);
-    ctx.fillText(P.nome, 43, 28, faixa ? 90 : 70);
-    ctx.font = `9px ${Neon.EMOJI}`; ctx.fillText(T.icone, 43 + larguraNome + 5, 28);
+    ctx.fillStyle = '#edf4f0'; ctx.font = fonte(11, 800); ctx.fillText(quem, 43, 14, w - 43 - 9 - ALVO * 12 - 4);
+    ctx.font = `11px ${Neon.EMOJI}`; ctx.fillText(T.icone, 43, 30);
     bolinhas(w - 9, 13, pts, P.cor);
     // giro: barra em gomos que esvazia, com o RPM em cima
     const gx = faixa ? 150 : 6, gw = faixa ? 196 : 138, gy = faixa ? 24 : 50, n = 16, gomo = gw / n;
@@ -1966,9 +2000,9 @@
       ctx.fillStyle = vivo && k < Math.round(f * n) ? (pisca ? '#ffffff' : corGiro(f)) : 'rgba(255,255,255,0.08)';
       ctx.fillRect(gx + k * gomo, gy, gomo - 1.6, 8);
     }
-    const rotulo = { mira: 'NO LANÇADOR', estourado: 'ESTOUROU', fora: 'FORA', caindo: 'PAROU', parado: 'PAROU' }[p.estado];
-    ctx.fillStyle = vivo ? corGiro(f) : '#a8b9c8'; ctx.font = fonte(8, 800);
-    ctx.textAlign = 'right'; ctx.fillText(rotulo || rpm(p.g) + ' RPM', gx + gw, gy - 7);
+    // fora do prato um ícone diz o que houve; girando, a barra já conta tudo
+    const icone = { estourado: '💥', fora: '🕳️', caindo: '💤', parado: '💤' }[p.estado];
+    if (icone) { ctx.font = `10px ${Neon.EMOJI}`; ctx.textAlign = 'right'; ctx.fillText(icone, gx + gw, gy - 7); }
     // trava: losangos que apagam a cada dente que gira
     const ty = faixa ? 46 : 72, t0 = faixa ? 156 : 11;
     for (let k = 0; k < p.s.trava; k++) {
@@ -1978,13 +2012,9 @@
       ctx.fill();
       if (!inteiro) { ctx.strokeStyle = 'rgba(255,90,77,0.7)'; ctx.lineWidth = 1; ctx.stroke(); }
     }
-    // especial: anel que enche. No cartão deitado, trava longa e ESPECIAL! não
-    // cabem juntos: o rótulo da trava sai e os losangos ficam
+    // especial: anel que enche e brilha quando está pronto
     const ex = w - 16, ey = faixa ? 40 : 70, pronto = p.carga >= 1 && vivo;
-    if (faixa || !pronto || p.s.trava < 5) {
-      ctx.textAlign = 'left'; ctx.fillStyle = '#a8b9c8'; ctx.font = fonte(6.5);
-      ctx.fillText('TRAVA', t0 - 5 + p.s.trava * 11, ty);
-    }
+    ctx.textAlign = 'left'; ctx.font = `7px ${Neon.EMOJI}`; ctx.fillText('🔩', t0 - 5 + p.s.trava * 11, ty);
     ctx.beginPath(); ctx.arc(ex, ey, 10, 0, TAU); ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 2.5; ctx.stroke();
     ctx.beginPath(); ctx.arc(ex, ey, 10, -Math.PI / 2, -Math.PI / 2 + TAU * p.carga);
@@ -1992,20 +2022,18 @@
     if (pronto) { ctx.shadowColor = P.cor; ctx.shadowBlur = 10 + 6 * Math.sin(relogio * 8); }
     ctx.stroke(); ctx.shadowBlur = 0;
     ctx.font = `10px ${Neon.EMOJI}`; ctx.textAlign = 'center'; ctx.fillText(T.icone, ex, ey + 1);
-    if (pronto) { ctx.font = fonte(6.5, 800); ctx.fillStyle = '#ffffff'; ctx.textAlign = 'right'; ctx.fillText('ESPECIAL!', ex - 14, ey); }
     ctx.restore();
   }
 
   function desenharInfo() {
-    const E = ESTADIOS[ar.e], hs = UI.hs, sub = `${E.nome} · ATÉ ${ALVO} PONTOS`;
+    const hs = UI.hs, txt = `ROUND ${roundN}`;
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = fonte(7.5 * hs);
-    const cabe = UI.livre - 20 * hs, larg = Math.min(ctx.measureText(sub).width + 26 * hs, UI.livre);
-    caixa(UI.info.x - larg / 2, UI.info.y - 11 * hs, larg, 32 * hs, 9 * hs); ctx.fillStyle = 'rgba(8,13,28,0.72)'; ctx.fill();
-    ctx.fillStyle = '#edf4f0'; ctx.font = fonte(12 * hs, 900);
-    ctx.fillText(`ROUND ${roundN}`, UI.info.x, UI.info.y, cabe);
-    ctx.fillStyle = temaDe(ar.e).luz; ctx.font = fonte(7.5 * hs);
-    ctx.fillText(sub, UI.info.x, UI.info.y + 13 * hs, cabe);
+    ctx.font = fonte(12 * hs, 900);
+    const larg = Math.min(ctx.measureText(txt).width + 26 * hs, UI.livre);
+    caixa(UI.info.x - larg / 2, UI.info.y - 11 * hs, larg, 22 * hs, 9 * hs); ctx.fillStyle = 'rgba(8,13,28,0.72)'; ctx.fill();
+    ctx.strokeStyle = rgba(temaDe(ar.e).luz, 0.5); ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#edf4f0';
+    ctx.fillText(txt, UI.info.x, UI.info.y, UI.livre - 20 * hs);
     ctx.restore();
   }
 
@@ -2020,10 +2048,13 @@
     if (ativo) { ctx.shadowColor = cor; ctx.shadowBlur = 16; }
     ctx.stroke(); ctx.shadowBlur = 0;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `${Math.round(c.r * 0.55)}px ${Neon.EMOJI}`; ctx.fillStyle = '#fff';
-    ctx.fillText(icone, c.x, c.y - c.r * 0.12);
-    ctx.font = fonte(Math.max(7, c.r * 0.17)); ctx.fillStyle = ativo ? '#ffffff' : '#a8b9c8';
-    ctx.fillText(rotulo, c.x, c.y + c.r * 0.46);
+    // no toque o ícone basta; com teclado o nome ajuda a ligar à tecla
+    ctx.font = `${Math.round(c.r * (dedo ? 0.7 : 0.55))}px ${Neon.EMOJI}`; ctx.fillStyle = '#fff';
+    ctx.fillText(icone, c.x, c.y - (dedo ? 0 : c.r * 0.12));
+    if (!dedo) {
+      ctx.font = fonte(Math.max(7, c.r * 0.17)); ctx.fillStyle = ativo ? '#ffffff' : '#a8b9c8';
+      ctx.fillText(rotulo, c.x, c.y + c.r * 0.46);
+    }
     if (tecla && !dedo) { ctx.font = fonte(7); ctx.fillStyle = '#a8b9c8'; ctx.fillText(tecla, c.x, c.y + c.r + 10); }
     ctx.restore();
   }
@@ -2043,8 +2074,14 @@
     } else if (dedo) {
       ctx.save(); ctx.globalAlpha = 0.22; ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(UI.manche.x, UI.manche.y, rm, 0, TAU); ctx.stroke();
-      ctx.font = fonte(8 * UI.hs); ctx.fillStyle = '#9be7ce'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('MANCHE', UI.manche.x, UI.manche.y);
+      // quatro setinhas no lugar da palavra
+      ctx.fillStyle = '#9be7ce';
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI / 2, d = rm * 0.55, t = rm * 0.16;
+        ctx.save(); ctx.translate(UI.manche.x + Math.cos(a) * d, UI.manche.y + Math.sin(a) * d); ctx.rotate(a);
+        ctx.beginPath(); ctx.moveTo(t, 0); ctx.lineTo(-t * 0.6, -t); ctx.lineTo(-t * 0.6, t); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
       ctx.restore();
     } else if (!retrato) {
       ctx.save(); ctx.font = fonte(8); ctx.fillStyle = 'rgba(168,185,200,0.7)'; ctx.textAlign = 'left';
@@ -2072,6 +2109,11 @@
       ctx.beginPath(); ctx.arc(pts[k][0], pts[k][1], 2.6 - k / pts.length * 1.4, 0, TAU); ctx.fill();
     }
     ctx.globalAlpha = 1;
+    if (mira.prev.fora && pts.length) {
+      const [fx, fy] = pts[pts.length - 1];
+      ctx.font = `22px ${Neon.EMOJI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.globalAlpha = 0.7 + 0.3 * Math.sin(relogio * 10); ctx.fillText('⚠️', fx, fy); ctx.globalAlpha = 1;
+    }
     // seta na saída do lançador
     const a = mira.ang, x0 = A.x + Math.cos(a) * A.r * 1.6, y0 = A.y + Math.sin(a) * A.r * 1.6;
     ctx.translate(x0, y0); ctx.rotate(a);
@@ -2095,14 +2137,34 @@
     }
     ctx.restore();
   }
+  // Uma palavra só, que vira SOLTE! na faixa dourada: dá pra jogar sem ler a
+  // frase. Em pé fica embaixo do prato; deitado, na sobra da esquerda, porque
+  // embaixo o prato encosta na borda do quadro.
   function desenharTextoMira() {
+    const hs = UI.hs, agora = mira.puxando && mira.forca >= PERFEITO, piscar = 0.65 + 0.35 * Math.sin(relogio * 5);
+    const coluna = (LAY.cx - (K.R + 64) * LAY.z) - 12, deitado = !retrato && coluna > 90;
+    const x = deitado ? 12 + coluna / 2 : W / 2, y = deitado ? H * 0.6 : UI.texto - 6 * hs;
+    const maxW = deitado ? coluna : W - 24;
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const hs = UI.hs, y = UI.texto - 10 * hs, piscar = 0.65 + 0.35 * Math.sin(relogio * 5);
-    ctx.font = fonte(12 * hs, 900); ctx.fillStyle = `rgba(237,244,240,${piscar})`;
-    ctx.fillText(mira.puxando ? 'SOLTE NO DOURADO!' : dedo ? 'SEGURE PRA PUXAR · SOLTE PRA LANÇAR' : 'SEGURE ESPAÇO · SOLTE PRA LANÇAR', W / 2, y);
-    ctx.font = fonte(7.5 * hs); ctx.fillStyle = '#a8b9c8';
-    ctx.fillText(dedo ? 'ARRASTE O DEDO PRA MIRAR' : '← → OU MOUSE PRA MIRAR · A LINHA MOSTRA O CAMINHO', W / 2, y + 15 * hs);
-    if (mira.prev && mira.prev.fora) { ctx.fillStyle = '#ff5a4d'; ctx.font = fonte(9 * hs, 800); ctx.fillText('CUIDADO: ASSIM ELE SAI DO PRATO', W / 2, y - 18 * hs); }
+    const palavra = agora ? 'SOLTE!' : 'SEGURE';
+    const tam = Math.min((agora ? 22 : 16) * hs, deitado ? coluna / 4.2 : 99);
+    // mãozinha que aperta enquanto segura
+    const mao = { x, y: y - tam * (deitado ? 1.7 : 1.5) };
+    ctx.font = `${Math.round(tam * 1.3)}px ${Neon.EMOJI}`;
+    ctx.globalAlpha = mira.puxando ? 1 : piscar;
+    ctx.fillText(mira.puxando ? '✊' : '👆', mao.x, mao.y + (mira.puxando ? 0 : Math.sin(relogio * 6) * 3 * hs));
+    ctx.globalAlpha = 1;
+    ctx.font = fonte(tam, 900);
+    ctx.lineJoin = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(4,6,12,0.85)';
+    ctx.strokeText(palavra, x, y, maxW);
+    ctx.fillStyle = agora ? '#efce95' : `rgba(237,244,240,${mira.puxando ? 0.85 : piscar})`;
+    if (agora) { ctx.shadowColor = '#efce95'; ctx.shadowBlur = 16; }
+    ctx.fillText(palavra, x, y, maxW);
+    ctx.shadowBlur = 0;
+    if (!dedo) {
+      ctx.font = fonte(7.5 * hs); ctx.fillStyle = '#a8b9c8';
+      ctx.fillText(deitado ? 'ESPAÇO · ← →' : 'ESPAÇO · ← → OU MOUSE MIRA', x, y + tam * 0.95, maxW);
+    }
     ctx.restore();
   }
 
@@ -2199,20 +2261,23 @@
       ctx.shadowColor = '#ff4d6d'; ctx.shadowBlur = 30; ctx.fillStyle = '#ffd36b'; ctx.fillText('VS', 0, 0);
       ctx.restore();
     }
-    ctx.textAlign = 'center'; ctx.font = fonte(11, 800); ctx.fillStyle = temaDe(ar.e).luz;
-    ctx.fillText(`${ESTADIOS[ar.e].nome} · ${bl.apelido.toUpperCase()}`, W / 2, retrato ? ny - 120 : 40, UI.livre);
-    ctx.font = fonte(Math.min(10 * UI.hs, retrato ? 11 : 15)); ctx.fillStyle = '#a8b9c8';
-    ctx.fillText(dicaDe(A, B), W / 2, retrato ? H - 40 : H - 30);
+    ctx.textAlign = 'center'; ctx.font = fonte(11 * Math.min(UI.hs, 1.3), 800); ctx.fillStyle = temaDe(ar.e).luz;
+    ctx.fillText(ESTADIOS[ar.e].nome, W / 2, retrato ? ny - 120 : 40, UI.livre);
+    const d = dicaDe(A, B);
+    if (d) {
+      const tam = Math.min(15 * UI.hs, 24), y = retrato ? H - 44 : H - 34;
+      ctx.font = fonte(tam, 900); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.fillStyle = d.cor;
+      ctx.strokeText(d.txt, W / 2, y); ctx.fillText(d.txt, W / 2, y);
+    }
     ctx.restore();
   }
   // a dica do VS sai do pedra-papel-tesoura dos tipos e do sentido de giro
   const VENCE = { ataque: 'resistencia', resistencia: 'defesa', defesa: 'ataque' };
   function dicaDe(A, B) {
     const ta = PIOES[A.i].tipo, tb = PIOES[B.i].tipo;
-    if (A.sentido !== B.sentido) return 'GIROS CONTRÁRIOS: MENOS COICE NO CHOQUE, A TRAVA AGUENTA MAIS';
-    if (VENCE[ta] === tb) return `VANTAGEM SUA: ${TIPOS[ta].nome} LEVA A MELHOR CONTRA ${TIPOS[tb].nome}`;
-    if (VENCE[tb] === ta) return `CUIDADO: ${TIPOS[tb].nome} LEVA A MELHOR CONTRA ${TIPOS[ta].nome}`;
-    return 'MESMO GIRO: CHOQUE DE FRENTE DÁ MAIS COICE E GIRA A TRAVA';
+    if (VENCE[ta] === tb) return { txt: `${TIPOS[ta].icone} › ${TIPOS[tb].icone}  👍`, cor: '#a8dba0' };
+    if (VENCE[tb] === ta) return { txt: `${TIPOS[ta].icone} ‹ ${TIPOS[tb].icone}  ⚠️`, cor: '#ff8a7a' };
+    return null;
   }
 
   // ── hub ───────────────────────────────────────────
@@ -2234,6 +2299,7 @@
       const nome = document.createElement('div');
       nome.className = 'arena-nome';
       nome.innerHTML = `<span>${ks[0] > save.aberta ? '🔒 ' : ''}${E.nome}</span><small>${T.desc}</small>`;
+      nome.title = T.desc;
       const grade = document.createElement('div');
       grade.className = 'lutas';
       for (const k of ks) {
@@ -2244,8 +2310,8 @@
         const cv = novoCanvas(144);
         cv.setAttribute('aria-hidden', 'true');
         btn.appendChild(cv);
-        for (const [tag, cls, txt] of [['span', 'tipo', aberta ? TIPOS[P.tipo].icone : ''], ['b', '', aberta ? b.nome : '???'],
-          ['span', 'apelido', aberta ? b.apelido : 'vença o anterior'], ['span', 'estrelas', aberta ? '★'.repeat(est) + '☆'.repeat(3 - est) : '🔒']]) {
+        for (const [tag, cls, txt] of [['span', 'tipo', aberta ? TIPOS[P.tipo].icone : ''], ['b', '', aberta ? b.nome : ''],
+          ['span', 'estrelas', aberta ? '★'.repeat(est) + '☆'.repeat(3 - est) : '🔒']]) {
           const el = document.createElement(tag); el.className = cls; el.textContent = txt; btn.appendChild(el);
         }
         btn.setAttribute('aria-label', aberta ? `${b.nome}, ${b.apelido}, pião ${P.nome} de ${TIPOS[P.tipo].nome}, ${est} de 3 estrelas` : 'Adversário trancado');
@@ -2273,7 +2339,7 @@
       const cv = novoCanvas(124);
       cv.setAttribute('aria-hidden', 'true');
       btn.appendChild(cv);
-      const situacao = tem ? (i === save.piao ? 'NA ARENA' : 'SEU') : venda ? '🪙 ' + P.preco : '🔒';
+      const situacao = tem ? '' : venda ? '🪙 ' + P.preco : '🔒';
       for (const [tag, cls, txt] of [['b', '', P.nome], ['span', 'situacao', situacao]]) {
         const el = document.createElement(tag); el.className = cls; el.textContent = txt; btn.appendChild(el);
       }
@@ -2285,27 +2351,28 @@
     const i = escolhido, P = PIOES[i], T = TIPOS[P.tipo], tem = temPiao(save, i), venda = !tem && liberado(save, i);
     els.oficina.style.setProperty('--piao', P.cor);
     els.fichaNome.textContent = P.nome;
-    els.fichaTipo.innerHTML = `<b>${T.icone} ${T.nome}</b> · giro ${P.sentido > 0 ? 'direito ↻' : 'esquerdo ↺'} · ${P.codigo}<br>`
-      + `Especial <b>${P.especial}</b>: ${DESC_ESPECIAL[P.tipo]}.`;
-    els.fichaBarras.innerHTML = barrasDe(i).map(([n, v]) => `<span>${n}</span><i style="--v:${Math.round(v * 100)}%"></i>`).join('');
+    els.fichaTipo.innerHTML = `<b>${T.icone} ${T.nome} ${P.sentido > 0 ? '↻' : '↺'}</b>`;
+    els.fichaTipo.title = `Especial ${P.especial}: ${DESC_ESPECIAL[P.tipo]}.`;
+    els.fichaBarras.innerHTML = barrasDe(i).map(([n, v], k) => `<span title="${n}" aria-label="${n}">${MELHORIAS[k].icone}</span><i style="--v:${Math.round(v * 100)}%"></i>`).join('');
     const acao = els.fichaAcao;
     acao.disabled = (tem && i === save.piao) || (!tem && !venda);
-    acao.textContent = tem ? (i === save.piao ? '✓ NA ARENA' : 'USAR NA ARENA') : venda ? `COMPRAR · 🪙 ${P.preco}` : `🔒 VENÇA ${BLADERS[i - 1].nome}`;
+    acao.textContent = tem ? (i === save.piao ? '✓' : '▶ USAR') : venda ? `🛒 🪙 ${P.preco}` : '🔒';
     els.melhorias.innerHTML = '';
     els.melhorias.classList.toggle('bloqueadas', !tem);
     const up = save.up[i];
     for (const m of MELHORIAS) {
       const nivel = up[m.id] | 0, custo = CUSTOS[nivel], maximo = nivel >= CUSTOS.length;
       const b = document.createElement('button');
-      b.className = 'melhoria' + (!maximo && save.moedas < custo ? ' caro' : '');
+      b.className = 'melhoria' + (!maximo && save.moedas < custo ? ' caro' : '') + (sugerida && sugerida.piao === i && sugerida.id === m.id && !maximo ? ' sugerida' : '');
       b.disabled = maximo || !tem;
       b.innerHTML = `<span class="ic">${m.icone}</span><b>${m.nome}</b>`
         + `<span class="pips">${'■'.repeat(nivel)}${'□'.repeat(CUSTOS.length - nivel)}</span>`
         + `<span class="desc">${m.desc}</span><span class="preco">${maximo ? 'MÁXIMO' : '🪙 ' + custo}</span>`;
       b.setAttribute('aria-label', `${m.nome}, nível ${nivel} de ${CUSTOS.length}. ${m.desc}. ${maximo ? 'No máximo' : 'Custa ' + custo + ' moedas'}`);
       b.addEventListener('click', () => {
-        if (save.moedas < custo) { som('wrong'); Neon.toast(`FALTAM ${custo - save.moedas} MOEDAS`); return; }
+        if (save.moedas < custo) { som('wrong'); Neon.toast(`🪙 FALTA ${custo - save.moedas}`); return; }
         save.moedas -= custo; up[m.id] = nivel + 1; gravar();
+        if (sugerida && sugerida.piao === i && sugerida.id === m.id) sugerida = null;
         som('level'); Neon.toast(`${m.icone} ${m.nome} NÍVEL ${nivel + 1}!`);
         montarHub();
         els.melhorias.children[MELHORIAS.indexOf(m)].focus();
@@ -2316,11 +2383,11 @@
   els.fichaAcao.addEventListener('click', () => {
     const i = escolhido, P = PIOES[i];
     if (temPiao(save, i)) {
-      if (save.piao !== i) { save.piao = i; gravar(); som('click'); Neon.toast(`🌀 ${P.nome} NA ARENA`); montarHub(); }
+      if (save.piao !== i) { save.piao = i; gravar(); som('click'); Neon.toast(`✓ ${P.nome}`); montarHub(); }
       return;
     }
     if (!liberado(save, i)) return;
-    if (save.moedas < P.preco) { som('wrong'); Neon.toast(`FALTAM ${P.preco - save.moedas} MOEDAS`); return; }
+    if (save.moedas < P.preco) { som('wrong'); Neon.toast(`🪙 FALTA ${P.preco - save.moedas}`); return; }
     save.moedas -= P.preco; save.comprados.push(i); save.piao = i; gravar();
     som('record'); Neon.toast(`🌀 ${P.nome} É SEU!`);
     montarHub();
@@ -2340,6 +2407,7 @@
     mostrarAba(aba);
     els.hubEstrelas.textContent = totalEstrelas();
     els.hubMoedas.textContent = save.moedas;
+    els.abaOficina.classList.toggle('alerta', podeMelhorar());
     pintarPainel();
   }
   function abrirHub(qual) {
@@ -2394,7 +2462,7 @@
   function iniciarPartida(k) {
     if (girouNaLuta) { location.reload(); return; }
     largarFoco();
-    luta = k; rounds = []; placar = [0, 0]; roundN = 0; golpeMax = 0;
+    luta = k; rounds = []; placar = [0, 0]; roundN = 0;
     els.hub.classList.add('hidden');
     Neon.overlay.hide();
     els.finalStats.style.display = 'none';
@@ -2410,9 +2478,10 @@
   function novoRound() {
     roundN++;
     const b = BLADERS[luta];
-    const A = novoPiao(save.piao, save.up[save.piao], 0), B = novoPiao(b.piao, upTudo(b.up), 1);
+    const rv = rivalDe(luta, save.tropecos[luta]);
+    const A = novoPiao(save.piao, save.up[save.piao], 0), B = novoPiao(rv.i, rv.up, 1);
     A.ajuda = true;
-    B.mente = { estilo: PIOES[b.piao].tipo, habil: b.habil, t: 0.5 };
+    B.mente = { estilo: PIOES[b.piao].tipo, habil: rv.habil, t: 0.5 };
     A.rastro = []; B.rastro = [];
     ar = novaArena(b.estadio, A, B, rngDe((Math.random() * 2 ** 31) | 0));
     mira = { ang: -Math.PI / 2 - 0.3 * A.sentido, forca: 0, puxando: false, t: 0, prev: null, chave: '' };
@@ -2438,7 +2507,7 @@
     mira.puxando = false;
     state = 'luta'; pousoT = 0;
     som('rip');
-    mostrarBanner('LANÇAR!', '#7fd8ff', perfeito ? 'LANÇAMENTO PERFEITO · +8% DE GIRO' : forca < 0.45 ? 'LANÇAMENTO FRACO' : '', 1.1);
+    mostrarBanner(perfeito ? 'PERFEITO!' : 'LANÇAR!', perfeito ? '#efce95' : '#7fd8ff', perfeito ? '★' : '', 1.1);
     if (perfeito) som('golden');
   }
   // os dois tocam o prato: poeira, faísca e o primeiro tranco
@@ -2463,7 +2532,7 @@
     const NOMES = { giro: 'GIRO FINAL!', fora: 'FORA!', estouro: 'ESTOURO!', extremo: 'EXTREMO!', empate: 'EMPATE!' };
     const cor = fim.vencedor === 0 ? '#a8dba0' : fim.vencedor === 1 ? '#ff6b5a' : '#efce95';
     const quem = fim.vencedor === 0 ? 'VOCÊ' : BLADERS[luta].nome;
-    const sub = fim.vencedor < 0 ? 'NINGUÉM PONTUA' : `+${fim.pontos} ${fim.pontos > 1 ? 'PONTOS' : 'PONTO'} PRA ${quem}`;
+    const sub = fim.vencedor < 0 ? '' : `${quem} +${'●'.repeat(fim.pontos)}`;
     mostrarBanner(NOMES[fim.tipo], cor, sub, 2.3, fim.tipo !== 'giro' && fim.tipo !== 'empate');
     if (fim.vencedor === 0) som(fim.tipo === 'extremo' ? 'record' : 'level'); else som('wrong');
     for (const p of [A, B]) { p.ctl.x = p.ctl.y = 0; p.querDash = p.querEsp = false; }
@@ -2477,16 +2546,18 @@
   function fimDaPartida() {
     const primeira = !venceuJa(save, luta), r = apurar(luta, rounds, primeira);
     apuracao = r; novidades = [];
-    const antes = save.lutas[luta] || { estrelas: 0, vitorias: 0 };
+    const antes = save.lutas[luta] || { estrelas: 0, vitorias: 0 }, tropecos = save.tropecos || (save.tropecos = {});
+    if (r.venceu) delete tropecos[luta];
+    else tropecos[luta] = Math.min(AJUDA_MAX, (tropecos[luta] | 0) + 1);
     if (r.venceu) {
       save.lutas[luta] = { estrelas: Math.max(antes.estrelas, r.estrelas), vitorias: antes.vitorias + 1 };
       if (primeira) {
         // liberar nunca volta atrás: aberta é sempre o adversário mais longe que já se alcançou
         if (luta + 1 < BLADERS.length && save.aberta <= luta) {
           save.aberta = luta + 1;
-          if (BLADERS[luta + 1].estadio !== BLADERS[luta].estadio) novidades.push(`🏟️ ESTÁDIO NOVO: ${ESTADIOS[BLADERS[luta + 1].estadio].nome}`);
+          if (BLADERS[luta + 1].estadio !== BLADERS[luta].estadio) novidades.push(`🏟️ ${ESTADIOS[BLADERS[luta + 1].estadio].nome}`);
         }
-        novidades.push(`🌀 ${PIOES[BLADERS[luta].piao].nome} À VENDA NA OFICINA`);
+        novidades.push(`🛒 ${PIOES[BLADERS[luta].piao].nome}`);
       }
     }
     save.moedas += r.moedas;
@@ -2496,40 +2567,48 @@
     pintarPainel();
     telaResultado();
   }
-  // o que mais derrubou você vira a dica da oficina
-  function dicaDerrota() {
+  // O jeito que você mais perdeu escolhe a melhoria que pisca na oficina. Se
+  // ela já está no máximo, vai a próxima da lista. Ícone no lugar de frase:
+  // dá pra entender sem saber ler.
+  const REMEDIO = { estouro: ['trava', 'defesa'], fora: ['defesa', 'trava'], extremo: ['defesa', 'trava'], giro: ['resist', 'giro'] };
+  const CAUSA = { estouro: '💥', fora: '🕳️', extremo: '🕳️', giro: '💤' };
+  let sugerida = null;   // { piao, id }: a melhoria que a última derrota pediu
+  function sugestaoDerrota() {
     const contra = rounds.filter(r => r.vencedor === 1).map(r => r.tipo);
     const mais = ['estouro', 'fora', 'extremo', 'giro'].map(t => [t, contra.filter(x => x === t).length]).sort((a, b) => b[1] - a[1])[0][0];
-    return { estouro: 'Sua trava girou até soltar: suba a TRAVA na oficina ou fuja dos choques de frente.',
-      fora: 'Você caiu pela boca: suba o PESO, ou fique longe da borda quando ele arrancar.',
-      extremo: 'Você caiu na boca do EXTREMO: suba o PESO e não encoste na borda perto dela.',
-      giro: 'Ele girou por mais tempo: suba a PONTA e o LANÇADOR, e solte a cordinha no dourado.' }[mais];
+    const up = save.up[save.piao];
+    const id = [...REMEDIO[mais], 'ataque', ...MELHORIAS.map(m => m.id)].find(id => (up[id] | 0) < CUSTOS.length);
+    return id ? { causa: mais, m: MELHORIAS.find(m => m.id === id), custo: CUSTOS[up[id] | 0] } : null;
   }
+  const podeMelhorar = () => !!(sugerida && sugerida.piao === save.piao && save.moedas >= CUSTOS[save.up[save.piao][sugerida.id] | 0]
+    && (save.up[save.piao][sugerida.id] | 0) < CUSTOS.length);
   function telaResultado() {
     state = 'resultado';
     Neon.audio.music.down();
     const r = apuracao, b = BLADERS[luta], ultimo = luta + 1 >= BLADERS.length;
     els.fsPlacar.textContent = `${r.pts[0]} × ${r.pts[1]}`;
-    els.fsRounds.textContent = rounds.length;
-    els.fsGolpe.textContent = Math.round(golpeMax);
     els.fsMoedas.textContent = `+${r.moedas}`;
     els.finalStats.style.display = '';
-    const linha = (ok, txt) => `<span class="key" style="opacity:${ok ? 1 : 0.4}">${ok ? '★' : '☆'} ${txt}</span>`;
-    const forte = rounds.some(x => x.vencedor === 0 && x.tipo !== 'giro');
-    const botoes = '<br><span class="key" id="btnTorneio" style="cursor:pointer">← TORNEIO</span>'
-      + '<span class="key" id="btnRevanche" style="cursor:pointer">↻ REVANCHE</span>'
-      + `<span class="key" id="btnOficina" style="cursor:pointer">🔧 OFICINA · 🪙 ${save.moedas}</span>`;
+    const chip = (id, txt, extra = '') => `<span class="key" id="${id}" style="cursor:pointer"${extra}>${txt}</span>`;
+    const botoes = '<div class="chips">' + chip('btnTorneio', '🏟️', ' aria-label="Torneio"') + chip('btnRevanche', '↻', ' aria-label="Revanche"')
+      + chip('btnOficina', `🔧 🪙 ${save.moedas}`, ' aria-label="Oficina"') + '</div>';
+    els.overlayText.classList.add('grande');
     if (r.venceu) {
+      sugerida = null;
       const campeao = b.chefe;
       Neon.overlay.show(
-        ultimo && campeao ? 'REI DO GIRO!' : campeao ? 'CAMPEÃO!' : r.estrelas === 3 ? 'VITÓRIA PERFEITA!' : 'VITÓRIA!',
-        `${r.pts[0]} × ${r.pts[1]} contra ${b.nome} · ${'★'.repeat(r.estrelas)}${'☆'.repeat(3 - r.estrelas)} · +${r.moedas} moedas`
-          + (novidades.length ? ' · ' + novidades.join(' · ') : ''),
-        ultimo ? 'DE NOVO' : 'PRÓXIMO RIVAL', r.estrelas === 3 || campeao ? 'record' : '',
-        linha(true, 'vencer') + linha(r.pts[1] === 0, 'sem levar ponto') + linha(forte, 'ganhar um round por FORA, ESTOURO ou EXTREMO') + botoes);
+        ultimo && campeao ? 'REI DO GIRO!' : campeao ? 'CAMPEÃO!' : 'VITÓRIA!',
+        '★'.repeat(r.estrelas) + '☆'.repeat(3 - r.estrelas),
+        ultimo ? '↻ DE NOVO' : '▶ PRÓXIMO', r.estrelas === 3 || campeao ? 'record' : '',
+        (novidades.length ? '<div class="chips">' + novidades.map(n => `<span class="key novo">${n}</span>`).join('') + '</div>' : '') + botoes);
     } else {
-      Neon.overlay.show('DERROTA', `${r.pts[0]} × ${r.pts[1]} contra ${b.nome} · +${r.moedas} moedas de consolo. ${dicaDerrota()}`,
-        'REVANCHE', 'go', botoes);
+      const d = sugestaoDerrota();
+      sugerida = d ? { piao: save.piao, id: d.m.id } : null;
+      const pode = podeMelhorar();
+      const cartao = d ? `<div class="dica${pode ? ' pode' : ''}" aria-label="Dica: melhore ${d.m.nome}">`
+        + `<span class="causa">${CAUSA[d.causa]}</span><span class="seta">➜</span><span class="ic">${d.m.icone}</span>`
+        + `<b>${d.m.nome}</b><span class="preco">🪙 ${d.custo}</span></div>` : '';
+      Neon.overlay.show('QUASE!', b.nome, pode ? '🔧 MELHORAR' : '↻ DE NOVO', 'go', cartao + botoes);
     }
     const t = Neon.$('btnTorneio'), v = Neon.$('btnRevanche'), o = Neon.$('btnOficina');
     if (t) t.addEventListener('click', () => abrirHub('torneio'));
@@ -2537,7 +2616,8 @@
     if (v) v.addEventListener('click', () => iniciarPartida(luta));
   }
   function proximo() {
-    if (!apuracao || !apuracao.venceu) iniciarPartida(luta);
+    if (apuracao && !apuracao.venceu && podeMelhorar()) abrirHub('oficina');
+    else if (!apuracao || !apuracao.venceu) iniciarPartida(luta);
     else if (luta + 1 < BLADERS.length) iniciarPartida(luta + 1);
     else iniciarPartida(luta);
   }
@@ -2546,7 +2626,8 @@
     pausadoDe = state; state = 'pausado';
     soltarTudo();
     som('pause'); Neon.audio.music.stop();
-    Neon.overlay.show('PAUSADO', 'Aperte P ou o botão para continuar. ESC volta ao torneio (a partida se perde).', 'CONTINUAR');
+    els.overlayText.classList.remove('grande');
+    Neon.overlay.show('PAUSADO', '', '▶');
   }
   function continuar() {
     if (state !== 'pausado') return;
@@ -2562,7 +2643,6 @@
     const agora = relogio, P = ev.p ? PIOES[ev.p.i] : null;
     if (ev.tipo === 'choque') {
       const k = clamp(ev.forca / 700, 0, 1), PA = PIOES[ev.a.i], PB = PIOES[ev.b.i];
-      golpeMax = Math.max(golpeMax, ev.forca);
       const cores = ['#ffffff', '#fff1c2', '#ffd36b', PA.cor, PB.cor];
       faiscas(ev.x, ev.y, -ev.ny, ev.nx, 6 + k * 26, 220 + k * 520, cores, 0.9);
       faiscas(ev.x, ev.y, ev.ny, -ev.nx, 6 + k * 26, 220 + k * 520, cores, 0.9);

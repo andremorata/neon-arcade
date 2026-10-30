@@ -58,7 +58,7 @@ em toda rampa, cada habilidade vale metros e os desbloqueios por recorde são al
 (lançamento, tiro de flipper, dreno, portão de mão única e uma varredura que solta a bola parada em cada ponto
 livre da mesa pra garantir que nenhum canto prende) e o voo do Planador (o piloto voa mais longe do que
 sem tocar, segurar o nariz estola, anel empurra, térmica levanta, torre derruba e o cenário de uma semente é
-sempre o mesmo) e a economia do Núcleo (todo posto cabe na área que o núcleo libera e o preço só sobe) e a arena do Pião (cada
+sempre o mesmo) e a economia do Núcleo (todo posto cabe na área que o núcleo libera e o preço só sobe) e a arena do Spinners (cada
 tipo gira o tempo que promete, todo estádio fica igual girado meia volta, boca derruba e parede segura, o trilho arranca, giro
 igual dá mais coice, a trava estoura e o torneio fecha com o pião certo no nível de melhoria que dá pra ter). Boa parte desses testes nasceu de um
 bug real, e o comentário acima de cada um diz qual.

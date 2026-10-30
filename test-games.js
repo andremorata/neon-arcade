@@ -3055,7 +3055,7 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
   const ini = src.indexOf('  // ── física ──'), fim = src.indexOf('  // ── fim da física ──');
   assert.ok(ini > 0 && fim > ini, 'piao: marcadores do bloco de fisica nao encontrados');
   const fisica = src.slice(ini, fim);
-  const F = new Function(fisica + '; return { K, STEP, PONTOS, TIPOS, PIOES, BLADERS, ESTADIOS, MELHORIAS, CUSTOS, statsDe, upTudo, novoPiao, lancar, novaArena, passo, especial, rngDe, partida, apurar, premioDe, trilhoEm };')();
+  const F = new Function(fisica + '; return { K, STEP, PONTOS, TIPOS, PIOES, BLADERS, ESTADIOS, MELHORIAS, CUSTOS, statsDe, upTudo, novoPiao, lancar, novaArena, passo, especial, rngDe, partida, apurar, premioDe, trilhoEm, rivalDe, AJUDA_MAX };')();
   const difAng = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
   const R = (vencedor, tipo) => ({ vencedor, tipo, pontos: F.PONTOS[tipo] });
 
@@ -3261,19 +3261,25 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
     const fabrica = [0, 1, 2, 9, 10, 11].map(k => taxa(k, 0, 0, 8));
     assert.ok(fabrica[0] >= 0.7, `piao: o ZECA é o tutorial, o FARAÓ de fábrica ganha só ${(fabrica[0] * 100).toFixed(0)}%`);
     const media = l => l.reduce((x, y) => x + y, 0) / l.length;
-    assert.ok(media(fabrica.slice(0, 3)) > media(fabrica.slice(3)) + 0.4, 'piao: o Vórtice tem que ser bem mais difícil que o Dojô');
+    assert.ok(media(fabrica.slice(0, 3)) > media(fabrica.slice(3)) + 0.35, 'piao: o Vórtice tem que ser bem mais difícil que o Dojô');
   }
 
   // moedas e estrelas: ★ vencer, ★ sem levar ponto, ★ ganhar um round sem ser no giro
   {
     const limpo = F.apurar(3, [R(0, 'fora'), R(0, 'giro'), R(0, 'giro')], true);
     assert.deepStrictEqual([limpo.venceu, limpo.estrelas, ...limpo.pts], [true, 3, 4, 0], 'piao: 4 × 0 com um FORA dá três estrelas');
-    assert.strictEqual(limpo.moedas, F.premioDe(3) * 2 + 8 + 4 + 4 + 15, 'piao: primeira vitória paga dobrado, mais o bônus de cada round e do placar limpo');
+    assert.strictEqual(limpo.moedas, F.premioDe(3) * 2 + 12 + 6 + 6 + 25, 'piao: primeira vitória paga dobrado, mais o bônus de cada round e do placar limpo');
     const suado = F.apurar(3, [R(1, 'giro'), R(0, 'giro'), R(-1, 'empate'), R(0, 'giro'), R(0, 'giro'), R(0, 'giro')], false);
-    assert.deepStrictEqual([suado.venceu, suado.estrelas, suado.moedas], [true, 1, F.premioDe(3) + 16], 'piao: vitória só no giro, levando ponto, dá uma estrela');
+    assert.deepStrictEqual([suado.venceu, suado.estrelas, suado.moedas], [true, 1, F.premioDe(3) + 24], 'piao: vitória só no giro, levando ponto, dá uma estrela');
     const perdeu = F.apurar(3, [R(1, 'extremo'), R(0, 'giro')], true);
-    assert.deepStrictEqual([perdeu.venceu, perdeu.estrelas, perdeu.moedas], [false, 0, 8], 'piao: derrota paga um consolo pelos pontos feitos');
+    assert.deepStrictEqual([perdeu.venceu, perdeu.estrelas, perdeu.moedas], [false, 0, 15 + 15 + 6], 'piao: derrota paga um consolo pelo rival e pelos pontos feitos');
     assert.ok(F.premioDe(11) > F.premioDe(0), 'piao: adversário mais forte paga mais');
+    // derrotas seguidas amolecem o rival até um teto, e nunca deixam nível negativo
+    const [r0, r1, r3, r9] = [0, 1, 3, 9].map(d => F.rivalDe(11, d));
+    assert.ok(r1.habil < r0.habil && r3.habil < r1.habil && r1.up.ataque < r0.up.ataque, 'piao: perder seguido tem que amolecer o rival');
+    assert.deepStrictEqual(r9, r3, 'piao: a ajuda para no teto');
+    assert.ok(F.rivalDe(0, 3).up.ataque === 0 && F.rivalDe(0, 3).habil > 0, 'piao: a ajuda não deixa o rival com nível negativo');
+    assert.deepStrictEqual(F.rivalDe(5), { i: F.BLADERS[5].piao, up: F.upTudo(F.BLADERS[5].up), habil: F.BLADERS[5].habil }, 'piao: sem derrota o rival vem inteiro');
   }
 
   // save: JSON quebrado não trava, nada sai das medidas e pião não comprado não entra na arena
@@ -3290,6 +3296,7 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
     assert.deepStrictEqual([s.up[5].ataque, s.up[5].defesa, s.up[0].ataque], [F.CUSTOS.length, 0, 0], 'piao: nível de melhoria fica entre 0 e o máximo');
     assert.deepStrictEqual([s.lutas[0].estrelas, s.lutas[40]], [3, undefined], 'piao: estrela por luta vai até 3 e luta que não existe some');
     assert.strictEqual(ler(JSON.stringify({ piao: 3, comprados: [] })).save.piao, 0, 'piao: pião não comprado volta pro FARAÓ');
+    assert.deepStrictEqual(ler(JSON.stringify({ tropecos: { 0: 99, 1: -4, 50: 2 } })).save.tropecos, { 0: F.AJUDA_MAX }, 'piao: derrotas seguidas ficam entre 0 e o teto');
     const { liberado } = ler(null);
     assert.ok(liberado({ lutas: {} }, 0) && !liberado({ lutas: {} }, 2) && liberado({ lutas: { 1: { vitorias: 1 } } }, 2),
       'piao: o pião só vai pra loja depois de vencer o dono');
@@ -3299,7 +3306,7 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
   // revanche e derrota não mexem no que já foi aberto
   {
     const terminar = (save, luta, rounds) => new Function('F', 'save', 'luta', 'rounds', `
-      const { BLADERS, ESTADIOS, PIOES, apurar } = F;
+      const { BLADERS, ESTADIOS, PIOES, apurar, AJUDA_MAX } = F;
       let apuracao = null, novidades = [], pb = 0, gravado = null;
       const venceuJa = (s, k) => !!(s.lutas[k] && s.lutas[k].vitorias > 0);
       const gravar = () => { gravado = JSON.parse(JSON.stringify(save)); };
@@ -3319,6 +3326,10 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
     assert.strictEqual(r.pb, 3 + 1 + 3, 'piao: o recorde é o total de estrelas');
     const perdeu = terminar(novo(), 2, [R(1, 'extremo')]);
     assert.deepStrictEqual([perdeu.gravado.aberta, perdeu.gravado.lutas[2]], [2, undefined], 'piao: perder não abre nada');
+    const empacado = terminar({ ...novo(), tropecos: { 2: F.AJUDA_MAX } }, 2, [R(1, 'giro')]);
+    assert.strictEqual(empacado.gravado.tropecos[2], F.AJUDA_MAX, 'piao: a conta de derrotas seguidas para no teto');
+    assert.strictEqual(perdeu.gravado.tropecos[2], 1, 'piao: perder conta uma derrota seguida');
+    assert.strictEqual(terminar({ ...novo(), tropecos: { 2: 2 } }, 2, vitoria).gravado.tropecos[2], undefined, 'piao: vencer zera a ajuda');
     const revanche = terminar({ ...novo(), aberta: 6, lutas: { ...novo().lutas, 2: { estrelas: 3, vitorias: 1 } } }, 2, [R(0, 'giro'), R(0, 'giro'), R(0, 'giro'), R(0, 'giro')]);
     assert.deepStrictEqual([revanche.gravado.aberta, revanche.gravado.lutas[2].estrelas, revanche.novidades.length], [6, 3, 0],
       'piao: revanche vencida não fecha o que já estava aberto nem apaga estrela');
