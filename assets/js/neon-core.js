@@ -188,6 +188,10 @@ window.Neon = (function () {
     redemoinho()  { if (!g()) return; noise(0, 0.42, 0.1, null, 1400); tone(260, 900, 0, 0.38, 'triangle', 0.05); },
     fogueira()    { if (!g()) return; noise(0, 0.45, 0.16, null, 380); [392, 523, 659].forEach((f, i) => tone(f, 0, 0.08 + i * 0.07, 0.14, 'triangle', 0.12)); },
     ponte()       { if (!g()) return; tone(320, 90, 0, 0.22, 'sawtooth', 0.11); noise(0, 0.16, 0.18, null, 1600); },
+    // trovão do pântano, sapo coaxando e o assobio do Curupira
+    trovao()      { if (!g()) return; noise(0, 1.3, 0.26, null, 60); tone(70, 32, 0, 1.1, 'sawtooth', 0.1); },
+    coaxar()      { if (!g()) return; tone(190, 120, 0, 0.11, 'square', 0.08); tone(230, 140, 0.13, 0.12, 'square', 0.07); },
+    assobio()     { if (!g()) return; tone(1200, 1900, 0, 0.18, 'sine', 0.08); tone(1900, 1100, 0.21, 0.26, 'sine', 0.08); },
   };
   const g = () => soundOn && AC;
 

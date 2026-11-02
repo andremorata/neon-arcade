@@ -228,7 +228,7 @@
   // O que há na casa (c, r), já atravessando para a tela vizinha nas bordas.
   function bloco(s, sc, c, r) {
     if (c < 0) { if (!sc.esq) return '#'; return bloco(s, tela(s, sc.esq), c + COLS, r); }
-    if (c >= COLS) { if (!sc.dir) return '#'; return bloco(s, tela(s, sc.dir), c - COLS, r); }
+    if (c >= COLS) { if (!sc.dir) return sc.def.aberto && sc.chefe && sc.chefe.est === 'esconde' ? '.' : '#'; return bloco(s, tela(s, sc.dir), c - COLS, r); }
     if (r < 0) {
       if (sc.cima) return bloco(s, tela(s, sc.cima), c, r + ROWS);
       return sc.grade[0][c] === '#' ? '#' : '.';
@@ -238,7 +238,7 @@
   }
   const duro = (s, ch) => SOLIDO.has(ch) || (ch === '+' && s.hab.has('lanterna'));
   const umaVia = (s, sc, ch, c, r) => ch === '=' || ch === '-' || (ch === 'H' && bloco(s, sc, c, r - 1) !== 'H');
-  const altura = s => s.baixo ? BH_BAIXO : BH;
+  const altura = s => s.baixo || s.modo === 'mergulho' ? BH_BAIXO : BH;
   function sobrepoe(s, sc, x, y, h, teste) {
     for (let r = Math.floor((y - h + 1) / T); r <= Math.floor((y - 1) / T); r++)
       for (let c = Math.floor((x - BW) / T); c <= Math.floor((x + BW) / T); c++) if (teste(bloco(s, sc, c, r), c, r)) return true;
@@ -249,7 +249,7 @@
     let r = Math.floor(y / T);
     if (bloco(s, sc, c, r) !== '~') return null;
     while (bloco(s, sc, c, r - 1) === '~' && r > -ROWS) r--;
-    return r * T + 6;
+    return duro(s, bloco(s, sc, c, r - 1)) ? null : r * T + 6;
   }
 
   // ── corrida ──
@@ -498,10 +498,9 @@
     s.vx = rumo(s.vx, dir * DIVE + sc.corrente * 0.5, 700 * dt);
     s.vy = rumo(s.vy, vert * DIVE - 22, 700 * dt);
     mover(s, sc, dt);
-    const sup = superficie(s, sc, s.x, s.y - 16);
-    if (sup === null) {
-      if (superficie(s, sc, s.x, s.y) === null) { s.modo = 'normal'; s.vy = Math.min(s.vy, -200); s.ar = s.arMax; }
-    } else if (s.y - BH < sup - 4 && vert <= 0) { s.modo = 'agua'; s.ar = s.arMax; }
+    if (bloco(s, sc, Math.floor(s.x / T), Math.floor((s.y - 12) / T)) !== '~') { s.modo = 'normal'; s.vy = Math.min(s.vy, -200); s.ar = s.arMax; return; }
+    const sup = superficie(s, sc, s.x, s.y - 12);
+    if (sup !== null && s.y - BH_BAIXO < sup + 2 && vert <= 0) { s.modo = 'agua'; s.ar = s.arMax; }
   }
   function modoParede(s, sc, dt, inp, dir) {
     const lado = s.face, c = Math.floor((s.x + lado * (BW + 3)) / T);
@@ -635,6 +634,11 @@
     }
   }
   function atravessar(s, sc) {
+    const saida = sc.chefe && CHEFES[sc.chefe.tipo].saida;
+    if (saida) {
+      const lado = s.x > W ? 'dir' : s.x < 0 ? 'esq' : s.y < 0 ? 'cima' : s.y > H ? 'baixo' : null;
+      if (lado && saida(sc.chefe, s, sc, lado)) return;
+    }
     let nova = null;
     if (s.x > W && sc.dir) { nova = sc.dir; s.x -= W; }
     else if (s.x < 0 && sc.esq) { nova = sc.esq; s.x += W; }
@@ -684,7 +688,13 @@
   // Cada bicho tem um jeito de ameaçar e um jeito de sair de cena: o chicote
   // afugenta (ninguém morre na selva), atordoa ou devolve o golpe.
   const LETRAS = { s: 'cobra', t: 'tatu', B: 'colmeia', c: 'jacare', p: 'piranha', e: 'poraque', g: 'tronco',
-    h: 'vitoria', m: 'macaco', j: 'onca', S: 'saci', Y: 'iara' };
+    h: 'vitoria', m: 'macaco', j: 'onca', b: 'morcego', a: 'aranha', k: 'estalactite', f: 'sapo', v: 'planta',
+    S: 'saci', Y: 'iara', G: 'cobragrande', C: 'curupira' };
+  // há chão entre (x, y0) e (x, y1)? morcego não mergulha através da pedra
+  function livreEntre(sc, x, y0, y1) {
+    for (let r = Math.floor(y0 / T) + 1; r <= Math.floor(y1 / T); r++) if (SOLIDO.has(casa(sc, Math.floor(x / T), r))) return false;
+    return true;
+  }
   function casa(sc, c, r) { return c < 0 || c >= COLS ? '#' : r < 0 || r >= ROWS ? '.' : sc.grade[r][c]; }
   function firmeEm(sc, x, y) {
     const ch = casa(sc, Math.floor(x / T), Math.floor((y + 1) / T));
@@ -743,6 +753,87 @@
     if (sc.tiros.length > 24 || sc.tiros.some(t => t.fim)) sc.tiros = sc.tiros.filter(t => !t.fim);
   }
   const BICHOS = {
+    // morcego: dorme no teto e mergulha numa curva que passa onde você vai estar
+    morcego: { w: 12, h: 12,
+      ini(e) { e.y = e.r * T + 24; e.hy = e.y; e.est = 'dorme'; },
+      passo(e, s, sc, dt) {
+        e.tt -= dt;
+        if (e.est === 'dorme') {
+          const alvoX = s.x + s.vx * 0.25;
+          if (e.tt <= 0 && Math.abs(s.x - e.x) < 150 && s.y > e.y + 50 && livreEntre(sc, s.x, e.hy, s.y - 40)) {
+            e.est = 'voa'; e.tt = 1.2; e.ax = e.hx; e.ay = e.hy; e.bx = clampF(alvoX, 20, W - 20); e.by = s.y - 26; ev(s, 'morcego', e.x, e.y);
+          }
+        } else if (e.est === 'voa') {
+          const k = 1 - Math.max(0, e.tt) / 1.2, cx = e.bx, cy = 2 * e.by - e.ay, fx = 2 * e.bx - e.ax;
+          e.x = (1 - k) * (1 - k) * e.ax + 2 * (1 - k) * k * cx + k * k * fx;
+          e.y = (1 - k) * (1 - k) * e.ay + 2 * (1 - k) * k * cy + k * k * e.ay;
+          if (e.tt <= 0) { e.est = 'volta'; e.tt = 0.7; e.ax = e.x; }
+        } else {
+          const k = 1 - Math.max(0, e.tt) / 0.7;
+          e.x = e.ax + (e.hx - e.ax) * k; e.y = e.hy;
+          if (e.tt <= 0) { e.est = 'dorme'; e.tt = 1.6; e.x = e.hx; }
+        }
+      },
+      perigo: e => e.est === 'voa',
+      chicote(e, s) { foge(e, s, 150); },
+    },
+    // aranha: desce pelo fio até a altura da cabeça quando você passa por baixo
+    aranha: { w: 11, h: 14,
+      ini(e) { e.ay = e.r * T; e.len = 30; e.y = e.ay + 30; e.est = 'sobe'; },
+      passo(e, s, sc, dt) {
+        if (e.est === 'sobe' && Math.abs(s.x - e.x) < 75 && s.y > e.ay + 40) { e.est = 'desce'; e.tt = 1.4; }
+        if (e.est === 'desce' && (e.tt -= dt) <= 0) e.est = 'sobe';
+        const alvo = e.est === 'desce' ? clampF(s.y - 30 - e.ay, 30, 320) : 30;
+        e.len = rumo(e.len, alvo, (e.est === 'desce' ? 190 : 60) * dt);
+        e.y = e.ay + e.len + Math.sin(e.t * 3) * 3;
+      },
+      perigo: () => true,
+      chicote(e, s) { foge(e, s, 150); },
+    },
+    // estalactite: treme quando alguém se aproxima e despenca; volta a crescer
+    estalactite: { w: 9, h: 26,
+      ini(e) { e.y = e.r * T + 30; e.hy = e.y; e.est = 'presa'; },
+      passo(e, s, sc, dt) {
+        e.tt -= dt;
+        if (e.est === 'presa') { if (Math.abs(s.x - e.x) < 110 && s.y > e.y) { e.est = 'treme'; e.tt = 0.3; ev(s, 'racha', e.x, e.y); } }
+        else if (e.est === 'treme') { if (e.tt <= 0) { e.est = 'cai'; e.vy = 0; } }
+        else if (e.est === 'cai') {
+          if (cairBicho(e, sc, dt) || e.y > H + 20) { e.est = 'quebrou'; e.tt = 4; ev(s, 'estoura', e.x, e.y - 8); }
+        } else if (e.tt <= 0 && Math.abs(s.x - e.x) > 60) { e.est = 'presa'; e.y = e.hy; e.vy = 0; }
+      },
+      perigo: e => e.est === 'cai',
+    },
+    // sapo venenoso: pula na sua direção, mas não pula para dentro d'água
+    sapo: { w: 12, h: 14,
+      ini(e) { e.est = 'senta'; e.tt = 1 + (e.c % 3) * 0.4; e.vx = 0; },
+      passo(e, s, sc, dt) {
+        if (e.est === 'senta') {
+          if ((e.tt -= dt) <= 0 && Math.abs(s.x - e.x) < 260) {
+            const d = s.x < e.x ? -1 : 1;
+            if (firmeEm(sc, clampF(e.x + d * 70, 10, W - 10), e.y)) { e.dir = d; e.est = 'pula'; e.vx = d * 140; e.vy = -380; ev(s, 'sapo', e.x, e.y); }
+            else e.tt = 0.8;
+          }
+        } else {
+          const nx = clampF(e.x + e.vx * dt, 10, W - 10);
+          if (vazioEm(sc, nx + e.dir * e.w, e.y)) e.x = nx;
+          if (cairBicho(e, sc, dt)) { e.est = 'senta'; e.tt = 1.5; }
+          if (e.y > H + 30) e.fora = true;
+        }
+      },
+      perigo: () => true,
+      chicote(e, s) { foge(e, s, 150); },
+    },
+    // planta carnívora: morde quem chega perto; o chicote a faz fechar um tempo
+    planta: { w: 14, h: 30,
+      ini(e) { e.est = 'aberta'; },
+      passo(e, s, sc, dt) {
+        if (e.stun > 0) { e.stun -= dt; e.est = 'fechada'; e.w = 12; return; }
+        e.est = Math.abs(s.x - e.x) < 72 && Math.abs(s.y - e.y) < 60 ? 'morde' : 'aberta';
+        e.w = e.est === 'morde' ? 24 : 14;
+      },
+      perigo: e => e.stun <= 0,
+      chicote(e, s) { if (e.stun <= 0) { e.stun = 3; if (!e.levou) { e.levou = 1; s.pontos += 100; s.bichos++; } ev(s, 'atordoa', e.x, e.y - 20); } },
+    },
     cobra: { w: 16, h: 16,
       ini(e) { e.est = 'anda'; },
       passo(e, s, sc, dt) {
@@ -959,7 +1050,90 @@
     sc.tiros.length = 0;
     ev(s, 'guardiao', ch.x, ch.y - 30, ch.tipo);
   }
+  // pegadas do Curupira em cada volta da clareira: apontam o caminho errado
+  const TRILHAS = ['baixo', 'alto', 'alto', 'baixo', 'alto', 'baixo', 'baixo', 'alto'];
   const CHEFES = {
+    // Cobra-Grande: sobe pelo poço mais perto, mira, dá o bote e fica cansada
+    // um instante — é a hora do chicote. Do meio das pedras o bote não alcança.
+    cobragrande: {
+      ini(ch, lista, sc) {
+        ch.buracos = lista.map(m => { const [a, b] = vaoAgua(sc, m.c, m.r); return { x: (a + b) / 2, sup: supGrade(sc, m.c, m.r) }; });
+        ch.i = 0; ch.vida = 4; ch.est = 'espera'; ch.tt = 1.4; ch.hx = ch.buracos[0].x; ch.hy = ch.buracos[0].sup + 40;
+        ch.mx = ch.hx; ch.my = ch.hy; ch.cuspiu = false;
+      },
+      passo(ch, s, sc, dt) {
+        if (ch.vencido) { ch.tt += dt; ch.hy += 50 * dt; return; }
+        ch.tt -= dt;
+        const b = ch.buracos[ch.i];
+        if (ch.est === 'espera') {
+          ch.hy = b.sup + 40;
+          if (ch.tt <= 0) {
+            let j = 0, d = Infinity;
+            ch.buracos.forEach((q, k) => { const dd = Math.abs(q.x - s.x); if (dd < d) { d = dd; j = k; } });
+            ch.i = j; ch.est = 'bolhas'; ch.tt = 0.9; ch.hx = ch.buracos[j].x; ev(s, 'bolhas', ch.hx, ch.buracos[j].sup);
+          }
+        } else if (ch.est === 'bolhas') { if (ch.tt <= 0) { ch.est = 'sobe'; ch.tt = 0.35; ev(s, 'serpente', ch.hx, b.sup); } }
+        else if (ch.est === 'sobe') {
+          ch.hx = b.x; ch.hy = b.sup - 110 * (1 - Math.max(0, ch.tt) / 0.35);
+          if (ch.tt <= 0) { ch.est = 'mira'; ch.tt = 0.8; }
+        } else if (ch.est === 'mira') {
+          ch.hx = b.x + Math.sin(ch.t * 6) * 10; ch.hy = b.sup - 110 + Math.cos(ch.t * 5) * 6;
+          ch.mx = clampF(s.x, b.x - 65, b.x + 65); ch.my = clampF(s.y - 26, b.sup - 120, b.sup - 24);
+          if (ch.vida <= 2 && !ch.cuspiu && ch.tt < 0.4) {
+            ch.cuspiu = true;
+            sc.tiros.push({ tipo: 'veneno', x: ch.hx, y: ch.hy, vx: clampF((s.x - ch.hx) / 0.8, -230, 230), vy: -280, g: GRAV * 0.6, r: 7, vida: 3 });
+            ev(s, 'cuspe', ch.hx, ch.hy);
+          }
+          if (ch.tt <= 0) { ch.est = 'bote'; ch.tt = 0.22; ch.ox = ch.hx; ch.oy = ch.hy; }
+        } else if (ch.est === 'bote') {
+          const k = 1 - Math.max(0, ch.tt) / 0.22;
+          ch.hx = ch.ox + (ch.mx - ch.ox) * k; ch.hy = ch.oy + (ch.my - ch.oy) * k;
+          if (ch.tt <= 0) { ch.est = 'cansada'; ch.tt = 1.05; ev(s, 'bote', ch.hx, ch.hy); }
+        } else if (ch.est === 'cansada') { ch.hy = ch.my + Math.sin(ch.t * 3) * 2; if (ch.tt <= 0) { ch.est = 'desce'; ch.tt = 0.4; } }
+        else if (ch.est === 'desce') {
+          ch.hx = rumo(ch.hx, b.x, 320 * dt); ch.hy = rumo(ch.hy, b.sup + 40, 440 * dt);
+          if (ch.tt <= 0) { ch.est = 'espera'; ch.tt = 0.7; ch.cuspiu = false; }
+        }
+      },
+      alvo: (ch, s, sc, k) => ch.est === 'cansada' && tocaCaixa(k, ch.hx, ch.hy + 12, 16, 24),
+      chicote(ch, s, sc) {
+        ch.vida--; s.pontos += 500; ev(s, 'acerto', ch.hx, ch.hy);
+        if (ch.vida <= 0) vencer(ch, s, sc); else { ch.est = 'desce'; ch.tt = 0.4; }
+      },
+      toca(ch, s) {
+        if ((ch.est === 'sobe' || ch.est === 'mira' || ch.est === 'bote') && encosta(s, { x: ch.hx, y: ch.hy + 14, w: 16, h: 28 }, 3)) ferir(s, ch.hx);
+      },
+    },
+    // Curupira: a clareira se repete até você sair pelo caminho contrário ao das
+    // pegadas — os pés dele são virados para trás. Achado, rende-se ao chicote.
+    curupira: {
+      ini(ch) { ch.casa = { x: ch.x, y: ch.y }; ch.passos = 0; ch.n = 0; ch.vida = 4; ch.est = 'esconde'; ch.trilha = TRILHAS[0]; ch.lado = 1; },
+      passo(ch, s, sc, dt) {
+        ch.trilha = TRILHAS[ch.n % TRILHAS.length];
+        if (ch.vencido) { ch.tt += dt; return; }
+        if (ch.est === 'aparece') {
+          if ((ch.tt -= dt) <= 0) { ch.lado *= -1; ch.est = 'corre'; ch.tt = 0.6; ch.de = ch.x; ev(s, 'assobio', ch.x, ch.y - 30); }
+        } else if (ch.est === 'corre') {
+          ch.tt -= dt;
+          const alvo = ch.casa.x + (ch.lado > 0 ? 0 : 360);
+          ch.x = ch.de + (alvo - ch.de) * (1 - Math.max(0, ch.tt) / 0.6);
+          if (ch.tt <= 0) { ch.est = 'aparece'; ch.tt = 2.6; }
+        }
+      },
+      saida(ch, s, sc, lado) {
+        if (ch.est !== 'esconde' || lado !== 'dir') return false;
+        const foi = s.y < 260 ? 'alto' : 'baixo';
+        if (foi !== ch.trilha) { ch.passos++; ev(s, 'acerta', W - 30, s.y - 30); }
+        else { ch.passos = 0; ev(s, 'erra', W - 30, s.y - 30); }
+        ch.n++; ch.vida = 4 - ch.passos;
+        s.x = 24; s.y = 400; s.vx = 0; s.vy = 0; s.modo = 'normal'; s.chao = true; s.piso = null;
+        ev(s, 'volta', s.x, s.y, sc.key);
+        if (ch.passos >= 3) { ch.est = 'aparece'; ch.tt = 3; ch.vida = 1; ev(s, 'curupira', ch.x, ch.y - 40); }
+        return true;
+      },
+      alvo: (ch, s, sc, k) => ch.est === 'aparece' && tocaCaixa(k, ch.x, ch.y, 14, 44),
+      chicote(ch, s, sc) { ch.vida = 0; s.pontos += 500; ev(s, 'acerto', ch.x, ch.y - 30); vencer(ch, s, sc); },
+    },
     // Saci: some num redemoinho e reaparece no ponto mais longe de você. Só dá
     // para acertá-lo parado, rindo; nesse meio-tempo ele solta redemoinhos.
     saci: {
@@ -1269,6 +1443,170 @@
           '######~~~###~~###~~~',
           '######~~~###~c###~~~'] },
       } },
+    { id: 'grutas', nome: 'GRUTAS DE CRISTAL', icone: '🔮', cor: '#b9a3ff', semente: 37, dia: 270, inicio: '0,0', escuro: true,
+      hab: 'lanterna', pede: 'escalada', guardiao: 'COBRA-GRANDE', ceu: ['#0b0a1a', '#1a1630'], chao: '#2a2540', grama: '#6c62a8',
+      telas: {
+        '0,0': { nome: 'BOCA DA GRUTA', dica: 'Estalactite treme antes de cair. Não pare embaixo.', mapa: [
+          '####################',
+          '####################',
+          '####..k.....k....###',
+          '#I................##',
+          '#M................##',
+          '#M..........$......#',
+          '#M.........====....#',
+          '#M.................#',
+          '........====........',
+          'P.....X........*.*..',
+          '####################',
+          '####################'] },
+        '1,0': { nome: 'SALÃO DOS MORCEGOS', dica: 'Morcego mergulha onde você vai estar. Mude o passo.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '...b......b.....b...',
+          '....................',
+          '....................',
+          '....................',
+          '....*.$.*...........',
+          '...=======...####...',
+          '...............*.*..',
+          '####################',
+          '####################'] },
+        '2,0': { nome: 'RIO SUBTERRÂNEO', dica: 'A pedra desce até a água: ↓ para mergulhar por baixo.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '........##..........',
+          '........##..........',
+          '........##..........',
+          '........##..........',
+          '........##..........',
+          '........##..........',
+          '..*.....##.....*....',
+          '####~~~~##~~~~~#####',
+          '####~~*~~~~*~~~#####'] },
+        '3,0': { nome: 'TEIAS', dica: 'Teia não se pula: estale o chicote nela.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '....a.........a.....',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '......W...$...W.....',
+          '......W...X...W.....',
+          '####################',
+          '####################'] },
+        '4,0': { nome: 'ABISMO DAS ARGOLAS', dica: 'Pule e estale perto das argolas douradas.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '....................',
+          '......o.....o.......',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '..............*.F.$.',
+          '####.........#######',
+          '####.........#######'] },
+        '5,0': { nome: 'LAGO DA COBRA-GRANDE', dica: 'Fique no meio das pedras. Depois do bote, ela cansa.', mapa: [
+          '####################',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '...................#',
+          '.......R...........#',
+          '####G~###G~###G~####',
+          '####~~###~~###~~####'] },
+      } },
+    { id: 'pantano', nome: 'PÂNTANO DA NÉVOA', icone: '🐸', cor: '#c9f58a', semente: 53, dia: 270, inicio: '0,0', chuva: true,
+      hab: 'escalada', pede: 'planar', guardiao: 'CURUPIRA', ceu: ['#101a1c', '#3a4a44'], chao: '#3a3026', grama: '#8fae5a',
+      telas: {
+        '0,0': { nome: 'BEIRA DO PÂNTANO', dica: 'Lama prende: atravesse sem parar.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '...........$........',
+          '..........===.......',
+          'P.....f......f..*...',
+          '#####%%%####%%%#####',
+          '####################'] },
+        '1,0': { nome: 'PLANTAS FAMINTAS', dica: 'Planta carnívora fecha com uma chicotada.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....*.*.....*.$.....',
+          '...====.....====....',
+          '.......v.......v....',
+          '####################',
+          '####################'] },
+        '2,0': { nome: 'NÉVOA', dica: 'A névoa esconde os buracos. O relâmpago mostra.', nevoa: true, mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '......*..$..*...F...',
+          '#####..####..#######',
+          '#####..####..#######'] },
+        '3,0': { nome: 'LAGOA DOS SAPOS', dica: 'Folha em folha, de olho no jacaré.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....*..*..*..*..*...',
+          '..........$.........',
+          '##~~h~~h~~h~~h~~h~##',
+          '##~~~~p~~~c~~~~~~~##'] },
+        '4,0': { nome: 'ÁRVORE OCA', dica: 'Suba pelas raízes. Lá de cima dá para planar longe.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '........*.*.........',
+          '.......H####H......I',
+          '.......H####H.....##',
+          '.......H####H.......',
+          '...f...H####H...F...',
+          '####################',
+          '####################'] },
+        '5,0': { nome: 'CLAREIRA DO CURUPIRA', dica: 'As pegadas enganam: saia pelo outro caminho.', aberto: true, mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '...........H========',
+          '...........H........',
+          '...........H........',
+          '...........H........',
+          '...........H........',
+          '.....C.....H...R....',
+          '####################',
+          '####################'] },
+      } },
   ];
   // ── fim da física ──
 
@@ -1324,7 +1662,13 @@
     }
     // sol de faixas que atravessa o céu conforme o tempo passa; à noite, lua
     const sx = 90 + Math.min(1, k) * 620, sy = 170 - Math.sin(Math.min(1, k) * Math.PI) * 110;
-    if (!noite) {
+    if (reg.chuva) {
+      for (let i = 0; i < 9; i++) {
+        const x = ((i * 130 + t * 8) % (W + 260)) - 130, y = 40 + (i % 3) * 34;
+        ctx.fillStyle = noite ? '#0c1020' : mistura('#3c4650', reg.ceu[0], 0.3);
+        ctx.beginPath(); ctx.ellipse(x, y, 120, 34, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (!noite) {
       const halo = ctx.createRadialGradient(sx, sy, 20, sx, sy, 110);
       halo.addColorStop(0, '#ffd27a55'); halo.addColorStop(1, '#ffd27a00');
       ctx.fillStyle = halo; ctx.fillRect(sx - 110, sy - 110, 220, 220);
@@ -1574,6 +1918,55 @@
     ctx.save();
     if (e.fora) { if (e.fuga <= 0) { ctx.restore(); return; } ctx.globalAlpha = Math.max(0, e.fuga / 0.7); }
     switch (e.tipo) {
+      case 'morcego': {
+        const voa = e.est !== 'dorme', asa = voa ? Math.sin(t * 22) * 9 : 2;
+        if (!voa) R(x - 1, y - 22, 2, 8, '#3a3550');
+        ctx.fillStyle = '#5a4a7a';
+        ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x - 16, y - 12 - asa); ctx.lineTo(x - 8, y - 4); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x, y - 8); ctx.lineTo(x + 16, y - 12 - asa); ctx.lineTo(x + 8, y - 4); ctx.fill();
+        Neon.circle(ctx, x, y - 7, 6, '#6a5a8a');
+        olho(x - 2, y - 8, '#ff6b6b'); olho(x + 2, y - 8, '#ff6b6b');
+        break;
+      }
+      case 'aranha': {
+        ctx.strokeStyle = '#d8dcf0aa'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, e.ay); ctx.lineTo(x, y - 10); ctx.stroke();
+        for (let i = 0; i < 4; i++) {
+          const a = 0.5 + i * 0.35, mexe = Math.sin(t * 10 + i) * 2;
+          membro(x, y - 7, x - Math.cos(a) * 13, y - 7 + Math.sin(a) * 9 + mexe, '#2a2238', 2);
+          membro(x, y - 7, x + Math.cos(a) * 13, y - 7 + Math.sin(a) * 9 - mexe, '#2a2238', 2);
+        }
+        Neon.circle(ctx, x, y - 7, 7, '#3e3050'); R(x - 2, y - 11, 4, 3, '#ff4a6a');
+        break;
+      }
+      case 'estalactite': {
+        if (e.est === 'quebrou') break;
+        const treme = e.est === 'treme' ? Math.sin(t * 60) * 2 : 0;
+        ctx.fillStyle = '#6a6290'; ctx.beginPath(); ctx.moveTo(x - 9 + treme, y - 26); ctx.lineTo(x + 9 + treme, y - 26); ctx.lineTo(x + treme, y); ctx.fill();
+        ctx.fillStyle = '#8f86c0'; ctx.beginPath(); ctx.moveTo(x - 3 + treme, y - 26); ctx.lineTo(x + 2 + treme, y - 26); ctx.lineTo(x + treme, y - 8); ctx.fill();
+        break;
+      }
+      case 'sapo': {
+        const pulo = e.est === 'pula';
+        ctx.fillStyle = '#3fd0a0'; ctx.beginPath(); ctx.ellipse(x, y - 7, 11, pulo ? 6 : 8, 0, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 3; i++) Neon.circle(ctx, x - 5 + i * 5, y - 10, 2, '#1a3a8a');
+        Neon.circle(ctx, x + e.dir * 5, y - 14, 4, '#3fd0a0'); olho(x + e.dir * 6, y - 15, '#1a1010');
+        if (pulo) { membro(x - 6, y - 3, x - 14, y + 3, '#2fa080', 3); membro(x + 6, y - 3, x + 14, y + 3, '#2fa080', 3); }
+        else { R(x - 12, y - 3, 6, 3, '#2fa080'); R(x + 6, y - 3, 6, 3, '#2fa080'); }
+        break;
+      }
+      case 'planta': {
+        const fecha = e.stun > 0, morde = e.est === 'morde', abre = fecha ? 0.05 : morde ? 0.2 + Math.abs(Math.sin(t * 9)) * 0.7 : 0.55;
+        membro(x, y, x + Math.sin(t * 2) * 3, y - 18, '#4f8a3a', 4);
+        ctx.fillStyle = '#4f9a3a'; ctx.beginPath(); ctx.ellipse(x - 8, y - 4, 9, 4, 0.5, 0, Math.PI * 2); ctx.fill();
+        const hx = x + (morde ? e.dir * 0 : 0) + Math.sin(t * 2) * 3, hy = y - 22;
+        ctx.fillStyle = fecha ? '#7a5a8a' : '#d94a6a';
+        ctx.beginPath(); ctx.ellipse(hx, hy - abre * 6, 13, 7, 0, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(hx, hy + abre * 6, 13, 7, 0, 0, Math.PI); ctx.fill();
+        if (!fecha) for (let i = -2; i <= 2; i++) { R(hx + i * 4, hy - abre * 6 - 1, 2, 3, '#fff6d8'); R(hx + i * 4 + 1, hy + abre * 6 - 2, 2, 3, '#fff6d8'); }
+        for (let i = 0; i < 5; i++) Neon.circle(ctx, hx - 8 + i * 4, hy - abre * 6 - 5, 1.5, '#ffe07a');
+        if (fecha) texto('z', hx + 12, hy - 10, 11, '#d7c9ff', 'center');
+        break;
+      }
       case 'cobra': {
         const arma = e.est === 'arma', bote = e.est === 'bote';
         const cor = '#7fcf6a', esc = '#3f7a3a';
@@ -1720,6 +2113,8 @@
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         R(p.x - 5, p.y - 6, 3, 3, '#ffffff');
         texto('♪', p.x + 1, p.y + 5, 11, '#c8f6ff', 'center');
+      } else if (p.tipo === 'veneno') {
+        Neon.glow(ctx, '#9bff6a', 12); Neon.circle(ctx, p.x, p.y, p.r, '#7ae05a'); R(p.x - 2, p.y - 3, 3, 3, '#e8ffd8');
       } else Neon.circle(ctx, p.x, p.y, p.r, '#ffd9a1');
       ctx.restore();
     }
@@ -1750,6 +2145,60 @@
         olho(x + 3, y - 42 - pul);
       }
       ctx.globalAlpha = 1;
+    } else if (ch.tipo === 'cobragrande') {
+      for (const b of ch.buracos) if (ch.est === 'bolhas' && b === ch.buracos[ch.i]) {
+        for (let i = 0; i < 5; i++) Neon.circle(ctx, b.x - 14 + ((i * 7 + t * 40) % 28), b.sup - 2 - ((t * 30 + i * 9) % 14), 3, '#b9e8ff');
+      }
+      if (ch.vencido && ch.tt > 2.5) return;
+      const b = ch.buracos[ch.i], cansada = ch.est === 'cansada';
+      if (ch.hy < b.sup + 30) {
+        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, b.sup + 2); ctx.clip();
+        ctx.strokeStyle = '#2d5a4a'; ctx.lineWidth = 22; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(b.x, b.sup + 30); ctx.quadraticCurveTo(b.x, (b.sup + ch.hy) / 2, ch.hx, ch.hy + 10); ctx.stroke();
+        ctx.strokeStyle = '#4f9a7a'; ctx.lineWidth = 8;
+        ctx.beginPath(); ctx.moveTo(b.x, b.sup + 30); ctx.quadraticCurveTo(b.x, (b.sup + ch.hy) / 2, ch.hx, ch.hy + 10); ctx.stroke();
+        const lado = Math.sign((run.x - ch.hx) || 1);
+        ctx.fillStyle = cansada ? '#3d7a5a' : '#2d6a4a';
+        ctx.beginPath(); ctx.ellipse(ch.hx, ch.hy + 4, 20, 13, lado * 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#9be7ce'; ctx.beginPath(); ctx.ellipse(ch.hx + lado * 6, ch.hy + 9, 12, 5, 0, 0, Math.PI * 2); ctx.fill();
+        olho(ch.hx + lado * 8, ch.hy - 2, ch.est === 'mira' ? '#ff4a4a' : '#ffe07a');
+        if (ch.est === 'bote' || ch.est === 'mira') membro(ch.hx + lado * 18, ch.hy + 6, ch.hx + lado * 28, ch.hy + 6 + (Math.sin(t * 30) > 0 ? 4 : -2), '#ff6b8a', 2);
+        if (cansada) texto('💤', ch.hx, ch.hy - 18, 14, '#d7c9ff', 'center');
+        ctx.restore();
+      }
+    } else if (ch.tipo === 'curupira') {
+      if (ch.est === 'esconde') {
+        // pegadas: apontam para o caminho errado
+        ctx.save(); ctx.globalAlpha = 0.75;
+        const pe = (px, py, ang) => {
+          ctx.save(); ctx.translate(px, py); ctx.rotate(ang);
+          ctx.fillStyle = '#ff9d4d'; ctx.beginPath(); ctx.ellipse(0, 0, 6, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+          for (let i = -1; i <= 1; i++) Neon.circle(ctx, 7, i * 2.5, 1.4, '#ff9d4d');
+          ctx.restore();
+        };
+        if (ch.trilha === 'baixo') for (let i = 0; i < 9; i++) pe(300 + i * 48, 396 - (i % 2) * 6, 0);
+        else {
+          for (let i = 0; i < 4; i++) pe(300 + i * 40, 396 - (i % 2) * 6, 0);
+          for (let i = 0; i < 5; i++) pe(452 + (i % 2) * 14, 360 - i * 46, -Math.PI / 2);
+          for (let i = 0; i < 6; i++) pe(500 + i * 48, 156 - (i % 2) * 6, 0);
+        }
+        ctx.restore();
+        return;
+      }
+      if (ch.vencido && ch.tt > 2) return;
+      const x = ch.x, y = ch.y, corre = ch.est === 'corre', pul = Math.abs(Math.sin(t * 9)) * 3;
+      ctx.save(); if (ch.vencido) ctx.globalAlpha = Math.max(0, 1 - ch.tt / 2);
+      const f = corre ? Math.sign(ch.lado) * -1 : Math.sign(run.x - x) || 1;
+      membro(x - 3, y - 16, x - 3 - f * 6, y - 2, '#7a4a2a', 4); membro(x + 3, y - 16, x + 3 - f * 6, y - 2, '#7a4a2a', 4);
+      R(x - 3 - f * 10, y - 4, 8, 4, '#5a3420'); R(x + 3 - f * 10, y - 4, 8, 4, '#5a3420');
+      R(x - 8, y - 34 - pul, 16, 18, '#3f8a4a');
+      Neon.circle(ctx, x, y - 42 - pul, 8, '#c98a5a');
+      ctx.save(); Neon.glow(ctx, '#ff6b3d', 18);
+      for (let i = 0; i < 5; i++) { ctx.fillStyle = ['#ff6b3d', '#ffb347', '#ff6b3d', '#ffb347', '#fff1a8'][i]; ctx.beginPath(); ctx.ellipse(x - 8 + i * 4, y - 52 - pul - Math.sin(t * 12 + i) * 3, 3, 7, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+      olho(x + f * 3, y - 43 - pul, '#fff6d8');
+      if (!corre) texto('♪', x + 18, y - 56 - ((t * 20) % 12), 12, '#ffd36b', 'center');
+      ctx.restore();
     } else if (ch.tipo === 'iara') {
       const x = ch.x, y = ch.y, canta = ch.est === 'canta' && !ch.vencido;
       R(x - 30, y - 18, 60, 22, '#4a4f63'); R(x - 26, y - 22, 52, 6, '#5d6480');
@@ -1886,7 +2335,7 @@
   let run = novaCorrida(0, { hab: save.hab, up: save.up }), state = 'menu', lastFrame = performance.now();
   let aba = 'mapa';
   const particles = new Neon.Particles();
-  const fx = { tremor: 0, flash: 0, flashCor: '#ed887f', troca: 0, trocaDir: 0 };
+  const fx = { tremor: 0, flash: 0, flashCor: '#ed887f', troca: 0, trocaDir: 0, raio: 5, relampago: 0 };
   const ambiente = [];
   const els = { hub: Neon.$('hub'), trilha: Neon.$('trilha'), campo: Neon.$('campo'), habs: Neon.$('habs'),
     hubRecorde: Neon.$('hubRecorde'), hubSementes: Neon.$('hubSementes'), abaMapa: Neon.$('abaMapa'), abaCampo: Neon.$('abaCampo') };
@@ -2022,8 +2471,10 @@
   Neon.onHide(pausar);
 
   // ── eventos da física viram som, faísca e aviso ──
-  const NOMES = { saci: 'O SACI', iara: 'A IARA' };
-  const FALAS = { saci: 'O Saci roubou a relíquia! Acerte-o enquanto ele ri.', iara: 'O canto da Iara puxa você para o rio. Quebre os búzios!' };
+  const NOMES = { saci: 'O SACI', iara: 'A IARA', cobragrande: 'A COBRA-GRANDE', curupira: 'O CURUPIRA' };
+  const FALAS = { saci: 'O Saci roubou a relíquia! Acerte-o enquanto ele ri.', iara: 'O canto da Iara puxa você para o rio. Quebre os búzios!',
+    cobragrande: 'A Cobra-Grande mora no lago. Fique no meio das pedras e espere o bote.',
+    curupira: 'A clareira se repete. As pegadas do Curupira apontam para o lado errado.' };
   function eventos() {
     for (const e of run.events) {
       const { x, y } = e;
@@ -2069,6 +2520,17 @@
         case 'acerto': som('whack'); fx.tremor = 0.2; particles.burst(x, y, '#ffd36b', 14, 160, 3); particles.float(x, y - 20, '+500', '#ffd36b', 15); break;
         case 'buzio': som('clear', 2); fx.tremor = 0.15; particles.burst(x, y, '#ffd3e6', 16, 150, 3); particles.float(x, y - 20, '+500', '#ffd3e6', 15); break;
         case 'chefe': Neon.toast(FALAS[e.extra] || 'Um guardião desperta.'); break;
+        case 'morcego': som('flag'); break;
+        case 'racha': som('wall'); break;
+        case 'sapo': som('coaxar'); break;
+        case 'bolhas': som('open'); break;
+        case 'serpente': som('rugido', 0.7); particles.burst(x, y, '#9fe3f2', 14, 160, 3); break;
+        case 'cuspe': som('acid'); break;
+        case 'bote': som('whack'); fx.tremor = Math.max(fx.tremor, 0.12); break;
+        case 'assobio': som('assobio'); break;
+        case 'acerta': som('point'); { const ch = tela(run).chefe; Neon.toast(`Você não caiu na pegadinha! ${ch ? ch.passos : ''}/3`); } break;
+        case 'erra': som('assobio'); Neon.toast('Fiu-fiu! O Curupira riu e a clareira recomeçou.'); break;
+        case 'curupira': som('level'); Neon.toast('O Curupira apareceu! Estale o chicote nele.'); break;
         case 'guardiao': som('record'); fx.flash = 0.4; fx.flashCor = '#fff6d8'; particles.wave(x, y, run.reg.cor, 220);
           Neon.toast(`${NOMES[e.extra] || 'O GUARDIÃO'} SE RENDEU! Pegue a relíquia.`); break;
         case 'noite': som('rugido', 1); Neon.toast('🌙 Anoiteceu. A selva ficou perigosa — e o bônus de sol acabou.'); break;
@@ -2230,7 +2692,7 @@
     const forte = sc.escuro, noite = run.noite;
     if (!forte && !noite) return;
     const lanterna = run.hab.has('lanterna');
-    const raio = forte ? (lanterna ? run.luz + 80 : 95) : (lanterna ? run.luz + 90 : run.luz + 40);
+    const raio = forte ? (lanterna ? run.luz + 80 : 120) : (lanterna ? run.luz + 90 : run.luz + 40);
     const px = run.x, py = run.y - 24, opaco = forte ? 0.95 : 0.78;
     const g = ctx.createRadialGradient(px, py, raio * 0.35, px, py, raio);
     g.addColorStop(0, 'rgba(3, 5, 14, 0)'); g.addColorStop(1, `rgba(3, 5, 14, ${opaco})`);
@@ -2239,8 +2701,39 @@
     const brilho = (x, y, r, cor) => { const b = ctx.createRadialGradient(x, y, 0, x, y, r); b.addColorStop(0, cor); b.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = b; ctx.fillRect(x - r, y - r, r * 2, r * 2); };
     for (const f of sc.fogueiras) if (f.aceso) brilho(f.x, f.y - 14, 90 + Math.sin(t * 9) * 6, 'rgba(255, 150, 70, 0.35)');
     for (const it of sc.itens) if (!it.pego && !it.oculto && (it.tipo === 'idolo' || it.tipo === 'reliquia' || it.tipo === 'tesouro')) brilho(it.x, it.y, 40, 'rgba(255, 220, 140, 0.18)');
+    if (run.hab.has('gancho')) for (const a of sc.argolas) brilho(a.x, a.y, 34, 'rgba(255, 210, 120, 0.3)');
     if (lanterna) for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (sc.grade[r][c] === '+') brilho(c * T + 20, r * T + 8, 46, 'rgba(185, 163, 255, 0.22)');
     ctx.restore();
+  }
+  // chuva do pântano e névoa que esconde os buracos; o relâmpago clareia tudo
+  function clima(sc, t, dt) {
+    if (!run.reg.chuva || sc.escuro) return;
+    if (dt) {
+      fx.raio -= dt;
+      if (fx.raio <= 0) { fx.raio = 6 + hash(Math.floor(run.t), 7) * 6; fx.relampago = 1; setTimeout(() => som('trovao'), 260); }
+    }
+  }
+  function desenharClima(sc, t) {
+    const chuva = run.reg.chuva && !sc.escuro;
+    if (sc.def.nevoa) {
+      const luz = fx.relampago > 0.2 ? 0.2 : 1, raio = 170;
+      const g = ctx.createRadialGradient(run.x, run.y - 24, raio * 0.3, run.x, run.y - 24, raio);
+      g.addColorStop(0, 'rgba(150, 170, 160, 0)'); g.addColorStop(1, `rgba(120, 140, 130, ${0.88 * luz})`);
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < 5; i++) {
+        const y = 150 + i * 60, x = ((t * (12 + i * 4) + i * 170) % (W + 300)) - 150;
+        ctx.fillStyle = 'rgba(200, 215, 205, 0.08)'; ctx.beginPath(); ctx.ellipse(x, y, 160, 26, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (chuva) {
+      ctx.strokeStyle = 'rgba(190, 220, 255, 0.35)'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 0; i < 90; i++) {
+        const x = (hash(i, 1) * (W + 80) + t * 60) % (W + 80) - 40, y = (hash(i, 2) * H + t * 520) % (H + 20) - 20;
+        ctx.moveTo(x, y); ctx.lineTo(x - 5, y + 14);
+      }
+      ctx.stroke();
+    }
+    if (fx.relampago > 0 && !Neon.motion.reduced) { ctx.save(); ctx.globalAlpha = fx.relampago * 0.5; R(0, 0, W, H, '#eef4ff'); ctx.restore(); }
   }
   // Mapa da região (tecla M): telas visitadas, tesouros que faltam, fogueiras.
   function mapaRegiao(t) {
@@ -2290,6 +2783,7 @@
     desenharAmbiente();
     frente(sc, t);
     escuridao(sc, t);
+    desenharClima(sc, t);
     ctx.restore();
     if (fx.flash > 0 && !Neon.motion.reduced) { ctx.save(); ctx.globalAlpha = Math.min(0.45, fx.flash); R(0, 0, W, H, fx.flashCor); ctx.restore(); }
     if (fx.troca > 0) { ctx.save(); ctx.globalAlpha = Math.min(1, fx.troca * 3); R(0, 0, W, H, '#050a14'); ctx.restore(); }
@@ -2315,6 +2809,8 @@
     } else if (state === 'hub' || state === 'menu') run.t += dt;
     if (state !== 'paused' && state !== 'mapa') {
       particles.update(dt); passoAmbiente(tela(run), dt);
+      if (state === 'playing') clima(tela(run), run.t, dt);
+      fx.relampago = Math.max(0, fx.relampago - dt * 3);
       for (const k of ['tremor', 'flash', 'troca']) fx[k] = Math.max(0, fx[k] - dt);
     }
     draw();
