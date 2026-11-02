@@ -188,7 +188,7 @@
     const marcas = {};
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       const ch = grade[r][c];
-      if (ch === '.' || ch === '#' || '=-H~%^MXWDL+o'.includes(ch)) {
+      if (ch === '.' || ch === '#' || '=-H~%^MXWDL+oZ'.includes(ch)) {
         if (ch === 'o') { sc.argolas.push({ x: c * T + T / 2, y: r * T + T / 2 }); grade[r][c] = '.'; }
         continue;
       }
@@ -219,6 +219,7 @@
       for (const m of lista) sc.ents.push(novoBicho(tipo, m, sc, sorte));
     }
     if (sc.chefe) for (const it of sc.itens) if (it.tipo === 'reliquia') it.oculto = true;
+    sc.tirolesas = (def.tirolesas || []).map(([x1, y1, x2, y2]) => ({ x1, y1, x2, y2, len: Math.hypot(x2 - x1, y2 - y1) }));
     return sc;
   }
   function tela(s, key = s.key) {
@@ -236,7 +237,7 @@
     if (r >= ROWS) return sc.baixo ? bloco(s, tela(s, sc.baixo), c, r - ROWS) : sc.grade[ROWS - 1][c] === '~' ? '#' : '.';
     return sc.grade[r][c];
   }
-  const duro = (s, ch) => SOLIDO.has(ch) || (ch === '+' && s.hab.has('lanterna'));
+  const duro = (s, ch) => SOLIDO.has(ch) || (ch === '+' && s.hab.has('lanterna')) || (ch === 'Z' && s.idolosAntes < 5);
   const umaVia = (s, sc, ch, c, r) => ch === '=' || ch === '-' || (ch === 'H' && bloco(s, sc, c, r - 1) !== 'H');
   const altura = s => s.baixo || s.modo === 'mergulho' ? BH_BAIXO : BH;
   function sobrepoe(s, sc, x, y, h, teste) {
@@ -261,7 +262,7 @@
       cipo: null, lx: 0, trava: 0, lama: 0, chicote: 0, recarga: 0, golpe: 0, planando: false,
       vidas, maxVidas: vidas, inv: 0, dano: false, ar: 7 + 3 * (up.folego | 0), arMax: 7 + 3 * (up.folego | 0),
       escudo: (up.amuleto | 0) > 0, alcance: CHICOTE + 22 * (up.chicote | 0), luz: 110 + 45 * (up.lanterna | 0),
-      hab: new Set(perfil.hab || []), up, pontos: 0, sementes: 0, tesouros: new Set(), idolo: false, bichos: 0,
+      hab: new Set(perfil.hab || []), up, idolosAntes: perfil.idolos | 0, zip: null, pontos: 0, sementes: 0, tesouros: new Set(), idolo: false, bichos: 0,
       tempo: reg.dia, noite: false, t: 0, status: 'playing', events: [], visitadas: new Set([reg.inicio]),
       check: null, seguro: null, puxa: 0, vento: 0, quedas: 0, desmaios: 0 };
     const sc = tela(s);
@@ -327,6 +328,7 @@
     else if (s.modo === 'agua') modoAgua(s, sc, dt, inp, dir);
     else if (s.modo === 'mergulho') modoMergulho(s, sc, dt, inp, dir);
     else if (s.modo === 'parede') modoParede(s, sc, dt, inp, dir);
+    else if (s.modo === 'tirolesa') modoTirolesa(s, sc, dt);
     if (s.status !== 'playing') return;
     if (s.modo === 'normal' || s.modo === 'agua') pousarEmBicho(s, sc, oy);
     if (s.chicote > 0) { s.chicote = Math.max(0, s.chicote - dt); acertar(s, sc); }
@@ -423,6 +425,14 @@
         bloco(s, sc, Math.floor((s.x + dir * (BW + 3)) / T), Math.floor((s.y - 24) / T)) === 'M') {
       s.modo = 'parede'; s.vx = 0; s.vy = 0; s.face = dir; ev(s, 'agarra'); return;
     }
+    if (!s.chao && s.solta <= 0) for (const z of sc.tirolesas) {
+      const hx = s.x, hy = s.y - BH + 6, u = ((hx - z.x1) * (z.x2 - z.x1) + (hy - z.y1) * (z.y2 - z.y1)) / (z.len * z.len);
+      if (u < 0 || u > 0.9) continue;
+      if (Math.hypot(hx - (z.x1 + (z.x2 - z.x1) * u), hy - (z.y1 + (z.y2 - z.y1) * u)) < 18) {
+        s.modo = 'tirolesa'; s.zip = { z, u, v: Math.max(90, Math.abs(s.vx)) }; s.vx = 0; s.vy = 0; s.planando = false;
+        ev(s, 'tirolesa'); return;
+      }
+    }
     if (!s.chao && s.solta <= 0) for (const v of sc.cipos) {
       if (v.held) continue;
       const hx = s.x - v.ax, hy = s.y - BH + 6 - v.ay, sn = Math.sin(v.th), cs = Math.cos(v.th);
@@ -455,6 +465,21 @@
       v.held = false;
       if (v.temp) { const i = sc.cipos.indexOf(v); if (i >= 0) sc.cipos.splice(i, 1); }
       s.cipo = null; s.modo = 'normal'; s.solta = 0.3; s.cortavel = false; ev(s, 'pulo');
+    }
+  }
+  // tirolesa: desce a corda sempre ladeira abaixo, cada vez mais rápido
+  function modoTirolesa(s, sc, dt) {
+    const zp = s.zip, z = zp.z, sen = (z.y2 - z.y1) / z.len, cs = (z.x2 - z.x1) / z.len;
+    zp.v = Math.min(360, zp.v + 700 * Math.max(0.15, sen) * dt);
+    zp.u += zp.v * dt / z.len;
+    const x0 = s.x, y0 = s.y;
+    s.x = z.x1 + (z.x2 - z.x1) * Math.min(1, zp.u); s.y = z.y1 + (z.y2 - z.y1) * Math.min(1, zp.u) + BH - 6;
+    s.face = Math.sign(cs) || 1;
+    const bateu = sobrepoe(s, sc, s.x, s.y, BH, ch => duro(s, ch));
+    if (bateu) { s.x = x0; s.y = y0; }
+    if (s.buffer > 0 || zp.u >= 1 || bateu) {
+      s.vx = cs * zp.v; s.vy = sen * zp.v - (s.buffer > 0 ? 320 : 0);
+      s.modo = 'normal'; s.solta = 0.35; s.zip = null; s.buffer = 0; s.cortavel = false; ev(s, 'pulo');
     }
   }
   function modoEscada(s, sc, dt, inp, dir) {
@@ -582,7 +607,7 @@
           sc.grade[r][c] = '.'; s.pontos += 50; ev(s, ch === 'X' ? 'caixa' : 'teia', c * T + 20, r * T + 20);
           if (ch === 'X') for (let i = 0; i < 2; i++) sc.itens.push({ tipo: 'semente', x: c * T + 12 + i * 16, y: r * T + 24, id: `${sc.key}:x${c},${r},${i}`, pego: false, solto: true });
         }
-        if (ch === 'L' && !sc.portas) {
+        if (ch === 'L' && !sc.portas && !(sc.chefe && CHEFES[sc.chefe.tipo].alavanca)) {
           sc.portas = true; ev(s, 'alavanca', c * T + 20, r * T + 20);
           for (const linha of sc.grade) for (let i = 0; i < COLS; i++) if (linha[i] === 'D') linha[i] = '.';
         }
@@ -689,7 +714,8 @@
   // afugenta (ninguém morre na selva), atordoa ou devolve o golpe.
   const LETRAS = { s: 'cobra', t: 'tatu', B: 'colmeia', c: 'jacare', p: 'piranha', e: 'poraque', g: 'tronco',
     h: 'vitoria', m: 'macaco', j: 'onca', b: 'morcego', a: 'aranha', k: 'estalactite', f: 'sapo', v: 'planta',
-    S: 'saci', Y: 'iara', G: 'cobragrande', C: 'curupira' };
+    l: 'lanca', d: 'dardo', x: 'esmagador', r: 'pedra',
+    S: 'saci', Y: 'iara', G: 'cobragrande', C: 'curupira', Q: 'mapinguari', O: 'boitata' };
   // há chão entre (x, y0) e (x, y1)? morcego não mergulha através da pedra
   function livreEntre(sc, x, y0, y1) {
     for (let r = Math.floor(y0 / T) + 1; r <= Math.floor(y1 / T); r++) if (SOLIDO.has(casa(sc, Math.floor(x / T), r))) return false;
@@ -748,11 +774,77 @@
       const ch = casa(sc, Math.floor(t.x / T), Math.floor(t.y / T));
       if (t.vida <= 0 || t.x < -40 || t.x > W + 40 || t.y > H + 40 || (t.solido !== false && SOLIDO.has(ch))) {
         t.fim = true; if (t.vida > 0 && t.y < H) ev(s, 'estoura', t.x, t.y);
+        // bola de fogo do Boitatá vira labareda no chão por um instante
+        if (t.tipo === 'fogo' && SOLIDO.has(ch)) sc.tiros.push({ tipo: 'chama', x: t.x, y: Math.floor(t.y / T) * T - 12, vx: 0, vy: 0, r: 12, vida: 1.4, solido: false, quebra: false });
       }
     }
     if (sc.tiros.length > 24 || sc.tiros.some(t => t.fim)) sc.tiros = sc.tiros.filter(t => !t.fim);
   }
   const BICHOS = {
+    // lanças do templo: avisam brilhando, sobem e descem num ritmo que dá para ler
+    lanca: { w: 17, h: 6,
+      ini(e) { e.est = 'baixo'; e.tt = 0.6 + (e.c % 3) * 0.55; e.k = 0; },
+      passo(e, s, sc, dt) {
+        e.tt -= dt;
+        if (e.est === 'baixo' && e.tt <= 0) { e.est = 'aviso'; e.tt = 0.45; }
+        else if (e.est === 'aviso' && e.tt <= 0) { e.est = 'alto'; e.tt = 0.9; ev(s, 'lanca', e.x, e.y); }
+        else if (e.est === 'alto' && e.tt <= 0) { e.est = 'baixo'; e.tt = 1.3; }
+        e.k = rumo(e.k, e.est === 'alto' ? 1 : 0, dt * 9);
+        e.h = 6 + 26 * e.k;
+      },
+      perigo: e => e.k > 0.5,
+    },
+    // cabeça de pedra na parede: brilha e cospe um dardo rasteiro
+    dardo: { w: 10, h: 16,
+      ini(e, sc) { e.dir = SOLIDO.has(casa(sc, e.c - 1, e.r)) ? 1 : -1; e.tt = 0.8 + (e.c % 4) * 0.45; e.est = ''; },
+      passo(e, s, sc, dt) {
+        e.tt -= dt;
+        e.est = e.tt < 0.4 ? 'mira' : '';
+        if (e.tt <= 0) {
+          e.tt = 2.3;
+          sc.tiros.push({ tipo: 'dardo', x: e.x + e.dir * 14, y: e.y - 14, vx: e.dir * 320, vy: 0, r: 5, vida: 3 });
+          ev(s, 'dardo', e.x, e.y - 14);
+        }
+      },
+      perigo: () => false,
+    },
+    // esmagador: bloco do teto que treme, despenca, espera e sobe devagar
+    esmagador: { w: 19, h: 40,
+      ini(e, sc) {
+        e.y = (e.r + 1) * T; e.hy = e.y; e.est = 'espera'; e.tt = 0.8 + (e.c % 3) * 0.9;
+        let r = e.r + 1; while (r < ROWS && !SOLIDO.has(casa(sc, e.c, r))) r++; e.fundo = r * T;
+      },
+      passo(e, s, sc, dt) {
+        e.tt -= dt;
+        if (e.est === 'espera' && e.tt <= 0) { e.est = 'treme'; e.tt = 0.35; }
+        else if (e.est === 'treme' && e.tt <= 0) { e.est = 'cai'; e.vy = 0; }
+        else if (e.est === 'cai') {
+          e.vy += GRAV * 2.2 * dt; e.y = Math.min(e.fundo, e.y + e.vy * dt);
+          if (e.y >= e.fundo) { e.est = 'chao'; e.tt = 0.7; ev(s, 'esmaga', e.x, e.y); }
+        } else if (e.est === 'chao' && e.tt <= 0) e.est = 'sobe';
+        else if (e.est === 'sobe') { e.y = Math.max(e.hy, e.y - 95 * dt); if (e.y <= e.hy) { e.est = 'espera'; e.tt = 1.3; } }
+      },
+      perigo: e => e.est === 'cai' || e.est === 'chao',
+    },
+    // pedra rolante: de tempos em tempos uma pedra desce o corredor
+    pedra: { w: 0, h: 0, fixo: true,
+      ini(e) { e.pedras = []; e.tt = 1.2 + (e.c % 2); e.dir = -1; },
+      passo(e, s, sc, dt) {
+        if ((e.tt -= dt) <= 0) {
+          e.tt = 3.1;
+          if (Math.abs(s.x - e.hx) > 90) { e.pedras.push({ x: e.hx, y: e.y, vy: 0, giro: 0 }); ev(s, 'pedra', e.hx, e.y - 16); }
+        }
+        for (const p of e.pedras) {
+          p.x += e.dir * 210 * dt; p.giro += e.dir * 210 * dt / 16;
+          const q = { x: p.x, y: p.y, vy: p.vy, w: 16 };
+          cairBicho(q, sc, dt); p.y = q.y; p.vy = q.vy;
+          if (!vazioEm(sc, p.x + e.dir * 18, p.y) || p.x < -30 || p.x > W + 30 || p.y > H + 30) p.fim = true;
+          if (!p.fim && Math.abs(p.x - s.x) < 16 + BW - 3 && p.y > s.y - altura(s) + 4 && p.y - 32 < s.y - 2) ferir(s, p.x);
+        }
+        if (e.pedras.some(p => p.fim)) { for (const p of e.pedras) if (p.fim) ev(s, 'estoura', p.x, p.y - 16); e.pedras = e.pedras.filter(p => !p.fim); }
+      },
+      perigo: () => false,
+    },
     // morcego: dorme no teto e mergulha numa curva que passa onde você vai estar
     morcego: { w: 12, h: 12,
       ini(e) { e.y = e.r * T + 24; e.hy = e.y; e.est = 'dorme'; },
@@ -1053,6 +1145,93 @@
   // pegadas do Curupira em cada volta da clareira: apontam o caminho errado
   const TRILHAS = ['baixo', 'alto', 'alto', 'baixo', 'alto', 'baixo', 'baixo', 'alto'];
   const CHEFES = {
+    // Mapinguari: um olho só, boca na barriga e casco duro. Ronda o chão e
+    // investe contra quem desce. Do galho, estale a corda de um tronco quando
+    // ele passar embaixo.
+    mapinguari: {
+      ini(ch, lista, sc, marcas) {
+        ch.toras = (marcas.q || []).map(m => ({ x: m.x, y: m.y - 8, hy: m.y - 8, vy: 0, est: 'presa', tt: 0 }));
+        ch.vida = ch.toras.length; ch.est = 'anda'; ch.tt = 1.5; ch.dir = -1; ch.chao = ch.y;
+      },
+      passo(ch, s, sc, dt) {
+        for (const t of ch.toras) {
+          if (t.est === 'cai') {
+            t.vy += GRAV * dt; t.y += t.vy * dt;
+            if (!ch.vencido && t.y > ch.chao - 70 && Math.abs(t.x - ch.x) < 46 && ch.est !== 'tonto') {
+              t.est = 'quebrou'; t.tt = 6; ch.vida--; s.pontos += 500; ev(s, 'acerto', ch.x, ch.chao - 60);
+              if (ch.vida <= 0) { vencer(ch, s, sc); return; }
+              ch.est = 'tonto'; ch.tt = 1.6;
+            } else if (t.y >= ch.chao) { t.est = 'quebrou'; t.tt = 4; ev(s, 'estoura', t.x, ch.chao - 10); }
+          } else if (t.est === 'quebrou' && (t.tt -= dt) <= 0) { t.est = 'presa'; t.y = t.hy; t.vy = 0; }
+        }
+        if (ch.vencido) { ch.tt += dt; return; }
+        ch.tt -= dt;
+        const noChao = s.chao && Math.abs(s.y - ch.chao) < 30 && s.modo === 'normal';
+        if (ch.est === 'anda') {
+          ch.x += ch.dir * 70 * dt;
+          if (ch.x < 60 || ch.x > W - 60) { ch.x = clampF(ch.x, 60, W - 60); ch.dir *= -1; }
+          if (noChao && Math.abs(s.x - ch.x) < 300 && ch.tt <= 0) { ch.est = 'ruge'; ch.tt = 0.6; ch.dir = s.x < ch.x ? -1 : 1; ev(s, 'rugido', ch.x, ch.chao - 60); }
+          else if (ch.tt <= -3.5) { ch.est = 'ruge'; ch.tt = 0.8; ev(s, 'rugido', ch.x, ch.chao - 60); }
+        } else if (ch.est === 'ruge') {
+          if (ch.tt <= 0) {
+            if (noChao) { ch.est = 'carga'; ch.tt = 1.4; }
+            else {
+              ch.est = 'anda'; ch.tt = 1.2;
+              // o urro sacode a copa: frutas despencam perto de quem está no galho
+              for (let i = -1; i <= 1; i += 2) sc.tiros.push({ tipo: 'fruta', x: clampF(s.x + i * 50, 20, W - 20), y: 10, vx: 0, vy: 40, g: GRAV * 0.45, r: 7, vida: 3 });
+            }
+          }
+        } else if (ch.est === 'carga') {
+          ch.x += ch.dir * 320 * dt;
+          if (ch.x < 50 || ch.x > W - 50) { ch.x = clampF(ch.x, 50, W - 50); ch.dir *= -1; ch.est = 'tonto'; ch.tt = 1.1; ev(s, 'bate', ch.x, ch.chao - 40); }
+          else if (ch.tt <= 0) { ch.est = 'anda'; ch.tt = 1; }
+        } else if (ch.est === 'tonto' && ch.tt <= 0) { ch.est = 'anda'; ch.tt = 1; }
+      },
+      alvo: (ch, s, sc, k) => ch.toras.find(t => t.est === 'presa' && tocaCaixa(k, t.x, t.y + 14, 24, 28)),
+      chicote(ch, s, sc, t) { t.est = 'cai'; t.vy = 0; ev(s, 'corda', t.x, t.y); },
+      toca(ch, s) { if (!ch.vencido && encosta(s, { x: ch.x, y: ch.chao, w: 30, h: 70 }, 4)) ferir(s, ch.x); },
+    },
+    // Boitatá: a cobra de fogo voa pelo salão. Estale um espelho quando ela for
+    // passar por cima dele: a luz do sol refletida a acerta. Três fases.
+    boitata: {
+      ini(ch, lista, sc, marcas) {
+        ch.espelhos = (marcas.E || []).map(m => ({ x: m.x, y: m.y, luz: 0, recarga: 0 }));
+        ch.vida = 6; ch.max = 6; ch.fase = 1; ch.dir = 1; ch.x = 120; ch.y = 150; ch.corpo = []; ch.amostra = 0; ch.fogo = 1.5; ch.inv = 0;
+      },
+      passo(ch, s, sc, dt) {
+        for (const m of ch.espelhos) { m.luz = Math.max(0, m.luz - dt); m.recarga = Math.max(0, m.recarga - dt); }
+        if (ch.vencido) { ch.tt += dt; ch.y -= 60 * dt; return; }
+        ch.inv = Math.max(0, ch.inv - dt);
+        ch.fase = ch.vida > 4 ? 1 : ch.vida > 2 ? 2 : 3;
+        const vel = [0, 160, 195, 230][ch.fase];
+        ch.x += ch.dir * vel * dt;
+        if (ch.x > W - 70) { ch.x = W - 70; ch.dir = -1; } else if (ch.x < 70) { ch.x = 70; ch.dir = 1; }
+        ch.y = 150 + Math.sin(ch.t * (1.2 + ch.fase * 0.3)) * 60 + (ch.fase === 3 ? Math.max(0, Math.sin(ch.t * 0.7)) * 120 : 0);
+        ch.amostra += dt;
+        while (ch.amostra >= 0.04) { ch.amostra -= 0.04; ch.corpo.unshift({ x: ch.x, y: ch.y }); if (ch.corpo.length > 12) ch.corpo.pop(); }
+        if (ch.fase >= 2 && (ch.fogo -= dt) <= 0 && Math.abs(s.x - ch.x) < 60) {
+          ch.fogo = ch.fase === 3 ? 1.1 : 1.6;
+          sc.tiros.push({ tipo: 'fogo', x: ch.x, y: ch.y + 16, vx: 0, vy: 60, g: GRAV * 0.5, r: 8, vida: 3 });
+          ev(s, 'fogo', ch.x, ch.y);
+        }
+        for (const m of ch.espelhos) if (m.luz > 0 && ch.inv <= 0 && Math.abs(ch.x - m.x) < 42) {
+          m.luz = 0; ch.vida--; ch.inv = 1; ch.dir *= -1; s.pontos += 500; ev(s, 'acerto', ch.x, ch.y);
+          if (ch.vida <= 0) { vencer(ch, s, sc); return; }
+          if (ch.vida === 4 || ch.vida === 2) ev(s, 'fase', ch.x, ch.y, ch.vida === 4 ? 2 : 3);
+        }
+      },
+      alvo: (ch, s, sc, k) => ch.espelhos.find(m => m.recarga <= 0 && tocaCaixa(k, m.x, m.y, 14, 34)),
+      chicote(ch, s, sc, m) { m.luz = 0.6; m.recarga = 1.1; ev(s, 'espelho', m.x, m.y - 20); },
+      toca(ch, s) {
+        if (ch.vencido) return;
+        const h = altura(s), cx = s.x, cy = s.y - h / 2;
+        if (Math.hypot(cx - ch.x, cy - ch.y) < 22 + 14) { ferir(s, ch.x); return; }
+        for (let i = 2; i < Math.min(9, ch.corpo.length); i += 2) {
+          const p = ch.corpo[i];
+          if (Math.abs(cx - p.x) < 14 + BW && Math.abs(cy - p.y) < 14 + h / 2 - 6) { ferir(s, p.x); return; }
+        }
+      },
+    },
     // Cobra-Grande: sobe pelo poço mais perto, mira, dá o bote e fica cansada
     // um instante — é a hora do chicote. Do meio das pedras o bote não alcança.
     cobragrande: {
@@ -1449,7 +1628,7 @@
         '0,0': { nome: 'BOCA DA GRUTA', dica: 'Estalactite treme antes de cair. Não pare embaixo.', mapa: [
           '####################',
           '####################',
-          '####..k.....k....###',
+          '#..#..k.....k....###',
           '#I................##',
           '#M................##',
           '#M..........$......#',
@@ -1607,6 +1786,170 @@
           '####################',
           '####################'] },
       } },
+    { id: 'dossel', nome: 'DOSSEL DAS ARARAS', icone: '🦜', cor: '#efce95', semente: 71, dia: 270, inicio: '0,0',
+      hab: 'planar', pede: 'planar', guardiao: 'MAPINGUARI', ceu: ['#14324a', '#7cc4ae'], chao: '#5a3d26', grama: '#7fc46a',
+      telas: {
+        '0,0': { nome: 'SUBIDA DO DOSSEL', dica: 'Aqui em cima o vento sopra. Galho em galho.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....m...............',
+          '..====..............',
+          '....................',
+          '....====.........I..',
+          '.................###',
+          '.====......$........',
+          'P.........*.*.......',
+          '####################',
+          '####################'] },
+        '1,0': { nome: 'PONTES DE CORDA', dica: 'Ponte de corda arrebenta se você parar.', vento: 50, mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '........m...........',
+          '.......===..........',
+          '....................',
+          '.....*.*.$.*.*......',
+          '....................',
+          '####------------####',
+          '####............####'] },
+        '2,0': { nome: 'TIROLESA', dica: 'Suba a raiz e pule na corda: ela leva você até o outro lado.', tirolesas: [[190, 76, 690, 300]], mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '..H==...............',
+          '..H.................',
+          '..H.................',
+          '..H.................',
+          '..H.................',
+          '..H.................',
+          '..H.........*.....*.',
+          '#####..........#####',
+          '#####..........#####'] },
+        '3,0': { nome: 'COLMEIAS NO VENTO', dica: 'O vento empurra. Colmeia se derruba com o chicote.', vento: 70, mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '......====....====..',
+          '.......B.......B....',
+          '..*.......*..$..F...',
+          '########..##########',
+          '########..##########'] },
+        '4,0': { nome: 'GALHOS DAS ARARAS', dica: 'Argola, argola e terra firme.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....o.....o.........',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '.................*..',
+          '###............#####',
+          '###............#####'] },
+        '5,0': { nome: 'ARENA DO MAPINGUARI', dica: 'Do galho, estale a corda quando ele passar embaixo do tronco.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '..q......q......q...',
+          '...=====...=====....',
+          '....................',
+          '......==.....==.....',
+          '.........Q.R........',
+          '####################',
+          '####################'] },
+      } },
+    { id: 'templo', nome: 'TEMPLO DO SOL', icone: '☀️', cor: '#ffb347', semente: 89, dia: 300, inicio: '0,0', interior: true,
+      hab: 'planar', pede: 'planar', guardiao: 'BOITATÁ', ceu: ['#2b1d2a', '#8a5a4a'], chao: '#5a4a3a', grama: '#d9a85a',
+      telas: {
+        '0,0': { nome: 'ESCADARIA DO SOL', dica: 'Lança brilha antes de subir. A alavanca abre a porta.', mapa: [
+          '####################',
+          '####################',
+          '...................#',
+          '...................#',
+          '...................#',
+          '...........$.......#',
+          '..........===......D',
+          '...................D',
+          '......====.........D',
+          'P......l....l....L.D',
+          '####################',
+          '####################'] },
+        '1,0': { nome: 'CORREDOR DOS DARDOS', dica: 'Pule o dardo ou quebre com o chicote.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '...................#',
+          '...................#',
+          '...................#',
+          '...................#',
+          '....*.*.*.$........#',
+          '...====.............',
+          '...................d',
+          '####################',
+          '####################'] },
+        '2,0': { nome: 'SALA DOS ESMAGADORES', dica: 'Passe por baixo quando o bloco estiver subindo.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '....x.....x.....x...',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '.......*..$..*......',
+          '####################',
+          '####################'] },
+        '3,0': { nome: 'A PEDRA ROLANTE', dica: 'Pedra vem rolando: pule por cima.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '...................r',
+          '....*....$....*.....',
+          '####################',
+          '####################'] },
+        '4,0': { nome: 'ALTAR DOS ÍDOLOS', dica: 'A porta do altar só abre com os cinco ídolos da selva.', mapa: [
+          '####################',
+          '####################',
+          '####################',
+          '###....Z....########',
+          '###....Z.I..########',
+          '...H===#####........',
+          '...H................',
+          '...H................',
+          '...H.........$......',
+          '...H.....F..........',
+          '####################',
+          '####################'] },
+        '5,0': { nome: 'SALÃO DO BOITATÁ', dica: 'Estale um espelho quando o Boitatá passar por cima dele.', mapa: [
+          '####################',
+          '#..O...............#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '#..................#',
+          '..........R........#',
+          '...E......E.....E..#',
+          '####################',
+          '####################'] },
+      } },
   ];
   // ── fim da física ──
 
@@ -1634,8 +1977,29 @@
     }
     return DIA[DIA.length - 1][i];
   }
+  // salão do templo: pedra lavrada, sóis entalhados e tochas que tremem
+  function salao(t) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#2a1d18'); g.addColorStop(1, '#4a3424');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.22)'; ctx.lineWidth = 1;
+    for (let y = 0; y < H; y += 28) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      for (let x = (y / 28) % 2 ? 0 : 30; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 28); ctx.stroke(); }
+    }
+    for (let i = 0; i < 3; i++) texto('☀', 160 + i * 240, 220, 46, 'rgba(217, 168, 90, 0.12)', 'center');
+    for (const tx of [100, 400, 700]) {
+      const fl = Math.sin(t * 11 + tx) * 3, b = ctx.createRadialGradient(tx, 150, 4, tx, 150, 110);
+      b.addColorStop(0, 'rgba(255, 170, 80, 0.32)'); b.addColorStop(1, 'rgba(255, 170, 80, 0)');
+      ctx.fillStyle = b; ctx.fillRect(tx - 110, 40, 220, 220);
+      R(tx - 3, 152, 6, 20, '#6b4a2a');
+      ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.ellipse(tx, 146 - fl * 0.3, 6, 11 + fl, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff1a8'; ctx.beginPath(); ctx.ellipse(tx, 149, 3, 6, 0, 0, Math.PI * 2); ctx.fill();
+    }
+  }
   function ceu(sc, t) {
     const reg = run.reg, k = 1 - run.tempo / reg.dia, noite = run.noite;
+    if (reg.interior) { salao(t); return; }
     if (sc.escuro) {
       const g = ctx.createLinearGradient(0, 0, 0, H);
       g.addColorStop(0, '#0b0a1a'); g.addColorStop(1, '#1a1630');
@@ -1686,7 +2050,7 @@
   // Três camadas de fundo que andam em velocidades diferentes: dá profundidade
   // mesmo numa tela parada, porque o deslocamento segue o explorador.
   function fundo(sc, t) {
-    if (sc.escuro) return;
+    if (sc.escuro || run.reg.interior) return;
     const reg = run.reg, base = (sc.cx * W + run.x) , noite = run.noite;
     const tom = (c, k) => noite ? mistura(c, '#050818', 0.55) : mistura(c, reg.ceu[1], k);
     // morros distantes
@@ -1717,7 +2081,7 @@
   }
   // franja de folhas na frente de tudo: emoldura a tela e esconde a borda de cima
   function frente(sc, t) {
-    if (sc.escuro) return;
+    if (sc.escuro || run.reg.interior) return;
     const base = sc.cx * W + run.x, off = (base * 0.4) % 90, cor = run.noite ? '#08160f' : '#0e2a1c';
     ctx.fillStyle = cor;
     for (let i = -1; i < W / 90 + 2; i++) {
@@ -1806,6 +2170,10 @@
         ctx.strokeStyle = sc.portas ? '#9be7ce' : '#efce95'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(x + 20, y + 22); ctx.lineTo(x + (sc.portas ? 32 : 8), y + 6); ctx.stroke();
         Neon.circle(ctx, x + (sc.portas ? 32 : 8), y + 6, 5, sc.portas ? '#9be7ce' : '#efce95');
+      } else if (ch === 'Z') {
+        const abre = run.idolosAntes >= 5;
+        R(x, y, T, T, abre ? '#3a4a3a' : '#4a3f63'); R(x + 3, y + 3, T - 6, T - 6, abre ? '#2a3a2a' : '#5d5080');
+        if (!abre && r === 3) for (let i = 0; i < 5; i++) Neon.circle(ctx, x + 8 + (i % 3) * 12, y + 12 + Math.floor(i / 3) * 14, 4, i < run.idolosAntes ? '#7dffb0' : '#2a2238');
       } else if (ch === '+') {
         const aceso = run.hab.has('lanterna');
         ctx.save();
@@ -1813,6 +2181,10 @@
         else { ctx.globalAlpha = 0.25 + 0.1 * Math.sin(t * 3 + c); ctx.strokeStyle = '#b9a3ff'; ctx.setLineDash([4, 4]); ctx.strokeRect(x + 2, y + 2, T - 4, 10); }
         ctx.restore();
       }
+    }
+    for (const z of sc.tirolesas || []) {
+      ctx.strokeStyle = '#d8c08a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(z.x1 - 10, z.y1 - 4); ctx.lineTo(z.x2 + 10, z.y2 + 4); ctx.stroke();
+      R(z.x1 - 14, z.y1 - 10, 8, 14, '#7a5233'); R(z.x2 + 6, z.y2 - 2, 8, 14, '#7a5233');
     }
     for (const a of sc.argolas) {
       const pode = run.hab.has('gancho');
@@ -1918,6 +2290,41 @@
     ctx.save();
     if (e.fora) { if (e.fuga <= 0) { ctx.restore(); return; } ctx.globalAlpha = Math.max(0, e.fuga / 0.7); }
     switch (e.tipo) {
+      case 'lanca': {
+        const aviso = e.est === 'aviso' && Math.sin(t * 30) > 0;
+        R(x - 18, y - 4, 36, 4, aviso ? '#ffb347' : '#6b5a3a');
+        ctx.fillStyle = '#d8dcf0';
+        for (let i = 0; i < 4; i++) {
+          const px = x - 14 + i * 9, alto = 4 + 26 * e.k;
+          ctx.beginPath(); ctx.moveTo(px - 3, y - 3); ctx.lineTo(px, y - 3 - alto); ctx.lineTo(px + 3, y - 3); ctx.fill();
+        }
+        break;
+      }
+      case 'dardo': {
+        const mira = e.est === 'mira';
+        R(x - 12, y - 30, 24, 30, '#6b5a4a'); R(x - 9, y - 27, 18, 24, '#8a7560');
+        R(x - 6, y - 22, 4, 4, mira ? '#ff6b3d' : '#2a1a10'); R(x + 2, y - 22, 4, 4, mira ? '#ff6b3d' : '#2a1a10');
+        R(x + e.dir * 6 - 3, y - 16, 6, 5, '#2a1a10');
+        if (mira) { ctx.save(); Neon.glow(ctx, '#ff6b3d', 14); Neon.circle(ctx, x + e.dir * 8, y - 14, 3, '#ffb347'); ctx.restore(); }
+        break;
+      }
+      case 'esmagador': {
+        const treme = e.est === 'treme' ? Math.sin(t * 60) * 2 : 0;
+        ctx.strokeStyle = '#4a3a2a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x - 8, e.r * T); ctx.lineTo(x - 8 + treme, y - 40); ctx.moveTo(x + 8, e.r * T); ctx.lineTo(x + 8 + treme, y - 40); ctx.stroke();
+        R(x - 20 + treme, y - 40, 40, 40, '#6a5a4a'); R(x - 17 + treme, y - 37, 34, 34, '#857560');
+        texto('☀', x + treme, y - 14, 18, '#d9a85a', 'center');
+        R(x - 20 + treme, y - 5, 40, 5, '#4a3a2a');
+        break;
+      }
+      case 'pedra': {
+        for (const p of e.pedras) {
+          ctx.save(); ctx.translate(p.x, p.y - 16); ctx.rotate(p.giro);
+          Neon.circle(ctx, 0, 0, 16, '#8a7a66'); Neon.circle(ctx, 0, 0, 12, '#9a8a76');
+          membro(-10, 0, 10, 0, '#6a5a4a', 3); membro(0, -10, 0, 10, '#6a5a4a', 2);
+          ctx.restore();
+        }
+        break;
+      }
       case 'morcego': {
         const voa = e.est !== 'dorme', asa = voa ? Math.sin(t * 22) * 9 : 2;
         if (!voa) R(x - 1, y - 22, 2, 8, '#3a3550');
@@ -2113,6 +2520,14 @@
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         R(p.x - 5, p.y - 6, 3, 3, '#ffffff');
         texto('♪', p.x + 1, p.y + 5, 11, '#c8f6ff', 'center');
+      } else if (p.tipo === 'dardo') {
+        membro(p.x - Math.sign(p.vx) * 12, p.y, p.x + Math.sign(p.vx) * 6, p.y, '#d8c08a', 3);
+        R(p.x - Math.sign(p.vx) * 14 - 2, p.y - 3, 4, 6, '#ff6b8a');
+      } else if (p.tipo === 'fogo' || p.tipo === 'chama') {
+        Neon.glow(ctx, '#ff7a3d', 18);
+        const h = p.tipo === 'chama' ? 22 + Math.sin(t * 20 + p.x) * 4 : 12;
+        ctx.fillStyle = '#ff7a3d'; ctx.beginPath(); ctx.ellipse(p.x, p.y + (p.tipo === 'chama' ? 6 : 0), p.r * 0.8, h * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe07a'; ctx.beginPath(); ctx.ellipse(p.x, p.y + (p.tipo === 'chama' ? 8 : 2), p.r * 0.4, h * 0.45, 0, 0, Math.PI * 2); ctx.fill();
       } else if (p.tipo === 'veneno') {
         Neon.glow(ctx, '#9bff6a', 12); Neon.circle(ctx, p.x, p.y, p.r, '#7ae05a'); R(p.x - 2, p.y - 3, 3, 3, '#e8ffd8');
       } else Neon.circle(ctx, p.x, p.y, p.r, '#ffd9a1');
@@ -2145,6 +2560,53 @@
         olho(x + 3, y - 42 - pul);
       }
       ctx.globalAlpha = 1;
+    } else if (ch.tipo === 'mapinguari') {
+      for (const tr of ch.toras) {
+        if (tr.est === 'quebrou') continue;
+        if (tr.est === 'presa') { ctx.strokeStyle = '#c99a62'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(tr.x - 10, 0); ctx.lineTo(tr.x - 10, tr.y); ctx.moveTo(tr.x + 10, 0); ctx.lineTo(tr.x + 10, tr.y); ctx.stroke(); }
+        R(tr.x - 24, tr.y, 48, 18, '#7a5233'); R(tr.x - 24, tr.y, 48, 4, '#a8784a');
+        ctx.fillStyle = '#c99a62'; ctx.beginPath(); ctx.ellipse(tr.x + 24, tr.y + 9, 4, 9, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      if (ch.vencido && ch.tt > 2.5) return;
+      const x = ch.x, y = ch.chao, f = ch.dir, tonto = ch.est === 'tonto', ruge = ch.est === 'ruge';
+      ctx.save(); if (ch.vencido) ctx.globalAlpha = Math.max(0, 1 - ch.tt / 2.5);
+      const passo = ch.est === 'anda' || ch.est === 'carga' ? Math.sin(ch.t * (ch.est === 'carga' ? 18 : 8)) * 5 : 0;
+      R(x - 22 + passo, y - 18, 12, 18, '#4a3420'); R(x + 10 - passo, y - 18, 12, 18, '#4a3420');
+      ctx.fillStyle = '#6b4a2a'; ctx.beginPath(); ctx.ellipse(x, y - 44, 30, 30, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#7a5a3a'; for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.ellipse(x - 20 + i * 8, y - 66 + (i % 2) * 4, 5, 9, 0, 0, Math.PI * 2); ctx.fill(); }
+      // boca na barriga e um olho só, como contam na Amazônia
+      ctx.fillStyle = '#2a1010'; ctx.beginPath(); ctx.ellipse(x + f * 6, y - 36, 12, ruge ? 10 : 5, 0, 0, Math.PI * 2); ctx.fill();
+      if (ruge) for (let i = -2; i <= 2; i++) R(x + f * 6 + i * 4 - 1, y - 45, 2, 4, '#fff6d8');
+      Neon.circle(ctx, x + f * 10, y - 64, 7, '#fff6d8'); Neon.circle(ctx, x + f * 12, y - 64, 3.5, tonto ? '#9a8a76' : '#e04a3a');
+      membro(x - f * 24, y - 50, x - f * 34, y - 28, '#6b4a2a', 7); membro(x + f * 24, y - 50, x + f * 36, y - (ch.est === 'carga' ? 52 : 30), '#6b4a2a', 7);
+      if (tonto) texto('✦ ✦', x, y - 86, 13, '#d7c9ff', 'center');
+      if (ruge && !Neon.motion.reduced) { ctx.strokeStyle = 'rgba(255, 220, 160, 0.4)'; ctx.lineWidth = 2; for (let i = 1; i <= 3; i++) { ctx.beginPath(); ctx.arc(x + f * 10, y - 38, 12 + ((t * 120 + i * 18) % 60), -0.6, 0.6); ctx.stroke(); } }
+      ctx.restore();
+    } else if (ch.tipo === 'boitata') {
+      for (const m of ch.espelhos) {
+        R(m.x - 10, m.y - 10, 20, 10, '#6b5a4a');
+        ctx.save(); Neon.glow(ctx, m.luz > 0 ? '#fff1a8' : '#9fe3f2', m.luz > 0 ? 30 : 8);
+        ctx.fillStyle = m.recarga > 0 && m.luz <= 0 ? '#4a6a7a' : '#bfefff'; ctx.beginPath(); ctx.ellipse(m.x, m.y - 24, 11, 15, 0, 0, Math.PI * 2); ctx.fill();
+        R(m.x - 4, m.y - 33, 3, 12, '#ffffff');
+        ctx.restore();
+        if (m.luz > 0) {
+          const g = ctx.createLinearGradient(m.x - 26, 0, m.x + 26, 0);
+          g.addColorStop(0, 'rgba(255, 241, 168, 0)'); g.addColorStop(0.5, `rgba(255, 241, 168, ${0.7 * m.luz / 0.6})`); g.addColorStop(1, 'rgba(255, 241, 168, 0)');
+          ctx.fillStyle = g; ctx.fillRect(m.x - 26, 0, 52, m.y - 30);
+        }
+      }
+      if (ch.vencido && ch.tt > 2.5) return;
+      ctx.save(); if (ch.vencido) ctx.globalAlpha = Math.max(0, 1 - ch.tt / 2.5);
+      if (ch.inv > 0 && Math.floor(t * 16) % 2) ctx.globalAlpha *= 0.4;
+      Neon.glow(ctx, '#ff7a3d', 26);
+      for (let i = ch.corpo.length - 1; i >= 1; i--) {
+        const p = ch.corpo[i], r = 15 - i * 0.8;
+        ctx.fillStyle = i % 2 ? '#ff7a3d' : '#ffb347'; ctx.beginPath(); ctx.arc(p.x, p.y + Math.sin(t * 10 + i) * 2, Math.max(4, r), 0, Math.PI * 2); ctx.fill();
+      }
+      Neon.circle(ctx, ch.x, ch.y, 20, '#ff9d4d'); Neon.circle(ctx, ch.x, ch.y, 12, '#ffe07a');
+      olho(ch.x + ch.dir * 8, ch.y - 5, '#ffffff'); olho(ch.x + ch.dir * 8, ch.y + 4, '#ffffff');
+      for (let i = 0; i < 3; i++) Neon.circle(ctx, ch.x - ch.dir * (10 + i * 6), ch.y - 16 - Math.sin(t * 14 + i) * 5, 4, '#fff1a8');
+      ctx.restore();
     } else if (ch.tipo === 'cobragrande') {
       for (const b of ch.buracos) if (ch.est === 'bolhas' && b === ch.buracos[ch.i]) {
         for (let i = 0; i < 5; i++) Neon.circle(ctx, b.x - 14 + ((i * 7 + t * 40) % 28), b.sup - 2 - ((t * 30 + i * 9) % 14), 3, '#b9e8ff');
@@ -2247,7 +2709,7 @@
     if (s.modo === 'normal' && s.baixo) quadril = -8;
     if (correndo) { pA = Math.sin(fase) * 0.8; pB = -pA; bA = -pA * 0.8; bB = pA * 0.8; }
     else if (s.modo === 'normal' && !s.chao) { pA = 0.6; pB = -0.4; bA = -1.2; bB = 1; if (s.planando) { bA = -2.4; bB = 2.4; } }
-    else if (s.modo === 'cipo' || s.modo === 'escada' || s.modo === 'parede') bracoCima = true;
+    else if (s.modo === 'cipo' || s.modo === 'escada' || s.modo === 'parede' || s.modo === 'tirolesa') bracoCima = true;
     else if (s.modo === 'agua' || s.modo === 'mergulho') { tronco = s.modo === 'mergulho' ? 1.1 : 0.5; pA = Math.sin(t * 8) * 0.5; pB = -pA; bA = Math.sin(t * 6) * 1.4 - 1; bB = -bA - 2; }
     if (s.modo === 'escada') { const k = Math.sin(s.y * 0.15); pA = k * 0.4; pB = -k * 0.4; }
     ctx.rotate(tronco * 0.6);
@@ -2354,8 +2816,10 @@
         + `<span class="selos">${selos}<i class="${r.idolo ? 'ok' : ''}">🗿</i></span>`
         + `<span class="pts">${r.melhor ? '🏆 ' + r.melhor : '💎 ' + r.achados.length + '/' + total}</span>`
       : `<span class="ic">🔒</span><b>${g.nome}</b><span class="pts">vença ${REGIOES[i - 1].guardiao}</span>`;
+    const pede = g.id === 'templo' ? 'os outros cinco ídolos' : HAB_INFO[g.pede].nome.toLowerCase();
+    b.title = r.idolo ? 'Ídolo encontrado' : `Ídolo secreto: precisa de ${pede}`;
     b.setAttribute('aria-label', aberta
-      ? `${g.nome}, guardião ${g.guardiao}. Recorde ${r.melhor}. Tesouros ${r.achados.length} de ${total}.${r.idolo ? ' Ídolo encontrado.' : ''}`
+      ? `${g.nome}, guardião ${g.guardiao}. Recorde ${r.melhor}. Tesouros ${r.achados.length} de ${total}. ${b.title}.`
       : `${g.nome}, trancada`);
     if (aberta) b.addEventListener('click', () => { Neon.audio.ensure(); som('click'); iniciarRegiao(i); });
     return b;
@@ -2412,7 +2876,8 @@
   // ── regiões ──
   function iniciarRegiao(i) {
     Neon.audio.ensure(); clearInput(); particles.clear(); ambiente.length = 0;
-    run = novaCorrida(i, { hab: save.hab, up: save.up });
+    const idolos = REGIOES.filter((g, j) => j !== i && save.reg[g.id].idolo).length;
+    run = novaCorrida(i, { hab: save.hab, up: save.up, idolos });
     state = 'playing'; lastFrame = performance.now();
     els.hub.classList.add('hidden'); Neon.overlay.hide();
     Neon.audio.music.start();
@@ -2445,11 +2910,12 @@
     pb = Neon.best.update('jungle', total); Neon.$('best').textContent = pb;
     state = 'fim'; clearInput(); Neon.audio.music.down(); som('record');
     const chip = (ok, txt) => `<span class="key${ok ? '' : ' apagado'}">${txt}</span>`;
-    const h = HAB_INFO[g.hab];
-    Neon.overlay.show('RELÍQUIA RECUPERADA!', `${run.pontos} pontos${novo ? ' · recorde da região!' : ''}`, 'MAPA DA SELVA', 'record',
+    const h = HAB_INFO[g.hab], fim = run.ri === REGIOES.length - 1;
+    Neon.overlay.show(fim ? 'A SELVA VOLTOU A BRILHAR!' : 'RELÍQUIA RECUPERADA!', `${run.pontos} pontos${novo ? ' · recorde da região!' : ''}`, 'MAPA DA SELVA', 'record',
       `<div class="chips">${chip(res.selos.sol, '☀️ +' + res.bonus.sol)}${chip(res.selos.tesouros, `💎 ${run.tesouros.size}/${res.total}`)}`
       + `${chip(res.selos.intacto, '❤️ sem dano')}${chip(run.idolo || r.idolo, '🗿')}${chip(true, '✦ +' + ganhou)}</div>`
-      + (novaHab ? `<div class="chips"><span class="key novo">${h.icone} ${h.nome}: ${h.dica}</span></div>` : ''));
+      + (novaHab ? `<div class="chips"><span class="key novo">${h.icone} ${h.nome}: ${h.dica}</span></div>` : '')
+      + (fim ? `<div class="chips"><span class="key novo">☀️ O sol do templo acendeu. Recorde da selva: ${total}</span></div>` : ''));
   }
   function pausar() {
     if (state !== 'playing') return;
@@ -2471,10 +2937,12 @@
   Neon.onHide(pausar);
 
   // ── eventos da física viram som, faísca e aviso ──
-  const NOMES = { saci: 'O SACI', iara: 'A IARA', cobragrande: 'A COBRA-GRANDE', curupira: 'O CURUPIRA' };
+  const NOMES = { saci: 'O SACI', iara: 'A IARA', cobragrande: 'A COBRA-GRANDE', curupira: 'O CURUPIRA', mapinguari: 'O MAPINGUARI', boitata: 'O BOITATÁ' };
   const FALAS = { saci: 'O Saci roubou a relíquia! Acerte-o enquanto ele ri.', iara: 'O canto da Iara puxa você para o rio. Quebre os búzios!',
     cobragrande: 'A Cobra-Grande mora no lago. Fique no meio das pedras e espere o bote.',
-    curupira: 'A clareira se repete. As pegadas do Curupira apontam para o lado errado.' };
+    curupira: 'A clareira se repete. As pegadas do Curupira apontam para o lado errado.',
+    mapinguari: 'O Mapinguari ronda o chão! Do galho, derrube um tronco nele.',
+    boitata: 'O Boitatá guarda o sol. Use a luz dos espelhos contra ele.' };
   function eventos() {
     for (const e of run.events) {
       const { x, y } = e;
@@ -2521,6 +2989,16 @@
         case 'buzio': som('clear', 2); fx.tremor = 0.15; particles.burst(x, y, '#ffd3e6', 16, 150, 3); particles.float(x, y - 20, '+500', '#ffd3e6', 15); break;
         case 'chefe': Neon.toast(FALAS[e.extra] || 'Um guardião desperta.'); break;
         case 'morcego': som('flag'); break;
+        case 'tirolesa': som('tick'); break;
+        case 'lanca': som('whack'); break;
+        case 'dardo': som('shoot'); break;
+        case 'esmaga': som('crunch', true); fx.tremor = Math.max(fx.tremor, 0.15); particles.burst(x, y, '#c9b08a', 8, 120, 2); break;
+        case 'pedra': som('drop'); break;
+        case 'corda': som('rip'); break;
+        case 'bate': som('boom'); fx.tremor = 0.3; break;
+        case 'espelho': som('boost'); particles.burst(x, y, '#fff1a8', 10, 130, 2); break;
+        case 'fogo': som('sizzle'); break;
+        case 'fase': fx.flash = 0.3; fx.flashCor = '#ff9d4d'; Neon.toast(e.extra === 3 ? 'O Boitatá mergulha baixo agora! Cuidado ao pular.' : 'O Boitatá ficou mais rápido e cospe fogo!'); break;
         case 'racha': som('wall'); break;
         case 'sapo': som('coaxar'); break;
         case 'bolhas': som('open'); break;
@@ -2663,7 +3141,7 @@
 
   // ── clima: folhas de dia, vaga-lumes de noite, poeira nas grutas ──
   function passoAmbiente(sc, dt) {
-    const escuro = sc.escuro, alvo = escuro ? 18 : run.noite ? 22 : 14;
+    const escuro = sc.escuro || run.reg.interior, alvo = escuro ? 18 : run.noite ? 22 : 14;
     while (ambiente.length < alvo) {
       const tipo = escuro ? 'poeira' : run.noite ? 'vagalume' : 'folha';
       ambiente.push({ tipo, x: Math.random() * W, y: tipo === 'folha' ? -10 - Math.random() * 200 : Math.random() * 400, t: Math.random() * 6,
@@ -2671,10 +3149,14 @@
     }
     for (const a of ambiente) {
       a.t += dt;
-      if (a.tipo === 'folha') { a.y += a.v * dt; a.x += Math.sin(a.t * 1.7) * 30 * dt + (sc.corrente ? 10 * dt : 0); if (a.y > H + 10) { a.y = -10; a.x = Math.random() * W; } }
+      if (a.tipo === 'folha') {
+        a.y += a.v * dt; a.x += Math.sin(a.t * 1.7) * 30 * dt + (sc.corrente ? 10 * dt : 0) + run.vento * 2.2 * dt;
+        if (a.y > H + 10) { a.y = -10; a.x = Math.random() * W; }
+        if (a.x > W + 20) a.x = -10; else if (a.x < -20) a.x = W + 10;
+      }
       else { a.x += Math.cos(a.t * 0.9) * 14 * dt; a.y += Math.sin(a.t * 1.3) * 10 * dt; }
     }
-    if ((escuro ? 'poeira' : run.noite ? 'vagalume' : 'folha') !== (ambiente[0] && ambiente[0].tipo)) ambiente.length = 0;
+    if (ambiente.length && (escuro ? 'poeira' : run.noite ? 'vagalume' : 'folha') !== ambiente[0].tipo) ambiente.length = 0;
   }
   function desenharAmbiente() {
     for (const a of ambiente) {

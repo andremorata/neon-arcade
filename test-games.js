@@ -2095,7 +2095,13 @@ for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = N
     const rel = sc.itens.find(it => it.tipo === 'reliquia' && !it.oculto && !it.pego);
     // destino desta tela
     let alvo = null;
+    const zip = sc.tirolesas && sc.tirolesas[0];
+    if (s.modo === 'tirolesa') return inp;
     if (ch && !ch.vencido) alvo = alvoChefe(J, s, sc, ch, mem);
+    else if (zip && s.x < zip.x2 - 100 && s.y > zip.y1 + 20 - 1) {
+      alvo = s.y > zip.y1 + 120 ? { x: 2 * 40 + 20, y: zip.y1 + 44 } : { x: zip.x1 + 4, y: zip.y1 + 44 };
+      if (s.y < zip.y1 + 120 && s.chao && Math.abs(s.x - (zip.x1 - 6)) < 14) { inp.jump = true; inp.jumpHeld = true; inp.right = true; return inp; }
+    }
     else if (rel) alvo = { x: rel.x, y: rel.y + 20 };
     else {
       const i = mem.rota.indexOf(s.key), prox = mem.rota[i + 1];
@@ -2165,7 +2171,15 @@ for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = N
     if (alvo.y < s.y - 30 && s.chao) {
       const ra = Math.round(alvo.y / T), c = Math.floor(s.x / T);
       if (J.bloco(s, sc, c, rf0() - 1) === 'H' && Math.abs(alvo.x - s.x) < 30) { inp.up = true; mem.sobe = true; }
-      else if (pisa(c, ra) && !duro(c, ra) && Math.abs(alvo.x - s.x) < 150) { inp.jump = true; inp.jumpHeld = true; mem.alvo = alvo.x; }
+      else if (alvo.y < s.y - 100) {
+        // degrau no meio do caminho: vai para baixo dele e pula
+        let melhor = null;
+        for (let dc = -5; dc <= 5; dc++) if (pisa(c + dc, rf0() - 2) && !duro(c + dc, rf0() - 2) && (!melhor || Math.abs(dc) < Math.abs(melhor))) melhor = dc;
+        if (melhor !== null) {
+          if (melhor === 0) { inp.jump = true; inp.jumpHeld = true; mem.alvo = alvo.x; }
+          else { andar(Math.sign(melhor)); mem.degrau = true; }
+        }
+      } else if (pisa(c, ra) && !duro(c, ra) && Math.abs(alvo.x - s.x) < 150) { inp.jump = true; inp.jumpHeld = true; mem.alvo = alvo.x; }
     } else if (alvo.y > s.y + 30 && s.chao && s.piso && s.piso.ch === '=' && Math.abs(alvo.x - s.x) < 50) { inp.down = true; inp.jump = true; }
     const rf = Math.round(s.y / T), d = dir;
     const sobreBicho = s.piso && s.piso.ent;
@@ -2222,10 +2236,22 @@ for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = N
       const outra = (d || 1) > 0 ? (c + n) * T + 24 : (c - n + 1) * T - 24;
       saltarPeca(J, s, sc, d || 1, outra, pecas, inp, mem, cf);
     }
+    // parado no lugar certo, vira para o lado que o guardião pede
+    if (alvo.face && !dir && s.chao && s.face !== alvo.face) andar(alvo.face);
     reagir();
     return inp;
 
     function reagir() {
+      // alavanca ao alcance e porta fechada: estala
+      if (!sc.portas) for (let r = 0; r < 12; r++) for (let c = 0; c < 20; c++) if (sc.grade[r][c] === 'L' && perto(c * T + 20, r * T + 30, 12, 20, 0)) inp.whip = true;
+      // lança subindo ou esmagador descendo à frente: espera; pedra rolando: pula
+      for (const e of sc.ents) {
+        if (e.fora) continue;
+        const dx = (e.x - s.x) * (dir || 1);
+        if (e.tipo === 'lanca' && dx > 0 && dx < 62 && s.chao && !(e.est === 'baixo' && e.tt > 0.4)) andar(0);
+        if (e.tipo === 'esmagador' && dx > -2 && dx < 95 && s.chao && !(e.est === 'sobe' && e.y < e.fundo - 60) && !(e.est === 'espera' && e.tt > 0.75)) andar(0);
+        if (e.tipo === 'pedra') for (const p of e.pedras) if (s.chao && p.x > s.x && p.x - s.x < 80) { inp.jump = true; inp.jumpHeld = true; }
+      }
       if (ch && !ch.vencido) {
         if (ch.tipo === 'saci' && (ch.est === 'ri' || ch.est === 'espera') && perto(ch.x, ch.y, 14, 44, 0)) inp.whip = true;
         if (ch.tipo === 'iara') for (const b of ch.buzios) if (b.ok && perto(b.x, b.y + 14, 13, 30, 0)) inp.whip = true;
@@ -2235,6 +2261,14 @@ for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = N
           else if (perto(ch.hx, ch.hy + 12, 16, 24, 0)) inp.whip = true;
         }
         if (ch.tipo === 'curupira' && ch.est === 'aparece' && perto(ch.x, ch.y, 14, 44, 0)) inp.whip = true;
+        if (ch.tipo === 'mapinguari' && s.chao && s.y < 300) for (const t of ch.toras) {
+          const vem = (t.x - ch.x) * ch.dir;
+          if (t.est === 'presa' && perto(t.x, t.y + 14, 24, 28, 0) && ch.est !== 'tonto' && ((vem > 0 && vem < 40) || Math.abs(t.x - ch.x) < 14)) inp.whip = true;
+        }
+        if (ch.tipo === 'boitata') for (const m of ch.espelhos) {
+          const vem = (m.x - ch.x) * ch.dir;
+          if (m.recarga <= 0 && perto(m.x, m.y, 14, 34, 0) && ((vem > -10 && vem < 75) || Math.abs(m.x - ch.x) < 30)) inp.whip = true;
+        }
       }
       // bicho rolando vindo e chicote recarregando: pula por cima
       for (const e of sc.ents) if (!e.fora && e.tipo === 'tatu' && e.est === 'rola' && s.chao && s.recarga > 0.04 &&
@@ -2281,6 +2315,23 @@ for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = N
       const lado = p.x > s.x ? -1 : 1;
       return { x: p.x + lado * 42, y: p.y, chefe: p };
     }
+    if (ch.tipo === 'mapinguari') {
+      // fica no galho, ao lado do tronco disponível mais perto, de frente para ele
+      const livres = ch.toras.filter(t => t.est === 'presa');
+      const t = livres.sort((a, b) => Math.abs(a.x - s.x) - Math.abs(b.x - s.x))[0] || ch.toras[0];
+      const lado = t.x < 220 ? 1 : -1, x = t.x < 220 ? t.x + 46 : t.x > 600 ? t.x - 34 : t.x - 72;
+      return { x, y: 240, face: -lado };
+    }
+    if (ch.tipo === 'boitata') {
+      const vel = [0, 160, 195, 230][ch.fase];
+      let melhor = null;
+      for (const m of ch.espelhos) {
+        const chega = (m.x - ch.x) * ch.dir / vel, ida = Math.abs(m.x - 50 - s.x) / 230;
+        if (chega > ida + 0.3 && (!melhor || chega < melhor.chega)) melhor = { m, chega };
+      }
+      const m = melhor ? melhor.m : ch.espelhos.reduce((a, b) => Math.abs(a.x - s.x) < Math.abs(b.x - s.x) ? a : b);
+      return { x: m.x - 50, y: 400 };
+    }
     if (ch.tipo === 'cobragrande') {
       const b = ch.buracos[ch.i], lado = s.x < b.x ? -1 : 1;
       if (ch.est === 'sobe' || ch.est === 'mira' || ch.est === 'bote') return { x: b.x + lado * 100, y: s.y };
@@ -2307,7 +2358,7 @@ for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = N
   assert.match(src, /pb = Neon\.best\.update\('jungle', total\)/, 'jungle: recorde usa a chave do menu');
   // mapas: grade 20×12, só letras da legenda, um início, uma relíquia e um ídolo por região
   // a legenda dos bichos sai da própria física: bicho novo não pede editar o teste
-  const LEGENDA = '.#=-H~%^MXWDL+o$*KIRFPVU' + Object.keys(J.LETRAS).join('');
+  const LEGENDA = '.#=-H~%^MXWDL+oZ$*KIRFPVUqE' + Object.keys(J.LETRAS).join('');
   for (const tipo of Object.values(J.LETRAS)) assert.ok(J.BICHOS[tipo] || J.CHEFES[tipo], `jungle: letra sem bicho nem guardião: ${tipo}`);
   for (const reg of J.REGIOES) {
     const conta = ch => Object.values(reg.telas).reduce((n, t) => n + t.mapa.join('').split(ch).length - 1, 0);
@@ -2395,6 +2446,43 @@ for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = N
     s.key = '2,0';
     assert.strictEqual(J.superficie(s, sc, 340, 460), null, 'jungle: embaixo da pedra não há superfície');
     assert.ok(J.superficie(s, sc, 260, 430) !== null, 'jungle: lago aberto tem superfície');
+  }
+  // cada ídolo pede a habilidade certa: com ela sai, sem ela não
+  const joga = (s, quadros, entrada) => { for (let i = 0; i < quadros && !s.idolo; i++) { J.passo(s, 1 / 60, entrada(s, i)); s.events.length = 0; } return s.idolo; };
+  for (const hab of [['escalada'], []]) {
+    // Grutas: o ídolo fica em cima da coluna de musgo
+    const s = J.novaCorrida(2, { hab }); s.key = '0,0'; s.x = 100; s.y = 400; s.face = -1;
+    const pegou = joga(s, 60 * 5, (s, i) => ({ left: true, up: i > 2, jump: i === 1, jumpHeld: true }));
+    assert.strictEqual(pegou, hab.length > 0, `jungle: ídolo das grutas ${hab.length ? 'sai' : 'não sai'} sem escalada`.replace('sai sem', 'sai com'));
+  }
+  for (const hab of [['planar'], []]) {
+    // Pântano: do alto da árvore oca, só planando se alcança a laje do ídolo
+    const s = J.novaCorrida(3, { hab }); s.key = '4,0'; s.x = 470; s.y = 240; s.chao = true;
+    const pegou = joga(s, 60 * 5, (s, i) => ({ right: true, jump: i === 1, jumpHeld: s.x < 735 }));
+    assert.strictEqual(pegou, hab.length > 0, `jungle: ídolo do pântano ${hab.length ? 'sai planando' : 'não sai sem planar'}`);
+  }
+  for (const hab of [['planar'], []]) {
+    // Dossel: do galho mais alto, só planando se chega à laje da direita
+    const s = J.novaCorrida(4, { hab }); s.key = '0,0'; s.x = 200; s.y = 160; s.chao = true;
+    const pegou = joga(s, 60 * 5, (s, i) => ({ right: !s.chao || s.y > 300, left: s.chao && s.y < 300 && i > 30, jump: i === 1, jumpHeld: s.x < 650 }));
+    assert.strictEqual(pegou, hab.length > 0, `jungle: ídolo do dossel ${hab.length ? 'sai planando' : 'não sai sem planar'}`);
+  }
+  for (const idolos of [5, 4]) {
+    // Templo: a porta do altar só abre com os cinco ídolos das outras regiões
+    const s = J.novaCorrida(5, { hab: J.HABS, idolos }); s.key = '4,0'; s.x = 200; s.y = 200; s.chao = true;
+    const pegou = joga(s, 60 * 3, () => ({ right: true }));
+    assert.strictEqual(pegou, idolos >= 5, `jungle: porta do altar ${idolos >= 5 ? 'abre' : 'fica fechada'} com ${idolos} ídolos`);
+  }
+  // tirolesa: pula na corda do alto da raiz e desce até o outro lado
+  {
+    const s = J.novaCorrida(4, { hab: J.HABS.slice(0, 4) }); s.key = '2,0'; s.x = 185; s.y = 120; s.chao = true;
+    let andou = false;
+    for (let i = 0; i < 60 * 5; i++) {
+      J.passo(s, 1 / 60, { right: !andou, jump: i === 2, jumpHeld: true });
+      if (s.modo === 'tirolesa') andou = true;
+      s.events.length = 0;
+    }
+    assert.ok(andou && s.key === '2,0' && s.x > 600 && s.chao && !s.dano, 'jungle: a tirolesa leva até o outro lado do vão');
   }
   // tesouro pontua uma vez e voltar de tela preserva o que foi pego
   {

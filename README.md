@@ -60,7 +60,7 @@ livre da mesa pra garantir que nenhum canto prende) e o voo do Planador (o pilot
 sem tocar, segurar o nariz estola, anel empurra, térmica levanta, torre derruba e o cenário de uma semente é
 sempre o mesmo) e a economia do Núcleo (todo posto cabe na área que o núcleo libera e o preço só sobe) e a arena do Spinners (cada
 tipo gira o tempo que promete, todo estádio fica igual girado meia volta, boca derruba e parede segura, o trilho arranca, giro
-igual dá mais coice, a trava estoura e o torneio fecha com o pião certo no nível de melhoria que dá pra ter) e a selva do Jungle (um robô fecha cada região com as habilidades de quem chega pela primeira vez, em três taxas de quadros e sem desmaiar; poço custa um coração, desmaio acorda na fogueira, a noite não encerra a partida e mergulho e cristal só funcionam com a habilidade certa). Boa parte desses testes nasceu de um
+igual dá mais coice, a trava estoura e o torneio fecha com o pião certo no nível de melhoria que dá pra ter) e a selva do Jungle (um robô fecha cada região com as habilidades de quem chega pela primeira vez, em três taxas de quadros e sem desmaiar; poço custa um coração, desmaio acorda na fogueira, a noite não encerra a partida, a clareira do Curupira recomeça quando se segue as pegadas, a tirolesa atravessa o vão e cada ídolo secreto só sai com a habilidade certa — e o do templo só com os outros cinco). Boa parte desses testes nasceu de um
 bug real, e o comentário acima de cada um diz qual.
 
 ## Estrutura
