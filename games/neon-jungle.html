@@ -12,46 +12,140 @@
 <link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
 <style>
   .stage { --arw: 5; --arh: 3; --maxw: 960px; }
-  .jungle-controls { position: absolute; inset: auto 12px 12px; display: flex; gap: 8px; z-index: 4; }
-  .jungle-controls button { min-width: 52px; min-height: 48px; padding: 8px 14px; border: 1px solid #9be7ce66; border-radius: 10px; background: #080d1cbb; color: #d6eee2; font: 700 12px monospace; touch-action: none; cursor: pointer; }
-  .jungle-controls button:last-child { margin-left: auto; }
+  /* dicas da selva são frases: quebram linha em vez de vazar do quadro */
+  .toast { z-index: 26; top: 44px; white-space: normal; width: max-content; max-width: min(92%, 600px); text-align: center;
+    letter-spacing: .06em; line-height: 1.35; border-radius: 16px; }
+  @media (max-width: 700px), (max-height: 520px) { .toast { font-size: 11px; padding: 7px 14px; top: 36px; } }
+  .sound-toggle { z-index: 22; }
+  .stage:has(.hub:not(.hidden)) .pause-toggle { display: none; }
+  .jungle-controls { position: absolute; right: 12px; bottom: 12px; display: none; gap: 10px; z-index: 4; }
+  .jungle-controls button { min-width: 66px; min-height: 54px; padding: 6px 10px; border: 1px solid #9be7ce66; border-radius: 16px;
+    background: #080d1c99; color: #d6eee2; font: 700 11px monospace; touch-action: none; cursor: pointer; }
+  .jungle-controls [data-action="whip"] { color: #efce95; border-color: #efce9577; }
   .jungle-controls button:active { background: #386b56; }
-  .overlay:not(.hidden) ~ .jungle-controls { visibility: hidden; }
-  @media (max-width: 560px) { .jungle-controls { bottom: 6px; inset-inline: 6px; gap: 5px; } }
+  @media (pointer: coarse) { .jungle-controls { display: flex; } }
+  .overlay:not(.hidden) ~ .jungle-controls, .hub:not(.hidden) ~ .jungle-controls { visibility: hidden; }
+  @media (max-width: 560px), (max-height: 520px) { .jungle-controls { right: 6px; bottom: 6px; gap: 6px; } .jungle-controls button { min-width: 56px; min-height: 46px; } }
+
+  /* Mapa da selva: HTML sobre o quadro, a selva continua viva atrás. */
+  .hub { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; gap: 10px; justify-content: safe center;
+    padding: 14px 16px 16px; overflow-y: auto; font-family: 'Orbitron', sans-serif;
+    background: radial-gradient(ellipse at 50% 0%, rgba(168, 219, 160, 0.12), transparent 60%),
+      linear-gradient(180deg, rgba(8, 18, 22, 0.86), rgba(10, 16, 28, 0.95)); }
+  .hub.hidden { display: none; }
+  .hub-topo, .trilha, .campo, .habs { width: 100%; max-width: 1000px; margin-inline: auto; }
+  .hub-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 56px 0 52px; flex-wrap: wrap; }
+  .hub-topo .placar { font-size: clamp(10px, 2.2vw, 13px); color: var(--text-dim); letter-spacing: .08em; }
+  .hub-topo .placar b { color: var(--neon-yellow); }
+  .abas { display: flex; gap: 6px; }
+  .aba { font: inherit; font-size: clamp(10px, 2.3vw, 13px); letter-spacing: .14em; padding: 8px 12px; cursor: pointer;
+    border-radius: 10px; border: 1px solid #ffffff22; background: #ffffff08; color: var(--text-dim); }
+  .aba[aria-pressed="true"] { color: var(--title); border-color: #a8dba0; box-shadow: inset 0 -2px #a8dba0; }
+  .aba.alerta { position: relative; border-color: var(--neon-yellow); animation: chama 1s ease-in-out infinite; }
+  .aba.alerta::after { content: '!'; position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--neon-yellow); color: #120a00; font-size: 11px; line-height: 16px; text-align: center; }
+  @keyframes chama { 50% { box-shadow: 0 0 14px #ffd36b88; } }
+  .trilha { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
+  .regiao { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px 9px;
+    border-radius: 14px; border: 1px solid var(--borda); background: var(--fundo); color: var(--text); font: inherit; cursor: pointer; }
+  .regiao .ic { font-size: clamp(22px, 5vw, 34px); line-height: 1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+  .regiao b { font-size: clamp(8px, 1.7vw, 11px); letter-spacing: .08em; color: var(--cor); text-align: center; }
+  .regiao .selos { font-size: clamp(11px, 2.2vw, 15px); letter-spacing: 3px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+  .regiao .selos i { font-style: normal; filter: grayscale(1) brightness(.5); }
+  .regiao .selos i.ok { filter: none; }
+  .regiao .pts { font-size: clamp(9px, 1.8vw, 11px); color: var(--neon-yellow); }
+  .regiao .guardiao { position: absolute; top: 5px; right: 7px; font-size: 9px; letter-spacing: .1em; color: var(--text-dim); }
+  .regiao.proxima { border-color: var(--cor); box-shadow: 0 0 0 1px var(--borda), 0 0 18px var(--borda); animation: proxima 1.6s ease-in-out infinite; }
+  @keyframes proxima { 50% { box-shadow: 0 0 0 1px var(--cor), 0 0 26px var(--borda); } }
+  .regiao:disabled { cursor: not-allowed; opacity: .45; }
+  .regiao:disabled .ic { filter: grayscale(1) brightness(.6); }
+  @media (hover: hover) { .regiao:not(:disabled):hover { background: #ffffff12; } }
+  .regiao:active:not(:disabled) { transform: scale(.97); }
+  .habs { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .hab { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid #ffffff1c;
+    font-size: clamp(8px, 1.6vw, 10px); letter-spacing: .08em; color: var(--text-dim); }
+  .hab span { font-size: 15px; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; filter: grayscale(1) brightness(.5); }
+  .hab.tem { color: var(--title); border-color: #a8dba077; }
+  .hab.tem span { filter: none; }
+  .campo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .campo.hidden, .trilha.hidden { display: none; }
+  .melhoria { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 4px; border-radius: 12px;
+    border: 1px solid #ffffff22; background: #ffffff05; color: var(--text); font: inherit; cursor: pointer; }
+  .melhoria .ic { font-size: 22px; line-height: 1; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+  .melhoria b { font-size: clamp(8px, 1.6vw, 10px); letter-spacing: .06em; color: var(--neon-cyan); }
+  .melhoria .pips { letter-spacing: 2px; color: var(--neon-yellow); font-size: 10px; }
+  .melhoria .desc { font: 9px/1.3 'Space Mono', monospace; color: var(--text-dim); text-align: center; }
+  .melhoria .preco { font-size: 11px; color: var(--neon-yellow); }
+  .melhoria.caro .preco { color: var(--text-dim); }
+  .melhoria:disabled { opacity: .5; cursor: default; }
+  @media (hover: hover) { .melhoria:not(:disabled):hover { background: #ffffff10; } }
+  .aba:focus-visible, .regiao:focus-visible, .melhoria:focus-visible { outline: 3px solid #efce95; outline-offset: 2px; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+  .chips .key { font-size: 14px; padding: 7px 12px; }
+  .chips .key.apagado { opacity: .4; }
+  .chips .key.novo { border-color: var(--neon-yellow); color: var(--neon-yellow); }
+  .overlay .sair { margin-top: 10px; background: none; border: 1px solid #ffffff33; color: var(--text-dim); border-radius: 10px;
+    padding: 8px 14px; font: 700 11px 'Orbitron', sans-serif; letter-spacing: .1em; cursor: pointer; }
+  @media (pointer: coarse) { .controls-hint { display: none; } }
+  @media (orientation: landscape) and (max-height: 520px) {
+    .hub { padding: 8px 10px 10px; gap: 6px; }
+    .trilha, .campo { gap: 6px; }
+    .regiao { padding: 6px 4px; gap: 2px; }
+    .melhoria { padding: 5px 2px; gap: 2px; }
+    .melhoria .desc { display: none; }
+  }
+  @media (max-width: 560px) and (orientation: portrait) {
+    .hub { padding: 62px 8px 10px; gap: 8px; }
+    .hub-topo { position: absolute; top: 14px; left: 54px; right: 60px; width: auto; padding: 0; gap: 4px; flex-wrap: nowrap; }
+    .aba { padding: 6px 12px; font-size: 18px; }
+    .aba .rot { display: none; }
+    .trilha, .campo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
 </style>
 </head>
 <body>
 <div class="app">
   <header><div class="brand">
     <a href="../index.html"><h1>NEON JUNGLE</h1></a>
-    <div class="tag">// expedição 2600 · a selva guarda o caminho</div>
+    <div class="tag">// seis regiões · guardiões do folclore · a selva guarda o caminho</div>
   </div></header>
   <div class="dashboard" style="--dash-cols:5">
     <div class="stat"><span class="lbl">Pontos</span><span class="val" id="score">0</span></div>
     <div class="stat"><span class="lbl">Recorde</span><span class="val" id="best" data-key="jungle">0</span></div>
-    <div class="stat"><span class="lbl">Tesouros</span><span class="val" id="treasures">0/6</span></div>
-    <div class="stat"><span class="lbl">Tempo</span><span class="val" id="time">3:00</span></div>
-    <div class="stat"><span class="lbl">Vidas</span><span class="val" id="lives">♥♥♥</span></div>
+    <div class="stat"><span class="lbl">Tesouros</span><span class="val" id="treasures">0/0</span></div>
+    <div class="stat"><span class="lbl">Sol</span><span class="val" id="time">4:00</span></div>
+    <div class="stat"><span class="lbl">Corações</span><span class="val" id="lives">♥♥♥</span></div>
   </div>
   <div class="stage" id="stage">
     <button class="sound-toggle" id="soundToggle" title="Som" aria-label="Alternar som">🔊</button>
     <button class="pause-toggle" id="pauseToggle" title="Pausa (P)" aria-label="Pausar ou continuar">⏸</button>
     <div class="toast" id="toast" role="status"></div>
-    <canvas id="game" width="800" height="480" aria-label="Aventura de plataforma na selva. Use as setas para andar e espaço para pular ou soltar o cipó."></canvas>
+    <canvas id="game" width="800" height="480" aria-label="Aventura na selva, tela a tela. Setas ou manche andam, sobem e descem; espaço pula ou solta o cipó; X estala o chicote; M abre o mapa; P pausa.">Use um navegador com suporte a canvas para jogar.</canvas>
     <div class="overlay" id="overlay">
       <h2 id="overlayTitle">A SELVA CHAMA</h2>
-      <p id="overlayText">Seis tesouros, três vidas e três minutos. Pule troncos e cobras. Salte em direção ao cipó para agarrar; pule de novo para soltar. Reúna os tesouros e alcance o templo à direita.</p>
+      <p id="overlayText">Seis regiões, seis guardiões do folclore e as relíquias que eles guardam.</p>
       <div class="sub" id="overlaySub"></div>
       <button class="btn" id="startBtn">EXPLORAR</button>
-      <div class="controls-hint"><span class="key">← → / A D anda</span><span class="key">ESPAÇO pula / solta</span><span class="key">P pausa</span></div>
+      <div class="controls-hint"><span class="key">← → anda · ↑ ↓ sobe</span><span class="key">ESPAÇO pula</span><span class="key">X chicote</span><span class="key">M mapa · P pausa</span></div>
+    </div>
+    <div class="hub hidden" id="hub">
+      <div class="hub-topo">
+        <div class="abas">
+          <button class="aba" id="abaMapa" aria-pressed="true" aria-label="Mapa da selva">🗺️<span class="rot"> SELVA</span></button>
+          <button class="aba" id="abaCampo" aria-pressed="false" aria-label="Acampamento">⛺<span class="rot"> ACAMPAMENTO</span></button>
+        </div>
+        <span class="placar">🏆 <b id="hubRecorde">0</b> · ✦ <b id="hubSementes">0</b></span>
+      </div>
+      <div class="trilha" id="trilha"></div>
+      <div class="campo hidden" id="campo"></div>
+      <div class="habs" id="habs"></div>
     </div>
     <div class="jungle-controls" aria-label="Controles do jogo">
-      <button data-action="left" aria-label="Andar para a esquerda">◀</button>
-      <button data-action="right" aria-label="Andar para a direita">▶</button>
-      <button data-action="jump">PULAR / SOLTAR</button>
+      <button data-action="whip" aria-label="Estalar o chicote">〰 CHICOTE</button>
+      <button data-action="jump" aria-label="Pular ou soltar o cipó">↑ PULAR</button>
     </div>
   </div>
-  <footer>// <a href="../index.html">← arcade</a> · ← → anda · espaço pula / solta o cipó · P pausa<br>inspirado nos clássicos de aventura do Atari 2600</footer>
+  <footer>// <a href="../index.html">← arcade</a> · ← → anda · ↑ ↓ sobe e desce · espaço pula · X chicote · M mapa · P pausa<br>aventura na selva neon com guardiões do folclore brasileiro</footer>
 </div>
 <script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
 <script>
@@ -59,262 +153,2174 @@
   'use strict';
   const Neon = window.Neon;
   const canvas = Neon.$('game'), ctx = canvas.getContext('2d');
-  const W = 800, H = 480;
 
-  // ── expedição: física compartilhada com o teste ──
-  const FLOOR = 370, SPEED = 220, GRAVITY = 1200, JUMP = 470;
-  const ROOMS = [
-    { name: 'TRILHA DOS TRONCOS', hint: 'Pule os troncos. O primeiro tesouro está à direita.', pits: [], logs: [320], snakes: [545] },
-    { name: 'O PRIMEIRO CIPÓ', hint: 'Salte para agarrar o cipó. Pule de novo para soltar.', pits: [[270, 530]], vine: true, logs: [], snakes: [] },
-    { name: 'PASSOS NO VAZIO', hint: 'Dois saltos curtos. Respire na ilha do meio.', pits: [[260, 365], [470, 575]], logs: [], snakes: [130] },
-    { name: 'LAGOA DOS JACARÉS', hint: 'Fique acima da água. O cipó é sua passagem.', pits: [[270, 530]], vine: true, water: true, logs: [], snakes: [] },
-    { name: 'RAÍZES ANTIGAS', hint: 'Troncos rolam. As margens são seu abrigo.', pits: [[330, 440]], logs: [200, 590], snakes: [] },
-    { name: 'TEMPLO DO SOL', hint: 'O último balanço. Leve os seis tesouros ao templo.', pits: [[270, 530]], vine: true, logs: [], snakes: [] },
-  ];
-  function expedition() {
-    return { room: 0, x: 60, y: FLOOR, vy: 0, grounded: true, hanging: false,
-      release: 0, drift: 0, facing: 1, t: 0, time: 180, lives: 3, score: 0,
-      collected: ROOMS.map(() => false), safeX: 60, invincible: 0, status: 'playing', events: [] };
+  // ── física ──
+  // Daqui até "fim da física" não há DOM nem Neon: o teste recorta este trecho
+  // e roda a selva inteira no Node, com um robô jogando em 30, 60 e 120 fps.
+  const W = 800, H = 480, T = 40, COLS = 20, ROWS = 12;
+  const GRAV = 1500, RUN = 230, ACC = 1800, DEC = 2300, AIR = 1150, MAX_FALL = 760;
+  const JUMP = 560, JUMP_SOLTO = 250, COYOTE = 0.1, BUFFER = 0.13;
+  const BW = 11, BH = 44, BH_BAIXO = 24;
+  const CLIMB = 130, SWIM = 115, DIVE = 150, PUMP = 2.6;
+  const CHICOTE = 74, CHICOTE_T = 0.26, CHICOTE_CD = 0.34, GANCHO = 175;
+  const HABS = ['gancho', 'mergulho', 'lanterna', 'escalada', 'planar'];
+  const SOLIDO = new Set(['#', 'M', 'X', 'W', 'D', '%']);
+  const clampF = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rumo = (v, alvo, passo) => v < alvo ? Math.min(alvo, v + passo) : Math.max(alvo, v - passo);
+  function rng(seed) {
+    let a = (seed >>> 0) || 1;
+    return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; };
   }
-  function vineAt(t) {
-    const angle = -0.82 * Math.cos(t * 1.6), speed = 0.82 * 1.6 * Math.sin(t * 1.6);
-    return { x: 400 + Math.sin(angle) * 270, y: 70 + Math.cos(angle) * 270,
-      vx: Math.cos(angle) * 270 * speed };
+
+  // ── telas ──
+  // Cada tela é uma grade 20×12 em texto. Letra minúscula vira bicho, maiúscula
+  // vira coisa (tesouro, fogueira, cipó...). O que sai da grade deixa ar, ou água
+  // quando o vizinho é água — assim jacaré e piranha nascem dentro do rio.
+  const COISAS = { '$': 'tesouro', '*': 'semente', 'K': 'coracao', 'I': 'idolo', 'R': 'reliquia', 'F': 'fogueira' };
+  function compilarTela(reg, key) {
+    const def = reg.telas[key], [cx, cy] = key.split(',').map(Number);
+    const grade = def.mapa.map(l => l.padEnd(COLS, '.').slice(0, COLS).split(''));
+    const sc = { key, def, reg, grade, cx, cy, ents: [], itens: [], cipos: [], argolas: [], fogueiras: [], tiros: [],
+      chefe: null, quebras: [], portas: false, escuro: !!(def.escuro ?? reg.escuro), corrente: def.corrente || 0,
+      esq: reg.telas[`${cx - 1},${cy}`] ? `${cx - 1},${cy}` : null, dir: reg.telas[`${cx + 1},${cy}`] ? `${cx + 1},${cy}` : null,
+      cima: reg.telas[`${cx},${cy - 1}`] ? `${cx},${cy - 1}` : null, baixo: reg.telas[`${cx},${cy + 1}`] ? `${cx},${cy + 1}` : null };
+    const sorte = rng(cx * 7919 + cy * 104729 + reg.semente);
+    const marcas = {};
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const ch = grade[r][c];
+      if (ch === '.' || ch === '#' || '=-H~%^MXWDL+o'.includes(ch)) {
+        if (ch === 'o') { sc.argolas.push({ x: c * T + T / 2, y: r * T + T / 2 }); grade[r][c] = '.'; }
+        continue;
+      }
+      const agua = grade[r][c - 1] === '~' || grade[r][c + 1] === '~' || (grade[r - 1] && grade[r - 1][c] === '~');
+      grade[r][c] = agua ? '~' : '.';
+      const x = c * T + T / 2, y = (r + 1) * T;
+      if (ch === 'P') { sc.inicio = { x, y }; continue; }
+      if (ch === 'V') {
+        let fim = r + 1;
+        while (fim < ROWS && !'#=-H~%^MXWD+'.includes(def.mapa[fim][c])) fim++;
+        const L = clampF((fim - r) * T - 70, 110, 300);
+        const amp = def.amp || 0.72;
+        sc.cipos.push({ ax: x, ay: r * T + 6, L, th: (c % 2 ? -amp : amp), w: 0, amp, held: false });
+        continue;
+      }
+      if (COISAS[ch]) {
+        const it = { tipo: COISAS[ch], x, y: y - T / 2, id: `${key}:${c},${r}`, pego: false, agua };
+        if (it.tipo === 'fogueira') { it.y = y; sc.fogueiras.push(it); }
+        else sc.itens.push(it);
+        continue;
+      }
+      (marcas[ch] = marcas[ch] || []).push({ x, y, c, r, agua });
+    }
+    for (const [ch, lista] of Object.entries(marcas)) {
+      const tipo = LETRAS[ch];
+      if (!tipo) continue;
+      if (CHEFES[tipo]) { sc.chefe = novoChefe(tipo, lista, sc, marcas); continue; }
+      for (const m of lista) sc.ents.push(novoBicho(tipo, m, sc, sorte));
+    }
+    if (sc.chefe) for (const it of sc.itens) if (it.tipo === 'reliquia') it.oculto = true;
+    return sc;
   }
-  function logAt(base, t) { return base + Math.sin(t * 1.4 + base) * 48; }
-  function hurt(s) {
-    if (s.invincible > 0 || s.status !== 'playing') return;
-    s.lives--; s.events.push('hurt');
-    if (!s.lives) { s.status = 'lost'; return; }
-    s.x = s.safeX; s.y = FLOOR; s.vy = 0; s.drift = 0;
-    s.hanging = false; s.grounded = true; s.release = 0.4; s.invincible = 1.4;
+  function tela(s, key = s.key) {
+    if (!s.telas[key]) s.telas[key] = compilarTela(s.reg, key);
+    return s.telas[key];
   }
-  function step(s, dt, input) {
+  // O que há na casa (c, r), já atravessando para a tela vizinha nas bordas.
+  function bloco(s, sc, c, r) {
+    if (c < 0) { if (!sc.esq) return '#'; return bloco(s, tela(s, sc.esq), c + COLS, r); }
+    if (c >= COLS) { if (!sc.dir) return '#'; return bloco(s, tela(s, sc.dir), c - COLS, r); }
+    if (r < 0) {
+      if (sc.cima) return bloco(s, tela(s, sc.cima), c, r + ROWS);
+      return sc.grade[0][c] === '#' ? '#' : '.';
+    }
+    if (r >= ROWS) return sc.baixo ? bloco(s, tela(s, sc.baixo), c, r - ROWS) : sc.grade[ROWS - 1][c] === '~' ? '#' : '.';
+    return sc.grade[r][c];
+  }
+  const duro = (s, ch) => SOLIDO.has(ch) || (ch === '+' && s.hab.has('lanterna'));
+  const umaVia = (s, sc, ch, c, r) => ch === '=' || ch === '-' || (ch === 'H' && bloco(s, sc, c, r - 1) !== 'H');
+  const altura = s => s.baixo ? BH_BAIXO : BH;
+  function sobrepoe(s, sc, x, y, h, teste) {
+    for (let r = Math.floor((y - h + 1) / T); r <= Math.floor((y - 1) / T); r++)
+      for (let c = Math.floor((x - BW) / T); c <= Math.floor((x + BW) / T); c++) if (teste(bloco(s, sc, c, r), c, r)) return true;
+    return false;
+  }
+  function superficie(s, sc, x, y) {
+    const c = Math.floor(x / T);
+    let r = Math.floor(y / T);
+    if (bloco(s, sc, c, r) !== '~') return null;
+    while (bloco(s, sc, c, r - 1) === '~' && r > -ROWS) r--;
+    return r * T + 6;
+  }
+
+  // ── corrida ──
+  function novaCorrida(ri, perfil = {}) {
+    const reg = REGIOES[ri], up = perfil.up || {};
+    const vidas = 3 + Math.min(2, up.coracao | 0);
+    const s = { ri, reg, key: reg.inicio, telas: {}, x: 0, y: 0, vx: 0, vy: 0, face: 1, chao: false, piso: null,
+      modo: 'normal', coyote: 0, buffer: 0, cortavel: false, solta: 0, furar: 0, baixo: false, firme: 0,
+      cipo: null, lx: 0, trava: 0, lama: 0, chicote: 0, recarga: 0, golpe: 0, planando: false,
+      vidas, maxVidas: vidas, inv: 0, dano: false, ar: 7 + 3 * (up.folego | 0), arMax: 7 + 3 * (up.folego | 0),
+      escudo: (up.amuleto | 0) > 0, alcance: CHICOTE + 22 * (up.chicote | 0), luz: 110 + 45 * (up.lanterna | 0),
+      hab: new Set(perfil.hab || []), up, pontos: 0, sementes: 0, tesouros: new Set(), idolo: false, bichos: 0,
+      tempo: reg.dia, noite: false, t: 0, status: 'playing', events: [], visitadas: new Set([reg.inicio]),
+      check: null, seguro: null, puxa: 0, vento: 0, quedas: 0, desmaios: 0 };
+    const sc = tela(s);
+    s.x = sc.inicio.x; s.y = sc.inicio.y; s.chao = true;
+    s.check = { key: s.key, x: s.x, y: s.y }; s.seguro = { ...s.check };
+    return s;
+  }
+  const ev = (s, nome, x, y, extra) => s.events.push({ nome, x: x ?? s.x, y: y ?? s.y - 24, extra });
+  function voltar(s, ponto) {
+    s.key = ponto.key; s.x = ponto.x; s.y = ponto.y; s.vx = 0; s.vy = 0; s.modo = 'normal'; s.baixo = false;
+    if (s.cipo) { s.cipo.v.held = false; s.cipo = null; }
+    s.chao = true; s.lama = 0; s.inv = 1.4; s.ar = s.arMax; s.visitadas.add(s.key);
+    const sc = tela(s);
+    for (const e of sc.ents) reiniciar(e);
+  }
+  // Pancada: perde um coração, é jogado para trás e pisca. Sem coração, desmaia
+  // e acorda na última fogueira — não existe game over na selva.
+  function ferir(s, deX) {
+    if (s.inv > 0 || s.status !== 'playing') return false;
+    if (s.escudo) { s.escudo = false; s.inv = 1.2; ev(s, 'escudo'); return true; }
+    s.vidas--; s.dano = true; s.inv = 1.3; ev(s, 'dano');
+    if (s.cipo) { s.cipo.v.held = false; s.cipo = null; }
+    s.modo = s.modo === 'mergulho' || s.modo === 'agua' ? s.modo : 'normal';
+    s.vx = (s.x < (deX ?? s.x - s.face) ? -1 : 1) * 210; s.vy = Math.min(s.vy, -320); s.cortavel = false;
+    if (s.vidas <= 0) desmaiar(s);
+    return true;
+  }
+  function queda(s, motivo) {
     if (s.status !== 'playing') return;
-    s.t += dt; s.time = Math.max(0, s.time - dt);
-    if (!s.time) { s.status = 'lost'; return; }
-    s.invincible = Math.max(0, s.invincible - dt); s.release = Math.max(0, s.release - dt);
-    const room = ROOMS[s.room], v = vineAt(s.t);
-    const dir = Number(!!input.right) - Number(!!input.left);
-    if (dir) s.facing = dir;
-    if (input.jump) {
-      if (s.hanging) {
-        s.hanging = false; s.release = 0.45; s.vy = -260;
-        s.drift = Math.max(-SPEED, Math.min(SPEED, v.vx)); s.events.push('jump');
-      } else if (s.grounded) {
-        s.vy = -JUMP; s.grounded = false; s.events.push('jump');
-      }
+    s.vidas--; s.dano = true; s.quedas++; ev(s, 'queda', s.x, Math.min(s.y, H - 10), motivo);
+    if (s.vidas <= 0) { desmaiar(s); return; }
+    voltar(s, s.seguro);
+  }
+  function desmaiar(s) {
+    s.desmaios++; s.vidas = s.maxVidas; s.pontos = Math.max(0, s.pontos - 500);
+    s.escudo = (s.up.amuleto | 0) > 0;
+    ev(s, 'desmaio'); voltar(s, s.check); s.inv = 2;
+  }
+
+  // ── passo ──
+  function passo(s, dt, inp) {
+    if (s.status !== 'playing') return;
+    s.t += dt;
+    if (!s.noite) { s.tempo = Math.max(0, s.tempo - dt); if (!s.tempo) { s.noite = true; ev(s, 'noite'); } }
+    for (const k of ['inv', 'buffer', 'solta', 'furar', 'recarga', 'trava']) s[k] = Math.max(0, s[k] - dt);
+    const sc = tela(s);
+    if (inp.jump) s.buffer = BUFFER;
+    const dir = s.trava > 0 ? 0 : (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+    // bichos, chefes e plataformas andam antes: quem está em cima de um tronco vai junto
+    for (const v of sc.cipos) if (!v.held) balancar(v, v.L, dt, false);
+    for (const e of sc.ents) passoBicho(e, s, sc, dt);
+    if (sc.chefe) passoChefe(sc.chefe, s, sc, dt);
+    passoTiros(s, sc, dt);
+    passoQuebras(s, sc, dt);
+    if (s.piso && s.piso.ent && s.chao) s.x += s.piso.ent.dx || 0;
+    s.puxa = sc.chefe && sc.chefe.puxa ? sc.chefe.puxa : 0;
+    s.vento = sc.def.vento ? Math.sin(s.t * 0.9) * sc.def.vento : 0;
+    if (inp.whip && s.recarga <= 0 && s.modo !== 'escada') chicotear(s, sc);
+    const oy = s.y;
+    if (s.modo === 'normal') modoNormal(s, sc, dt, inp, dir);
+    else if (s.modo === 'escada') modoEscada(s, sc, dt, inp, dir);
+    else if (s.modo === 'cipo') modoCipo(s, sc, dt, inp, dir);
+    else if (s.modo === 'agua') modoAgua(s, sc, dt, inp, dir);
+    else if (s.modo === 'mergulho') modoMergulho(s, sc, dt, inp, dir);
+    else if (s.modo === 'parede') modoParede(s, sc, dt, inp, dir);
+    if (s.status !== 'playing') return;
+    if (s.modo === 'normal' || s.modo === 'agua') pousarEmBicho(s, sc, oy);
+    if (s.chicote > 0) { s.chicote = Math.max(0, s.chicote - dt); acertar(s, sc); }
+    perigos(s, sc, dt);
+    coletar(s, sc);
+    if (s.status === 'playing') atravessar(s, sc);
+  }
+  function balancar(v, r, dt, preso) {
+    let a = -(GRAV / r) * Math.sin(v.th) - v.w * (preso ? 0.05 : 0.02);
+    if (!preso) {
+      const e = 0.5 * v.w * v.w + (GRAV / r) * (1 - Math.cos(v.th)), alvo = (GRAV / r) * (1 - Math.cos(v.amp));
+      a += e < alvo ? (v.w >= 0 ? 1 : -1) * 0.8 : -v.w * 0.12;
     }
-    if (s.hanging) { s.x = v.x; s.y = v.y + 28; }
-    else {
-      const oldY = s.y;
-      s.x += (dir ? dir * SPEED : s.drift) * dt;
-      s.vy += GRAVITY * dt; s.y += s.vy * dt;
-      const pit = room.pits.some(([a, b]) => s.x > a && s.x < b);
-      s.grounded = false;
-      if (!pit && oldY <= FLOOR && s.y >= FLOOR && s.vy >= 0) {
-        s.y = FLOOR; s.vy = 0; s.drift = 0; s.grounded = true;
-      }
-      if (room.vine && !s.grounded && !s.release && Math.hypot(s.x - v.x, s.y - 28 - v.y) < 30) {
-        s.hanging = true; s.x = v.x; s.y = v.y + 28; s.vy = 0; s.events.push('grab');
-      }
-      if (!s.hanging && s.y > FLOOR + 24) {
-        // Invulnerabilidade protege o retorno, mas nunca permite andar sob o chão.
-        s.invincible = 0; hurt(s); return;
-      }
+    v.w += a * dt;
+    if (preso) v.w = clampF(v.w, -3.1, 3.1);
+    v.th += v.w * dt;
+    if (Math.abs(v.th) > 1.4) { v.th = Math.sign(v.th) * 1.4; v.w *= -0.3; }
+  }
+  function mover(s, sc, dt) {
+    const h = altura(s);
+    let nx = s.x + s.vx * dt;
+    const r0 = Math.floor((s.y - h + 1) / T), r1 = Math.floor((s.y - 1) / T);
+    s.parede = 0;
+    if (s.vx > 0) {
+      const c = Math.floor((nx + BW) / T);
+      for (let r = r0; r <= r1; r++) if (duro(s, bloco(s, sc, c, r))) { nx = c * T - BW - 0.01; s.vx = 0; s.parede = 1; break; }
+    } else if (s.vx < 0) {
+      const c = Math.floor((nx - BW) / T);
+      for (let r = r0; r <= r1; r++) if (duro(s, bloco(s, sc, c, r))) { nx = (c + 1) * T + BW + 0.01; s.vx = 0; s.parede = -1; break; }
     }
-    if (!s.hanging && s.y > FLOOR - 24 && (
-      room.logs.some(base => Math.abs(s.x - logAt(base, s.t)) < 23) ||
-      room.snakes.some(x => Math.abs(s.x - x) < 25))) { hurt(s); return; }
-    if (!s.collected[s.room] && Math.abs(s.x - 722) < 25 && Math.abs(s.y - FLOOR) < 50) {
-      s.collected[s.room] = true; s.score += 1000; s.events.push('treasure');
-    }
-    if (s.x > W) {
-      if (s.room < ROOMS.length - 1) {
-        s.room++; s.x = 24; s.safeX = 60; s.events.push('room');
-      } else {
-        s.x = W - 16;
-        if (s.collected.every(Boolean)) {
-          s.score += Math.ceil(s.time) * 10 + s.lives * 500; s.status = 'won';
-        } else s.events.push('missing');
+    s.x = nx;
+    const oy = s.y;
+    let ny = oy + s.vy * dt;
+    const c0 = Math.floor((s.x - BW) / T), c1 = Math.floor((s.x + BW) / T);
+    s.chao = false; s.piso = null;
+    if (s.vy >= 0) {
+      for (let r = Math.ceil(oy / T - 1e-6); r * T <= ny; r++) {
+        let pega = null;
+        for (let c = c0; c <= c1 && !pega; c++) {
+          const ch = bloco(s, sc, c, r);
+          if (duro(s, ch) || (!s.furar && umaVia(s, sc, ch, c, r))) pega = { ch, c, r };
+        }
+        if (pega) { ny = r * T; s.vy = 0; s.chao = true; s.piso = pega; break; }
       }
-    } else if (s.x < 0) {
-      if (s.room > 0) { s.room--; s.x = W - 24; s.safeX = W - 50; s.events.push('room'); }
-      else s.x = 0;
+    } else {
+      const a = Math.floor((oy - h) / T), b = Math.floor((ny - h) / T);
+      if (b < a) for (let c = c0; c <= c1; c++) if (duro(s, bloco(s, sc, c, b))) { ny = (b + 1) * T + h; s.vy = 0; break; }
+    }
+    s.y = ny;
+  }
+  function modoNormal(s, sc, dt, inp, dir) {
+    if (dir) s.face = dir;
+    const naLama = s.chao && s.piso && s.piso.ch === '%';
+    if (inp.down && s.chao && !s.baixo) s.baixo = true;
+    else if (s.baixo && (!inp.down || !s.chao) && !sobrepoe(s, sc, s.x, s.y, BH, ch => duro(s, ch))) s.baixo = false;
+    const lento = naLama ? 0.45 : s.baixo ? 0.62 : 1;
+    const alvo = dir * RUN * lento + s.puxa + s.vento;
+    s.vx = rumo(s.vx, alvo, (s.chao ? (dir ? ACC : DEC) : AIR) * dt);
+    s.coyote = s.chao ? COYOTE : Math.max(0, s.coyote - dt);
+    if (inp.down && s.buffer > 0 && s.chao && s.piso && (s.piso.ch === '=' || s.piso.ch === '-')) {
+      s.furar = 0.25; s.buffer = 0; s.chao = false; s.baixo = false; s.y += 2; s.coyote = 0;
+    }
+    if (s.buffer > 0 && s.coyote > 0 && !(s.baixo && sobrepoe(s, sc, s.x, s.y, BH, ch => duro(s, ch)))) {
+      s.vy = -JUMP * (naLama ? 0.82 : 1); s.chao = false; s.coyote = 0; s.buffer = 0; s.baixo = false;
+      s.cortavel = true; s.lama = 0; ev(s, 'pulo');
+    }
+    if (s.cortavel && !inp.jumpHeld && s.vy < -JUMP_SOLTO) s.vy = -JUMP_SOLTO;
+    if (s.vy >= 0) s.cortavel = false;
+    s.planando = s.hab.has('planar') && !s.chao && inp.jumpHeld && s.vy > 0 && !s.cortavel;
+    s.vy = Math.min(s.planando ? 95 : MAX_FALL, s.vy + GRAV * dt);
+    if (s.planando) s.vx = rumo(s.vx, dir * RUN * 1.15 + s.vento * 1.6, AIR * dt);
+    mover(s, sc, dt);
+    if (naLama && s.chao && s.piso && s.piso.ch === '%') {
+      s.lama += dt;
+      if (s.lama > 2.4) { s.lama = 0; queda(s, 'lama'); return; }
+    } else s.lama = Math.max(0, s.lama - dt * 2);
+    // chão firme vira ponto de retorno quando o explorador cai num poço
+    if (s.chao && s.piso && !s.piso.ent && (s.piso.ch === '#' || s.piso.ch === 'M' || s.piso.ch === '=') && !s.inv) {
+      s.firme += dt;
+      if (s.firme > 0.3) s.seguro = { key: s.key, x: s.x, y: s.y };
+    } else s.firme = 0;
+    if (s.chao && s.piso && s.piso.ch === '-') pisarPonte(s, sc, s.piso.c, s.piso.r, dt);
+    const cc = Math.floor(s.x / T);
+    if ((inp.up && bloco(s, sc, cc, Math.floor((s.y - 20) / T)) === 'H') ||
+        (inp.down && s.chao && bloco(s, sc, cc, Math.floor((s.y + 2) / T)) === 'H' && !inp.jump)) {
+      s.modo = 'escada'; s.lx = cc * T + T / 2; s.vx = 0; s.vy = 0; s.baixo = false;
+      if (inp.down && s.chao) s.y += 3;
+      return;
+    }
+    if (s.vy >= 0 && superficie(s, sc, s.x, s.y - 16) !== null) {
+      s.modo = 'agua'; s.vy *= 0.3; s.cortavel = false; s.baixo = false; ev(s, 'mergulho'); return;
+    }
+    if (!s.chao && s.hab.has('escalada') && dir && s.parede === dir && s.trava <= 0 &&
+        bloco(s, sc, Math.floor((s.x + dir * (BW + 3)) / T), Math.floor((s.y - 24) / T)) === 'M') {
+      s.modo = 'parede'; s.vx = 0; s.vy = 0; s.face = dir; ev(s, 'agarra'); return;
+    }
+    if (!s.chao && s.solta <= 0) for (const v of sc.cipos) {
+      if (v.held) continue;
+      const hx = s.x - v.ax, hy = s.y - BH + 6 - v.ay, sn = Math.sin(v.th), cs = Math.cos(v.th);
+      const ao = hx * sn + hy * cs, perp = Math.abs(hx * cs - hy * sn);
+      if (ao > v.L * 0.4 && ao < v.L + 14 && perp < 24) { agarrar(s, v, Math.min(v.L, ao)); break; }
     }
   }
+  function agarrar(s, v, r) {
+    const sn = Math.sin(v.th), cs = Math.cos(v.th);
+    v.w = clampF(v.w * 0.4 + (s.vx * cs - s.vy * sn) / r * 0.6, -2.6, 2.6);
+    v.held = true; s.cipo = { v, r }; s.modo = 'cipo'; s.vx = 0; s.vy = 0; s.baixo = false; s.planando = false;
+    ev(s, 'cipo');
+  }
+  function modoCipo(s, sc, dt, inp, dir) {
+    const c = s.cipo, v = c.v;
+    if (inp.up) c.r = Math.max(Math.min(v.L, 70) * 0.9, c.r - 90 * dt);
+    if (inp.down) c.r = Math.min(v.L, c.r + 90 * dt);
+    // empurrar a favor do balanço dá impulso; contra, freia devagar
+    if (dir) { s.face = dir; v.w += dir * PUMP * dt * (Math.sign(v.w) === dir ? 1 : 0.4); }
+    const th0 = v.th, x0 = s.x, y0 = s.y;
+    balancar(v, c.r, dt, true);
+    s.x = v.ax + Math.sin(v.th) * c.r; s.y = v.ay + Math.cos(v.th) * c.r + BH - 6;
+    if (sobrepoe(s, sc, s.x, s.y, BH, ch => duro(s, ch))) {
+      v.th = th0; v.w *= -0.35; s.x = x0; s.y = y0;
+    }
+    if (s.buffer > 0) {
+      s.buffer = 0;
+      s.vx = clampF(Math.cos(v.th) * v.w * c.r, -360, 360);
+      s.vy = clampF(-Math.sin(v.th) * v.w * c.r - 150, -640, 300);
+      v.held = false;
+      if (v.temp) { const i = sc.cipos.indexOf(v); if (i >= 0) sc.cipos.splice(i, 1); }
+      s.cipo = null; s.modo = 'normal'; s.solta = 0.3; s.cortavel = false; ev(s, 'pulo');
+    }
+  }
+  function modoEscada(s, sc, dt, inp, dir) {
+    s.x = rumo(s.x, s.lx, 300 * dt);
+    const cc = Math.floor(s.lx / T);
+    if (s.buffer > 0) {
+      s.buffer = 0; s.modo = 'normal'; s.vy = -JUMP * 0.72; s.vx = dir * RUN * 0.8; s.cortavel = true;
+      if (dir) s.face = dir;
+      ev(s, 'pulo'); return;
+    }
+    const v = ((inp.down ? 1 : 0) - (inp.up ? 1 : 0)) * CLIMB;
+    let ny = s.y + v * dt;
+    if (v < 0) {
+      const rp = Math.floor((ny - 1) / T);
+      if (bloco(s, sc, cc, rp) !== 'H' && bloco(s, sc, cc, rp + 1) === 'H') { ny = (rp + 1) * T; s.modo = 'normal'; s.chao = true; }
+      if (duro(s, bloco(s, sc, cc, Math.floor((ny - BH) / T)))) ny = s.y;
+    } else if (v > 0) {
+      const rp = Math.floor(ny / T), ch = bloco(s, sc, cc, rp);
+      if (duro(s, ch)) { ny = rp * T; s.modo = 'normal'; s.chao = true; }
+      else if (ch !== 'H' && bloco(s, sc, cc, Math.floor((ny - 20) / T)) !== 'H') s.modo = 'normal';
+    } else if (bloco(s, sc, cc, Math.floor((s.y - 20) / T)) !== 'H' && bloco(s, sc, cc, Math.floor((s.y - 1) / T)) !== 'H') s.modo = 'normal';
+    s.y = ny; s.vx = 0; s.vy = 0;
+  }
+  function modoAgua(s, sc, dt, inp, dir) {
+    if (dir) s.face = dir;
+    const sup = superficie(s, sc, s.x, s.y - 16) ?? superficie(s, sc, s.x, s.y);
+    if (sup === null) { s.modo = 'normal'; return; }
+    s.ar = Math.min(s.arMax, s.ar + dt * 4);
+    s.vx = rumo(s.vx, dir * SWIM + sc.corrente + s.puxa * 0.6, 700 * dt);
+    s.vy = rumo(s.vy, (sup + 30 - s.y) * 6, 1100 * dt);
+    if (s.buffer > 0) {
+      s.buffer = 0; s.vy = -440; s.modo = 'normal'; s.cortavel = false; ev(s, 'pulo');
+    } else if (inp.down && s.hab.has('mergulho')) { s.modo = 'mergulho'; s.vy = 140; ev(s, 'afunda'); }
+    mover(s, sc, dt);
+  }
+  function modoMergulho(s, sc, dt, inp, dir) {
+    if (dir) s.face = dir;
+    s.ar -= dt;
+    if (s.ar <= 0) { s.ar = s.arMax; queda(s, 'ar'); return; }
+    const vert = (inp.down ? 1 : 0) - (inp.up ? 1 : 0) || (inp.jumpHeld ? -1 : 0);
+    s.vx = rumo(s.vx, dir * DIVE + sc.corrente * 0.5, 700 * dt);
+    s.vy = rumo(s.vy, vert * DIVE - 22, 700 * dt);
+    mover(s, sc, dt);
+    const sup = superficie(s, sc, s.x, s.y - 16);
+    if (sup === null) {
+      if (superficie(s, sc, s.x, s.y) === null) { s.modo = 'normal'; s.vy = Math.min(s.vy, -200); s.ar = s.arMax; }
+    } else if (s.y - BH < sup - 4 && vert <= 0) { s.modo = 'agua'; s.ar = s.arMax; }
+  }
+  function modoParede(s, sc, dt, inp, dir) {
+    const lado = s.face, c = Math.floor((s.x + lado * (BW + 3)) / T);
+    if (s.buffer > 0) {
+      s.buffer = 0; s.modo = 'normal'; s.face = -lado; s.vx = -lado * RUN * 1.1; s.vy = -JUMP * 0.86;
+      s.trava = 0.16; s.cortavel = true; ev(s, 'pulo'); return;
+    }
+    if (dir === -lado) { s.modo = 'normal'; s.trava = 0.1; return; }
+    s.vx = 0;
+    s.vy = inp.up ? -CLIMB * 0.85 : inp.down ? CLIMB : 28;
+    mover(s, sc, dt);
+    if (s.chao) { s.modo = 'normal'; return; }
+    if (bloco(s, sc, c, Math.floor((s.y - 24) / T)) !== 'M') {
+      if (inp.up) { s.vy = -JUMP * 0.62; s.vx = lado * 130; s.cortavel = false; }
+      s.modo = 'normal';
+    }
+  }
+  function pousarEmBicho(s, sc, oy) {
+    if (s.vy < 0) return;
+    for (const e of sc.ents) {
+      const B = BICHOS[e.tipo];
+      if (e.fora || !B.plataforma || !B.plataforma(e)) continue;
+      const topo = e.y - e.h;
+      if (oy <= topo + 3 && s.y >= topo - 1 && Math.abs(s.x - e.x) < e.w + BW * 0.6) {
+        s.y = topo; s.vy = 0; s.chao = true; s.piso = { ent: e, ch: '' }; s.modo = 'normal'; s.coyote = COYOTE;
+
+        return;
+      }
+    }
+  }
+  function pisarPonte(s, sc, c, r, dt) {
+    const q = sc.quebras.find(q => q.c === c && q.r === r);
+    if (q) { q.peso += dt; if (q.peso > 0.55 && !q.caiu) { q.caiu = 4; sc.grade[r][c] = '.'; ev(s, 'ponte', c * T + 20, r * T); } }
+    else sc.quebras.push({ c, r, peso: dt, caiu: 0 });
+  }
+  function passoQuebras(s, sc, dt) {
+    for (const q of sc.quebras) if (q.caiu) {
+      q.caiu = Math.max(0, q.caiu - dt);
+      if (!q.caiu) {
+        if (Math.abs(s.x - (q.c * T + 20)) < 40 && Math.abs(s.y - q.r * T) < 50) q.caiu = 0.5;
+        else { sc.grade[q.r][q.c] = '-'; q.peso = 0; }
+      }
+    } else if (!(s.chao && s.piso && s.piso.c === q.c && s.piso.r === q.r)) q.peso = Math.max(0, q.peso - dt);
+  }
+  // ── chicote ──
+  // Com o gancho, o estalo procura uma argola à frente e acima e vira cipó na hora.
+  function chicotear(s, sc) {
+    s.recarga = CHICOTE_CD;
+    if (s.hab.has('gancho') && s.modo !== 'cipo') {
+      let alvo = null, perto = GANCHO;
+      for (const a of sc.argolas) {
+        const dx = a.x - s.x, dy = a.y - (s.y - 30), d = Math.hypot(dx, dy);
+        if (d < perto && dy < -24 && dx * s.face > -40) { perto = d; alvo = a; }
+      }
+      if (alvo) {
+        const th = Math.atan2(s.x - alvo.x, s.y - BH + 6 - alvo.y), r = clampF(perto, 60, GANCHO);
+        const v = { ax: alvo.x, ay: alvo.y, L: r, th, w: 0, amp: 0.6, held: false, temp: true };
+        sc.cipos.push(v);
+        if (s.modo === 'agua' || s.modo === 'mergulho') s.modo = 'normal';
+        agarrar(s, v, r); ev(s, 'gancho', alvo.x, alvo.y); return;
+      }
+    }
+    s.chicote = CHICOTE_T; s.golpe++; ev(s, 'chicote');
+  }
+  function caixaChicote(s) {
+    const a = s.x + s.face * 8, b = s.x + s.face * (8 + s.alcance);
+    const topo = s.y - (s.baixo ? 26 : 50), base = s.y + 8;
+    return { x0: Math.min(a, b), x1: Math.max(a, b), y0: topo, y1: base };
+  }
+  const tocaCaixa = (k, x, y, w, h) => x + w > k.x0 && x - w < k.x1 && y > k.y0 && y - h < k.y1;
+  function acertar(s, sc) {
+    if (s.chicote > CHICOTE_T - 0.05) return;   // o laço ainda está saindo da mão
+    const k = caixaChicote(s);
+    for (let c = Math.floor(k.x0 / T); c <= Math.floor(k.x1 / T); c++)
+      for (let r = Math.floor(k.y0 / T); r <= Math.floor(k.y1 / T); r++) {
+        if (c < 0 || c >= COLS || r < 0 || r >= ROWS) continue;
+        const ch = sc.grade[r][c];
+        if (ch === 'X' || ch === 'W') {
+          sc.grade[r][c] = '.'; s.pontos += 50; ev(s, ch === 'X' ? 'caixa' : 'teia', c * T + 20, r * T + 20);
+          if (ch === 'X') for (let i = 0; i < 2; i++) sc.itens.push({ tipo: 'semente', x: c * T + 12 + i * 16, y: r * T + 24, id: `${sc.key}:x${c},${r},${i}`, pego: false, solto: true });
+        }
+        if (ch === 'L' && !sc.portas) {
+          sc.portas = true; ev(s, 'alavanca', c * T + 20, r * T + 20);
+          for (const linha of sc.grade) for (let i = 0; i < COLS; i++) if (linha[i] === 'D') linha[i] = '.';
+        }
+      }
+    for (const e of sc.ents) {
+      if (e.fora || e.golpe === s.golpe || !BICHOS[e.tipo].chicote) continue;
+      if (tocaCaixa(k, e.x, e.y, e.w, e.h)) { e.golpe = s.golpe; BICHOS[e.tipo].chicote(e, s, sc); }
+    }
+    for (const t of sc.tiros) if (!t.fim && t.quebra !== false && tocaCaixa(k, t.x, t.y + t.r, t.r, t.r * 2)) { t.fim = true; ev(s, 'estoura', t.x, t.y); }
+    if (sc.chefe && sc.chefe.golpe !== s.golpe) {
+      const ch = sc.chefe, alvo = CHEFES[ch.tipo].alvo(ch, s, sc, k);
+      if (alvo) { ch.golpe = s.golpe; CHEFES[ch.tipo].chicote(ch, s, sc, alvo); }
+    }
+  }
+
+  // ── perigos, coleta e saídas ──
+  function encosta(s, e, folga = 0) {
+    const h = altura(s);
+    return s.x + BW - folga > e.x - e.w && s.x - BW + folga < e.x + e.w && s.y - folga > e.y - e.h && s.y - h + folga < e.y;
+  }
+  function perigos(s, sc) {
+    const h = altura(s);
+    if (sobrepoe(s, sc, s.x, s.y, h, (ch, c, r) => ch === '^' && s.y > r * T + 18)) { ferir(s, s.x - s.face * 10); s.vy = -420; }
+    for (const e of sc.ents) {
+      if (e.fora || !BICHOS[e.tipo].perigo(e, s, sc)) continue;
+      if (encosta(s, e, 3)) ferir(s, e.x);
+    }
+    for (const t of sc.tiros) if (!t.fim && Math.abs(t.x - s.x) < t.r + BW - 2 && t.y + t.r > s.y - h + 3 && t.y - t.r < s.y - 2) {
+      if (ferir(s, t.x) && t.quebra !== false) t.fim = true;
+    }
+    if (sc.chefe && CHEFES[sc.chefe.tipo].toca) CHEFES[sc.chefe.tipo].toca(sc.chefe, s, sc);
+  }
+  function coletar(s, sc) {
+    for (const it of sc.itens) {
+      if (it.pego || it.oculto) continue;
+      if (Math.abs(it.x - s.x) > 26 || it.y < s.y - altura(s) - 16 || it.y > s.y + 10) continue;
+      it.pego = true;
+      if (it.tipo === 'semente') { s.sementes++; s.pontos += 25; }
+      else if (it.tipo === 'tesouro') { s.tesouros.add(it.id); s.pontos += 1000; }
+      else if (it.tipo === 'coracao') { if (s.vidas < s.maxVidas) s.vidas++; else s.pontos += 100; }
+      else if (it.tipo === 'idolo') { s.idolo = true; s.pontos += 2500; }
+      else if (it.tipo === 'reliquia') { concluir(s); }
+      ev(s, it.tipo, it.x, it.y);
+    }
+    for (const f of sc.fogueiras) {
+      if (f.aceso || Math.abs(f.x - s.x) > 30 || Math.abs(f.y - s.y) > 50) continue;
+      f.aceso = true; s.check = { key: sc.key, x: f.x, y: f.y }; s.seguro = { ...s.check };
+      s.vidas = s.maxVidas; ev(s, 'fogueira', f.x, f.y - 20);
+    }
+  }
+  function atravessar(s, sc) {
+    let nova = null;
+    if (s.x > W && sc.dir) { nova = sc.dir; s.x -= W; }
+    else if (s.x < 0 && sc.esq) { nova = sc.esq; s.x += W; }
+    else if (s.y < 0 && sc.cima) { nova = sc.cima; s.y += H; }
+    else if (s.y > H && sc.baixo) { nova = sc.baixo; s.y -= H; }
+    else if (s.y > H + 70) { queda(s, 'poço'); return; }
+    if (!nova) return;
+    if (s.cipo) { s.cipo.v.held = false; s.cipo = null; s.modo = 'normal'; }
+    const de = s.key;
+    s.key = nova; s.piso = null;
+    const novaTela = tela(s);
+    for (const e of novaTela.ents) reiniciar(e);
+    if (!s.visitadas.has(nova)) { s.visitadas.add(nova); ev(s, 'tela', s.x, s.y, nova); }
+    else ev(s, 'volta', s.x, s.y, de);
+  }
+  // Relíquia na mão fecha a região: sobra de sol vira ponto, assim como passar
+  // sem levar dano e achar todos os tesouros.
+  function totalTesouros(reg) {
+    let n = 0;
+    for (const t of Object.values(reg.telas)) for (const l of t.mapa) n += (l.match(/\$/g) || []).length;
+    return n;
+  }
+  function concluir(s) {
+    const total = totalTesouros(s.reg), todos = s.tesouros.size >= total;
+    const sol = !s.noite, intacto = !s.dano;
+    const bonus = { sol: sol ? Math.ceil(s.tempo) * 5 : 0, intacto: intacto ? 1500 : 0, todos: todos ? 1000 : 0, guardiao: 3000 };
+    s.pontos += bonus.sol + bonus.intacto + bonus.todos + bonus.guardiao;
+    s.resultado = { bonus, selos: { tesouros: todos, sol, intacto }, total };
+    s.status = 'cleared';
+  }
+  // Caminho principal de uma região, tela a tela, do início até a relíquia.
+  function rota(reg) {
+    const alvo = Object.keys(reg.telas).find(k => reg.telas[k].mapa.some(l => l.includes('R')));
+    const ant = { [reg.inicio]: null }, fila = [reg.inicio];
+    while (fila.length) {
+      const k = fila.shift();
+      if (k === alvo) break;
+      const [x, y] = k.split(',').map(Number);
+      for (const n of [`${x + 1},${y}`, `${x},${y - 1}`, `${x},${y + 1}`, `${x - 1},${y}`])
+        if (reg.telas[n] && !(n in ant) && !reg.telas[n].fora) { ant[n] = k; fila.push(n); }
+    }
+    const lista = [];
+    for (let k = alvo; k; k = ant[k]) lista.unshift(k);
+    return lista;
+  }
+  // ── bichos ──
+  // Cada bicho tem um jeito de ameaçar e um jeito de sair de cena: o chicote
+  // afugenta (ninguém morre na selva), atordoa ou devolve o golpe.
+  const LETRAS = { s: 'cobra', t: 'tatu', B: 'colmeia', c: 'jacare', p: 'piranha', e: 'poraque', g: 'tronco',
+    h: 'vitoria', m: 'macaco', j: 'onca', S: 'saci', Y: 'iara' };
+  function casa(sc, c, r) { return c < 0 || c >= COLS ? '#' : r < 0 || r >= ROWS ? '.' : sc.grade[r][c]; }
+  function firmeEm(sc, x, y) {
+    const ch = casa(sc, Math.floor(x / T), Math.floor((y + 1) / T));
+    return SOLIDO.has(ch) || ch === '=' || ch === '-' || ch === 'H';
+  }
+  const vazioEm = (sc, x, y) => !SOLIDO.has(casa(sc, Math.floor(x / T), Math.floor((y - 12) / T)));
+  function anda(e, sc, v, dt, raio) {
+    const nx = e.x + e.dir * v * dt, frente = nx + e.dir * e.w;
+    if (!firmeEm(sc, frente, e.y) || !vazioEm(sc, frente, e.y) || (raio && Math.abs(nx - e.hx) > raio)) { e.dir *= -1; return false; }
+    e.x = nx; return true;
+  }
+  function cairBicho(e, sc, dt) {
+    const oy = e.y;
+    e.vy = Math.min(MAX_FALL, e.vy + GRAV * dt); e.y += e.vy * dt;
+    if (e.vy > 0) for (let r = Math.ceil(oy / T - 1e-6); r * T <= e.y; r++) if (firmeEm(sc, e.x, r * T - 1)) { e.y = r * T; e.vy = 0; return true; }
+    return false;
+  }
+  function vaoAgua(sc, c, r) {
+    let a = c, b = c;
+    while (a > 0 && sc.grade[r][a - 1] === '~') a--;
+    while (b < COLS - 1 && sc.grade[r][b + 1] === '~') b++;
+    return [a * T, (b + 1) * T];
+  }
+  function supGrade(sc, c, r) { while (r > 0 && sc.grade[r - 1][c] === '~') r--; return r * T + 6; }
+  const naAgua = s => s.modo === 'agua' || s.modo === 'mergulho';
+  function foge(e, s, pts) {
+    e.fora = true; e.fuga = 0.7; e.fvx = (e.x < s.x ? -1 : 1) * 150;
+    s.pontos += pts; s.bichos++; ev(s, 'foge', e.x, e.y - e.h / 2, e.tipo);
+  }
+  function novoBicho(tipo, m, sc, sorte) {
+    const B = BICHOS[tipo];
+    const e = { tipo, x: m.x, y: m.y, hx: m.x, c: m.c, r: m.r, w: B.w, h: B.h, dir: m.c % 2 ? -1 : 1, t: sorte() * 3,
+      est: '', tt: 0, vy: 0, stun: 0, fora: false, fuga: 0, golpe: -1, dx: 0 };
+    if (B.ini) B.ini(e, sc);
+    if (!B.fixo) e.base = Object.fromEntries(Object.entries(e).filter(([, v]) => typeof v !== 'object'));
+    return e;
+  }
+  function reiniciar(e) { if (e.base && !e.fora) Object.assign(e, e.base); }
+  function passoBicho(e, s, sc, dt) {
+    const x0 = e.x;
+    if (e.fora) { if (e.fuga > 0) { e.fuga -= dt; e.x += e.fvx * dt; e.y -= 70 * dt; } e.dx = 0; return; }
+    e.t += dt;
+    BICHOS[e.tipo].passo(e, s, sc, dt);
+    if (!BICHOS[e.tipo].plataforma) e.dx = e.x - x0;
+  }
+  function passoTiros(s, sc, dt) {
+    for (const t of sc.tiros) {
+      if (t.fim) continue;
+      t.vy += (t.g || 0) * dt; t.x += t.vx * dt; t.y += t.vy * dt; t.vida -= dt;
+      if (t.passo) t.passo(t, s, sc, dt);
+      const ch = casa(sc, Math.floor(t.x / T), Math.floor(t.y / T));
+      if (t.vida <= 0 || t.x < -40 || t.x > W + 40 || t.y > H + 40 || (t.solido !== false && SOLIDO.has(ch))) {
+        t.fim = true; if (t.vida > 0 && t.y < H) ev(s, 'estoura', t.x, t.y);
+      }
+    }
+    if (sc.tiros.length > 24 || sc.tiros.some(t => t.fim)) sc.tiros = sc.tiros.filter(t => !t.fim);
+  }
+  const BICHOS = {
+    cobra: { w: 16, h: 16,
+      ini(e) { e.est = 'anda'; },
+      passo(e, s, sc, dt) {
+        const dx = s.x - e.x, perto = Math.abs(dx) < 118 && Math.abs(s.y - e.y) < 50 && s.modo !== 'cipo';
+        e.tt -= dt;
+        if (e.est === 'anda') {
+          anda(e, sc, 34, dt, 60);
+          if (perto && e.tt <= 0) { e.est = 'arma'; e.tt = 0.45; e.dir = dx < 0 ? -1 : 1; }
+        } else if (e.est === 'arma') { if (e.tt <= 0) { e.est = 'bote'; e.tt = 0.24; } }
+        else if (e.est === 'bote') { anda(e, sc, 250, dt, 0); if (e.tt <= 0) { e.est = 'volta'; e.tt = 0.9; } }
+        else if (e.tt <= 0) { e.est = 'anda'; e.tt = 0.7; }
+      },
+      perigo: () => true,
+      chicote(e, s) { foge(e, s, 150); },
+    },
+    tatu: { w: 15, h: 18,
+      ini(e) { e.est = 'anda'; },
+      passo(e, s, sc, dt) {
+        const dx = s.x - e.x;
+        if (e.est === 'anda') {
+          anda(e, sc, 28, dt, 80);
+          if (Math.abs(dx) < 240 && Math.abs(s.y - e.y) < 44 && Math.sign(dx) === e.dir) { e.est = 'enrola'; e.tt = 0.45; ev(s, 'enrola', e.x, e.y - 10); }
+        } else if (e.est === 'enrola') { if ((e.tt -= dt) <= 0) { e.est = 'rola'; e.tt = 3; } }
+        else if (e.est === 'rola') {
+          const d = e.dir, nx = e.x + e.dir * 240 * dt;
+          if (nx < 6 || nx > W - 6) {
+            e.x = nx;
+            if (e.x < -20 || e.x > W + 20) { e.fora = true; e.fuga = 0; s.pontos += 150; s.bichos++; ev(s, 'foge', clampF(e.x, 10, W - 10), e.y - 10, 'tatu'); }
+            return;
+          }
+          anda(e, sc, 240, dt, 0);
+          if (d !== e.dir) ev(s, 'quica', e.x, e.y - 10);
+          if ((e.tt -= dt) <= 0) { e.est = 'abre'; e.tt = 0.5; }
+        } else if ((e.tt -= dt) <= 0) { e.est = 'anda'; e.hx = e.x; }
+        e.h = e.est === 'anda' ? 18 : 16;
+      },
+      perigo: e => e.est === 'rola' || e.est === 'enrola',
+      chicote(e, s) {
+        if (e.est === 'rola') { e.dir = s.face; e.tt = Math.max(e.tt, 1.4); s.pontos += 50; ev(s, 'rebate', e.x, e.y - 10); }
+        else foge(e, s, 150);
+      },
+    },
+    colmeia: { w: 14, h: 26, fixo: true,
+      ini(e) { e.y = e.r * T + 32; e.abelhas = []; e.est = 'pendura'; },
+      passo(e, s, sc, dt) {
+        if (e.est === 'cai') {
+          if (cairBicho(e, sc, dt) || e.y > H) { e.fora = true; e.fuga = 0; ev(s, 'estoura', e.x, e.y - 10); }
+          return;
+        }
+        const dx = s.x - e.x, dy = s.y - e.y;
+        e.tt -= dt;
+        if (!e.abelhas.length && e.tt <= 0 && Math.abs(dx) < 120 && dy > -30 && dy < 220) {
+          for (let i = 0; i < 3; i++) e.abelhas.push({ x: e.x + (i - 1) * 6, y: e.y - 8, t: i * 0.8, vida: 4.5 });
+          ev(s, 'abelhas', e.x, e.y);
+        }
+        const k = s.chicote > 0 && s.chicote < CHICOTE_T - 0.05 ? caixaChicote(s) : null;
+        for (const b of e.abelhas) {
+          b.t += dt; b.vida -= dt;
+          const caca = b.vida > 0, ax = caca ? s.x : e.x, ay = caca ? s.y - 30 : e.y - 12;
+          const ang = Math.atan2(ay - b.y, ax - b.x), vel = caca ? 100 : 150;
+          b.x += (Math.cos(ang) * vel + Math.cos(b.t * 9) * 55) * dt;
+          b.y += (Math.sin(ang) * vel + Math.sin(b.t * 11) * 55) * dt;
+          if (!caca && Math.hypot(b.x - e.x, b.y - e.y + 12) < 16) b.casa = true;
+          if (k && tocaCaixa(k, b.x, b.y + 4, 6, 8)) { b.casa = true; s.pontos += 50; ev(s, 'foge', b.x, b.y, 'abelha'); }
+          else if (caca && Math.abs(b.x - s.x) < BW + 5 && b.y > s.y - altura(s) - 4 && b.y < s.y + 2) ferir(s, b.x);
+        }
+        const antes = e.abelhas.length;
+        e.abelhas = e.abelhas.filter(b => !b.casa);
+        if (antes && !e.abelhas.length) e.tt = 2.5;
+      },
+      perigo: () => false,
+      chicote(e, s) {
+        if (e.est === 'cai') return;
+        e.est = 'cai'; e.vy = 0; e.abelhas.length = 0; s.pontos += 300; s.bichos++; ev(s, 'colmeia', e.x, e.y - 12);
+      },
+    },
+    jacare: { w: 30, h: 14,
+      ini(e, sc) { [e.x0, e.x1] = vaoAgua(sc, e.c, e.r); e.y = supGrade(sc, e.c, e.r) + 10; e.est = 'nada'; },
+      passo(e, s, sc, dt) {
+        if (e.stun > 0) { e.stun -= dt; e.h = 6; return; }
+        const presa = naAgua(s) || (s.chao && s.piso && s.piso.ent);
+        const dx = s.x - e.x, perto = presa && Math.abs(dx) < 165 && Math.abs(s.y - e.y) < 80;
+        const lim = v => clampF(v, e.x0 + e.w, e.x1 - e.w);
+        e.tt -= dt;
+        if (e.est === 'nada') {
+          e.x += e.dir * 45 * dt;
+          if (e.x !== lim(e.x)) { e.x = lim(e.x); e.dir *= -1; }
+          if (perto && e.tt <= 0) { e.est = 'arma'; e.tt = 0.5; e.dir = dx < 0 ? -1 : 1; ev(s, 'jacare', e.x, e.y); }
+        } else if (e.est === 'arma') { if (e.tt <= 0) { e.est = 'bote'; e.tt = 0.4; } }
+        else if (e.est === 'bote') { e.x = lim(e.x + e.dir * 300 * dt); if (e.tt <= 0) { e.est = 'nada'; e.tt = 1.1; } }
+        e.h = e.est === 'bote' ? 34 : 14;
+      },
+      perigo: e => e.stun <= 0,
+      chicote(e, s) {
+        if (e.stun > 0) return;
+        e.stun = 2.6; e.est = 'nada'; e.tt = 1;
+        if (!e.levou) { e.levou = 1; s.pontos += 100; s.bichos++; }
+        ev(s, 'atordoa', e.x, e.y - 10);
+      },
+    },
+    piranha: { w: 10, h: 14,
+      ini(e, sc) { e.sup = supGrade(sc, e.c, e.r); e.y = e.sup + 26; e.tt = 1 + (e.c % 3) * 0.7; e.est = 'espera'; },
+      passo(e, s, sc, dt) {
+        if (e.est === 'espera') { if ((e.tt -= dt) <= 0) { e.est = 'salta'; e.vy = -620; ev(s, 'splash', e.x, e.sup); } }
+        else {
+          e.vy += GRAV * dt; e.y += e.vy * dt;
+          if (e.vy > 0 && e.y >= e.sup + 26) { e.y = e.sup + 26; e.est = 'espera'; e.tt = 1.9; ev(s, 'splash', e.x, e.sup); }
+        }
+      },
+      perigo: e => e.est === 'salta',
+      chicote(e, s) { if (e.est === 'salta') foge(e, s, 150); },
+    },
+    poraque: { w: 22, h: 10,
+      ini(e, sc) { [e.x0, e.x1] = vaoAgua(sc, e.c, e.r); e.sup = supGrade(sc, e.c, e.r); e.y = e.sup + 22; e.est = 'calmo'; e.tt = 2 + (e.c % 2); },
+      passo(e, s, sc, dt) {
+        e.x = clampF(e.hx + Math.sin(e.t * 0.8) * 60, e.x0 + 22, e.x1 - 22);
+        if (e.stun > 0) { e.stun -= dt; e.est = 'calmo'; e.tt = 1.5; return; }
+        e.tt -= dt;
+        if (e.est === 'calmo' && e.tt <= 0) { e.est = 'carrega'; e.tt = 0.9; ev(s, 'carrega', e.x, e.y); }
+        else if (e.est === 'carrega' && e.tt <= 0) { e.est = 'choque'; e.tt = 0.6; ev(s, 'choque', e.x, e.y); }
+        else if (e.est === 'choque' && e.tt <= 0) { e.est = 'calmo'; e.tt = 3.2; }
+        if (e.est === 'choque' && naAgua(s) && s.x > e.x0 - 10 && s.x < e.x1 + 10) ferir(s, e.x);
+      },
+      perigo: e => e.est === 'choque',
+      chicote(e, s) { e.stun = 3; ev(s, 'atordoa', e.x, e.y); },
+    },
+    tronco: { w: 36, h: 10, fixo: true,
+      ini(e, sc) { [e.x0, e.x1] = vaoAgua(sc, e.c, e.r); e.sup = supGrade(sc, e.c, e.r); e.y = e.sup + 4; e.v = sc.corrente || 42 * e.dir; },
+      passo(e, s, sc, dt) {
+        const x0 = e.x;
+        e.x += e.v * dt;
+        if (sc.corrente) {
+          if (e.v > 0 && e.x - e.w > e.x1) e.x = e.x0 - e.w + 2;
+          if (e.v < 0 && e.x + e.w < e.x0) e.x = e.x1 + e.w - 2;
+        } else if (e.x - e.w < e.x0 || e.x + e.w > e.x1) { e.v *= -1; e.x = clampF(e.x, e.x0 + e.w, e.x1 - e.w); }
+        e.dx = e.x - x0;
+        if (Math.abs(e.dx) > 60) { e.dx = 0; if (s.piso && s.piso.ent === e) { s.piso = null; s.chao = false; } }
+      },
+      perigo: () => false, plataforma: () => true,
+    },
+    vitoria: { w: 26, h: 6, fixo: true,
+      ini(e, sc) { e.sup = supGrade(sc, e.c, e.r); e.y = e.sup; e.est = 'boia'; e.peso = 0; e.fundo = 0; },
+      passo(e, s, sc, dt) {
+        const em = s.chao && s.piso && s.piso.ent === e;
+        if (e.est === 'boia') {
+          e.peso = em ? e.peso + dt : Math.max(0, e.peso - dt * 0.5);
+          if (e.peso > 0.85) { e.est = 'afunda'; e.tt = 2.2; ev(s, 'afunda', e.x, e.y); }
+        } else if (e.est === 'afunda') { e.fundo = Math.min(1, e.fundo + dt * 3); if ((e.tt -= dt) <= 0) e.est = 'volta'; }
+        else { e.fundo = Math.max(0, e.fundo - dt * 2); if (!e.fundo) { e.est = 'boia'; e.peso = 0; } }
+        e.dx = 0;
+      },
+      perigo: () => false, plataforma: e => e.est === 'boia',
+    },
+    macaco: { w: 14, h: 24,
+      ini(e) { e.tt = 1.4 + (e.c % 3) * 0.5; e.joga = 0; },
+      passo(e, s, sc, dt) {
+        const dx = s.x - e.x;
+        e.dir = dx < 0 ? -1 : 1;
+        e.joga = Math.max(0, e.joga - dt);
+        if (Math.abs(dx) < 330 && s.y > e.y - 10 && (e.tt -= dt) <= 0) {
+          e.tt = 2.4; e.joga = 0.3;
+          const voo = 0.9, g = GRAV * 0.6;
+          const vy = ((s.y - 20) - (e.y - 20) - 0.5 * g * voo * voo) / voo;
+          sc.tiros.push({ tipo: 'fruta', x: e.x, y: e.y - 20, vx: clampF(dx / voo, -260, 260), vy: clampF(vy, -520, 200), g, r: 7, vida: 3 });
+          ev(s, 'joga', e.x, e.y - 20);
+        }
+      },
+      perigo: () => false,
+      chicote(e, s) { foge(e, s, 150); },
+    },
+    onca: { w: 24, h: 26,
+      ini(e) { e.est = 'ronda'; e.vx = 0; },
+      passo(e, s, sc, dt) {
+        if (!s.noite) return;
+        if (e.stun > 0) { e.stun -= dt; return; }
+        const dx = s.x - e.x, ve = Math.abs(dx) < 300 && Math.abs(s.y - e.y) < 60;
+        e.tt -= dt;
+        if (e.est === 'ronda') {
+          anda(e, sc, 70, dt, 120);
+          if (ve && e.tt <= 0) { e.est = 'agacha'; e.tt = 0.55; e.dir = dx < 0 ? -1 : 1; ev(s, 'rugido', e.x, e.y - 20); }
+        } else if (e.est === 'agacha') { if (e.tt <= 0) { e.est = 'salto'; e.vx = e.dir * 330; e.vy = -360; } }
+        else if (e.est === 'salto') {
+          if (vazioEm(sc, e.x + e.vx * dt + e.dir * e.w, e.y)) e.x += e.vx * dt;
+          if (cairBicho(e, sc, dt)) { e.est = 'ronda'; e.tt = 1.6; e.hx = e.x; }
+          if (e.y > H + 40) { e.y = e.base.y; e.x = e.base.x; e.est = 'ronda'; e.vy = 0; }
+        }
+      },
+      perigo: (e, s) => s.noite && e.stun <= 0,
+      chicote(e, s) {
+        if (!s.noite) return;
+        e.stun = 1.6; e.est = 'ronda'; e.tt = 2.2;
+        if (!e.levou) { e.levou = 1; s.pontos += 300; s.bichos++; }
+        ev(s, 'atordoa', e.x, e.y - 20);
+      },
+    },
+  };
+  // ── guardiões ──
+  // Cada região termina num guardião do folclore. Vencer não é matar: o Saci
+  // devolve a relíquia que roubou, a Iara desiste do canto e mergulha.
+  function novoChefe(tipo, lista, sc, marcas) {
+    const ch = { tipo, x: lista[0].x, y: lista[0].y, est: '', tt: 0, t: 0, vida: 0, max: 0, ativo: false, golpe: -1, puxa: 0, vencido: false };
+    CHEFES[tipo].ini(ch, lista, sc, marcas);
+    ch.max = ch.vida;
+    return ch;
+  }
+  function passoChefe(ch, s, sc, dt) {
+    if (!ch.ativo) { ch.ativo = true; ev(s, 'chefe', ch.x, ch.y - 40, ch.tipo); }
+    ch.t += dt;
+    CHEFES[ch.tipo].passo(ch, s, sc, dt);
+  }
+  function vencer(ch, s, sc) {
+    ch.vencido = true; ch.puxa = 0;
+    for (const it of sc.itens) if (it.tipo === 'reliquia') it.oculto = false;
+    sc.tiros.length = 0;
+    ev(s, 'guardiao', ch.x, ch.y - 30, ch.tipo);
+  }
+  const CHEFES = {
+    // Saci: some num redemoinho e reaparece no ponto mais longe de você. Só dá
+    // para acertá-lo parado, rindo; nesse meio-tempo ele solta redemoinhos.
+    saci: {
+      ini(ch, lista) { ch.pontos = lista.map(m => ({ x: m.x, y: m.y })); ch.i = 0; ch.vida = 3; ch.est = 'espera'; ch.tt = 1.2; ch.de = null; },
+      passo(ch, s, sc, dt) {
+        if (ch.vencido) { ch.tt += dt; return; }
+        ch.tt -= dt;
+        const p = ch.pontos[ch.i];
+        if (ch.est === 'espera') { if (ch.tt <= 0) { ch.est = 'ri'; ch.tt = 2.2; ch.jogou = false; } }
+        else if (ch.est === 'ri') {
+          ch.x = p.x; ch.y = p.y;
+          if (!ch.jogou && ch.tt < 0.9) {
+            ch.jogou = true;
+            const d = s.x < ch.x ? -1 : 1;
+            sc.tiros.push({ tipo: 'redemoinho', x: ch.x + d * 20, y: ch.y - 18, vx: d * 165, vy: 0, r: 15, vida: 3.4, solido: false });
+            ev(s, 'redemoinho', ch.x, ch.y - 20);
+          }
+          if (ch.tt <= 0) { ch.est = 'some'; ch.tt = 0.35; }
+        } else if (ch.est === 'tonto') { if (ch.tt <= 0) { ch.est = 'some'; ch.tt = 0.3; } }
+        else if (ch.est === 'some') {
+          if (ch.tt <= 0) {
+            // ordem fixa (dá para aprender), mas nunca reaparece em cima do explorador
+            let j = (ch.i + 1) % ch.pontos.length;
+            if (Math.abs(ch.pontos[j].x - s.x) < 80 && Math.abs(ch.pontos[j].y - s.y) < 60) j = (j + 1) % ch.pontos.length;
+            ch.de = { x: ch.x, y: ch.y }; ch.i = j; ch.est = 'viaja'; ch.tt = 0.75;
+          }
+        } else if (ch.est === 'viaja') {
+          const q = ch.pontos[ch.i], k = 1 - Math.max(0, ch.tt) / 0.75;
+          ch.x = ch.de.x + (q.x - ch.de.x) * k; ch.y = ch.de.y + (q.y - ch.de.y) * k - Math.sin(k * Math.PI) * 60;
+          if (ch.tt <= 0) { ch.est = 'espera'; ch.tt = 0.5; ch.x = q.x; ch.y = q.y; }
+        }
+      },
+      alvo: (ch, s, sc, k) => (ch.est === 'ri' || ch.est === 'espera') && !ch.vencido && tocaCaixa(k, ch.x, ch.y, 14, 44),
+      chicote(ch, s, sc) {
+        ch.vida--; s.pontos += 500; ev(s, 'acerto', ch.x, ch.y - 30);
+        if (ch.vida <= 0) vencer(ch, s, sc);
+        else { ch.est = 'tonto'; ch.tt = 0.8; }
+      },
+      toca(ch, s) { if (ch.est === 'viaja' && encosta(s, { x: ch.x, y: ch.y, w: 16, h: 40 }, 4)) ferir(s, ch.x); },
+    },
+    // Iara: enquanto canta, puxa o explorador para o rio e solta bolhas
+    // encantadas que vão atrás dele. Quebrar os três búzios desfaz o encanto.
+    iara: {
+      ini(ch, lista, sc, marcas) {
+        ch.buzios = (marcas.U || []).map(m => ({ x: m.x, y: m.y - 22, ok: true }));
+        ch.vida = ch.buzios.length; ch.est = 'respira'; ch.tt = 1.5; ch.onda = 0;
+        const c = Math.floor(ch.x / T), r = Math.floor((ch.y - 1) / T);
+        ch.sup = casa(sc, c, r + 1) === '~' ? supGrade(sc, c, r + 1) : ch.y;
+      },
+      passo(ch, s, sc, dt) {
+        if (ch.vencido) { ch.puxa = 0; ch.tt += dt; return; }
+        ch.tt -= dt;
+        if (ch.est === 'respira') { ch.puxa = 0; if (ch.tt <= 0) { ch.est = 'canta'; ch.tt = 3.4; ch.onda = 0.6; ev(s, 'canto', ch.x, ch.y - 40); } }
+        else {
+          ch.puxa = Math.sign(ch.x - s.x) * 75;
+          if ((ch.onda -= dt) <= 0) {
+            ch.onda = 1.7;
+            const d = s.x < ch.x ? -1 : 1;
+            sc.tiros.push({ tipo: 'bolha', x: ch.x - 26, y: ch.y - 56, vx: d * 115, vy: 0, r: 11, vida: 5.5, solido: false,
+              passo: (b, alvo) => { b.vy = clampF((alvo.y - 28 - b.y) * 1.3, -80, 80) + Math.sin(b.vida * 5) * 45; } });
+            ev(s, 'bolha', ch.x - 26, ch.y - 56);
+          }
+          if (ch.tt <= 0) { ch.est = 'respira'; ch.tt = 1.7; }
+        }
+      },
+      alvo: (ch, s, sc, k) => ch.buzios.find(b => b.ok && tocaCaixa(k, b.x, b.y + 14, 13, 30)),
+      chicote(ch, s, sc, b) {
+        b.ok = false; ch.vida--; s.pontos += 500; ev(s, 'buzio', b.x, b.y);
+        if (ch.vida <= 0) vencer(ch, s, sc);
+        else { ch.est = 'respira'; ch.tt = 1.2; }
+      },
+    },
+  };
+  // ── mapas ──
+  // Legenda: # chão · = galho · - ponte de corda · H raiz/escada · ~ água · % lama
+  // ^ espinho · M musgo · X caixa · W teia · D porta · L alavanca · + cristal · o argola
+  // $ tesouro · * semente · K coração · I ídolo · R relíquia · F fogueira · P início · V cipó
+  // bichos: s cobra · t tatu · B colmeia · c jacaré · p piranha · e poraquê · g tronco
+  //         h vitória-régia · m macaco · j onça (só à noite) · S Saci · Y Iara · U búzio
+  const REGIOES = [
+    { id: 'orla', nome: 'ORLA DA SELVA', icone: '🌴', cor: '#a8dba0', semente: 11, dia: 240, inicio: '0,0',
+      hab: 'gancho', pede: 'mergulho', guardiao: 'SACI', ceu: ['#0f2d33', '#2f6b5a'], chao: '#3c3226', grama: '#a8c970',
+      telas: {
+        '0,0': { nome: 'TRILHA DA ORLA', dica: 'Pule nos galhos. X estala o chicote.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '...............$....',
+          '.............=====..',
+          '........*.*.*.......',
+          '......=======.......',
+          'P....*....t.....*...',
+          '####################',
+          '####################'] },
+        '1,0': { nome: 'O PRIMEIRO CIPÓ', dica: 'Pule no cipó. ← → dão impulso, pule de novo para soltar.', mapa: [
+          '....................',
+          '.........V..........',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '...*.....$.......*..',
+          '....................',
+          '######........######',
+          '######........######'] },
+        '2,0': { nome: 'PASSOS NO VAZIO', dica: 'Dois saltos curtos. A fogueira guarda seu caminho.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '......*.*.*.*.......',
+          '....................',
+          '..........s......F..',
+          '#####...####...#####',
+          '#####...####...#####'] },
+        '3,0': { nome: 'A COLMEIA', dica: 'Estale a colmeia antes que os marimbondos saiam.', mapa: [
+          '......H.............',
+          '......H.............',
+          '......H.............',
+          '......H.............',
+          '......H.............',
+          '......H.............',
+          '......H.............',
+          '......H....====.....',
+          '......H.....B.......',
+          '...*..H...*....*..t.',
+          '####################',
+          '####################'] },
+        '3,-1': { nome: 'COPA DOS MACACOS', dica: 'Frutas voando! O chicote rebate.', mapa: [
+          '....................',
+          '....................',
+          '...............$....',
+          '...m..........m.....',
+          '..====.......=====..',
+          '...K.*..............',
+          '.........====.......',
+          '....................',
+          '......H====.........',
+          '......H.............',
+          '......H.............',
+          '......H.............'] },
+        '4,0': { nome: 'LAGOA DO JACARÉ', dica: 'Embaixo da lagoa há uma gruta. Quem mergulha, acha.', mapa: [
+          '....................',
+          '..........V.........',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '..........$.........',
+          '..*..............*..',
+          '####~~~~~~~c~~~~####',
+          '####~~~~~~~~~~~~####'] },
+        '4,1': { nome: 'GRUTA SUBMERSA', dica: 'O ar acaba. Respire no bolsão.', escuro: true, mapa: [
+          '####~~~~~~~~~~~~####',
+          '####~~~~~~~~~~~~####',
+          '####~~~~~~~~~~~~####',
+          '####~~~~~~~~~~~..###',
+          '####~~~~~~~~~~~~~~##',
+          '####~~~~~~~##~~~~~~#',
+          '####~~~*~~~##~~~~I~#',
+          '####~~~~~~~##~~~~~~#',
+          '#####~~~~~~~~~~~~###',
+          '######~~~*~~~~~#####',
+          '####################',
+          '####################'] },
+        '5,0': { nome: 'RAÍZES ANTIGAS', dica: 'Pedra baixa: segure ↓ para rolar por baixo.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '.......M............',
+          '.......M....####....',
+          '.......M.*.K####....',
+          '.......M====####....',
+          '.......M....####....',
+          '............####....',
+          '.........s.......F..',
+          '####################',
+          '####################'] },
+        '6,0': { nome: 'CLAREIRA DO SACI', dica: 'O Saci roubou a relíquia! Acerte-o enquanto ele ri.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '...S..........S.....',
+          '..=====......=====..',
+          '.........S.R........',
+          '####################',
+          '####################'] },
+      } },
+    { id: 'rio', nome: 'RIO DAS VITÓRIAS-RÉGIAS', icone: '🌊', cor: '#7fd4f5', semente: 23, dia: 270, inicio: '0,0',
+      hab: 'mergulho', pede: 'lanterna', guardiao: 'IARA', ceu: ['#0d2236', '#2c5f7a'], chao: '#33302b', grama: '#8fc9a8',
+      telas: {
+        '0,0': { nome: 'MARGEM DO RIO', dica: 'Vitória-régia afunda se você parar em cima.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          'P.......*.$.*.......',
+          '######~~h~~h~~######',
+          '######~~~~~~~~######'] },
+        '1,0': { nome: 'CORREDEIRA', dica: 'Suba num tronco e deixe a correnteza levar.', corrente: 70, mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '......*...*...*.....',
+          '....................',
+          '###~~g~~~~~~g~~~~###',
+          '###~~~~p~~~~~~p~~###'] },
+        '2,0': { nome: 'ILHAS DAS VITÓRIAS', dica: 'Pule de folha em folha. O jacaré espreita.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....*..*..*..*......',
+          '.........$........F.',
+          '##~~h~~h~~h~~h~c~###',
+          '##~~~~~~~~~~~~~~~###'] },
+        '3,0': { nome: 'CACHOEIRA', dica: 'As raízes sobem atrás da queda d’água.', cachoeira: [600, 720], mapa: [
+          '.....H..............',
+          '.....H..............',
+          '.....H..............',
+          '.....H..............',
+          '.....H..............',
+          '.....H..............',
+          '.....H..............',
+          '.....H..............',
+          '.....H.......*.*....',
+          '.....H...s..........',
+          '#############~~~####',
+          '#############~p~####'] },
+        '3,-1': { nome: 'GRUTA DA CACHOEIRA', dica: 'Cristais só aparecem à luz da lanterna.', escuro: true, mapa: [
+          '####################',
+          '#..................#',
+          '#..................#',
+          '#..............I...#',
+          '#............++++..#',
+          '#..................#',
+          '#.........+++......#',
+          '#..................#',
+          '#......+++.........#',
+          '#.*.*.......*.*.*..#',
+          '#####H##############',
+          '#####H##############'] },
+        '4,0': { nome: 'POÇO DO PORAQUÊ', dica: 'Nade quando a água parar de faiscar.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '..*..............*..',
+          '....................',
+          '####~~~~~$~~~#######',
+          '####~~~~~~~e~#######'] },
+        '5,0': { nome: 'MANGUEZAL', dica: 'Galho em galho, longe das frutas.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '..............m.....',
+          '.............====...',
+          '..........$.........',
+          '........====........',
+          '....................',
+          '.....===....===.....',
+          '..*...............F.',
+          '######~~~~~~~~######',
+          '######~~~~~~~~######'] },
+        '6,0': { nome: 'PEDRA DA IARA', dica: 'Quebre os três búzios para calar o canto.', mapa: [
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '....................',
+          '..........U...RU....',
+          '...U.....###..###.Y.',
+          '######~~~###~~###~~~',
+          '######~~~###~c###~~~'] },
+      } },
+  ];
   // ── fim da física ──
 
-  let run = expedition(), state = 'menu', lastFrame = performance.now();
-  let pb = Neon.best.get('jungle');
-  const held = new Set(), pointers = new Map();
-  let jumpQueued = false;
-  const sprites = {
-    explorer: ['..hhhh..', '.hhhhhh.', '..ssks..', '..sss...', '.ggggg..', 'sgggggs.', 's.ggg.s.', '..bbb...', '..b.b...', '.bb.bb..', '.kk.kk..'],
-    snake: ['.......rr.', '......ggg.', '..gg..gk..', '.ggggggg..', 'gg..gg....'],
-    treasure: ['...yy...', '..yyyy..', '.ywwwyy.', 'yyyyyyyy', '.yyyyyy.', '..yyyy..'],
-  };
-  const colors = { h: '#ddab63', s: '#f6d5a1', k: '#122e29', g: '#a8dba0', b: '#879fca', r: '#ed887f', y: '#efce95', w: '#fff4cf' };
-  function sprite(rows, x, y, scale, flip) {
-    ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.scale(flip ? -scale : scale, scale);
-    for (let j = 0; j < rows.length; j++) for (let i = 0; i < rows[j].length; i++) {
-      const color = colors[rows[j][i]];
-      if (color) { ctx.fillStyle = color; ctx.fillRect(i - rows[j].length / 2, j, 1, 1); }
+  // ── desenho: cenário ──
+  const R = (x, y, w, h, c) => { ctx.fillStyle = c; ctx.fillRect(x, y, w, h); };
+  function hash(a, b) {
+    let h = (a * 374761393 + b * 668265263) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  }
+  function rgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function mistura(a, b, k) {
+    const p = rgb(a), q = rgb(b);
+    return `rgb(${p.map((v, i) => Math.round(v + (q[i] - v) * k)).join(',')})`;
+  }
+  function texto(t, x, y, size, color, align = 'left', fonte = 'monospace') {
+    ctx.fillStyle = color; ctx.font = `bold ${size}px ${fonte}`; ctx.textAlign = align; ctx.textBaseline = 'alphabetic'; ctx.fillText(t, x, y);
+  }
+  // O dia de cada região: manhã → meio-dia → entardecer. Depois disso, noite.
+  const DIA = [[0, '#14324a', '#58978a'], [0.45, '#0f4862', '#7cc4ae'], [0.8, '#2b1f44', '#e0896a'], [1, '#1a1433', '#5b3550']];
+  function corDoDia(k, i) {
+    for (let j = 1; j < DIA.length; j++) if (k <= DIA[j][0]) {
+      const a = DIA[j - 1], b = DIA[j];
+      return mistura(a[i], b[i], (k - a[0]) / (b[0] - a[0]));
+    }
+    return DIA[DIA.length - 1][i];
+  }
+  function ceu(sc, t) {
+    const reg = run.reg, k = 1 - run.tempo / reg.dia, noite = run.noite;
+    if (sc.escuro) {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#0b0a1a'); g.addColorStop(1, '#1a1630');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      for (let i = 0; i < 14; i++) {
+        const x = hash(i, sc.cx * 7 + sc.cy) * W, w = 18 + hash(i, 3) * 40, h = 30 + hash(i, 9) * 90;
+        ctx.fillStyle = '#15132a';
+        ctx.beginPath(); ctx.moveTo(x - w / 2, 0); ctx.lineTo(x, h); ctx.lineTo(x + w / 2, 0); ctx.fill();
+      }
+      return;
+    }
+    const topo = noite ? '#050818' : mistura(corDoDia(k, 1), reg.ceu[0], 0.3);
+    const base = noite ? '#16203a' : mistura(corDoDia(k, 2), reg.ceu[1], 0.3);
+    const g = ctx.createLinearGradient(0, 0, 0, H * 0.8);
+    g.addColorStop(0, topo); g.addColorStop(1, base);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    if (noite || k > 0.75) {
+      ctx.globalAlpha = noite ? 1 : (k - 0.75) * 4;
+      for (let i = 0; i < 60; i++) {
+        const x = hash(i, 1) * W, y = hash(i, 2) * 220, pis = 0.5 + 0.5 * Math.sin(t * 2 + i);
+        R(x, y, i % 5 ? 1 : 2, i % 5 ? 1 : 2, pis > 0.3 ? '#cfe3ff' : '#6d7fa8');
+      }
+      ctx.globalAlpha = 1;
+    }
+    // sol de faixas que atravessa o céu conforme o tempo passa; à noite, lua
+    const sx = 90 + Math.min(1, k) * 620, sy = 170 - Math.sin(Math.min(1, k) * Math.PI) * 110;
+    if (!noite) {
+      const halo = ctx.createRadialGradient(sx, sy, 20, sx, sy, 110);
+      halo.addColorStop(0, '#ffd27a55'); halo.addColorStop(1, '#ffd27a00');
+      ctx.fillStyle = halo; ctx.fillRect(sx - 110, sy - 110, 220, 220);
+      ctx.save(); ctx.beginPath(); ctx.arc(sx, sy, 40, 0, Math.PI * 2); ctx.clip();
+      const sg = ctx.createLinearGradient(0, sy - 40, 0, sy + 40);
+      sg.addColorStop(0, '#ffe9a0'); sg.addColorStop(1, k > 0.7 ? '#ff7a6a' : '#f2b35a');
+      ctx.fillStyle = sg; ctx.fillRect(sx - 40, sy - 40, 80, 80);
+      for (let i = 0; i < 5; i++) R(sx - 42, sy + 6 + i * 7, 84, 2 + i * 0.6, base);
+      ctx.restore();
+    } else {
+      Neon.circle(ctx, 640, 90, 26, '#dfe8ff');
+      Neon.circle(ctx, 650, 84, 22, '#050818');
+    }
+  }
+  // Três camadas de fundo que andam em velocidades diferentes: dá profundidade
+  // mesmo numa tela parada, porque o deslocamento segue o explorador.
+  function fundo(sc, t) {
+    if (sc.escuro) return;
+    const reg = run.reg, base = (sc.cx * W + run.x) , noite = run.noite;
+    const tom = (c, k) => noite ? mistura(c, '#050818', 0.55) : mistura(c, reg.ceu[1], k);
+    // morros distantes
+    ctx.fillStyle = tom('#1d3b3f', 0.45);
+    ctx.beginPath(); ctx.moveTo(0, H);
+    for (let x = -40; x <= W + 40; x += 40) {
+      const wx = x + base * 0.06;
+      ctx.lineTo(x, 250 - Math.sin(wx * 0.006) * 40 - Math.sin(wx * 0.017 + 1) * 18);
+    }
+    ctx.lineTo(W, H); ctx.fill();
+    // árvores do meio
+    const passo = 120, off = (base * 0.16) % passo;
+    for (let i = -1; i < W / passo + 2; i++) {
+      const x = i * passo - off, n = Math.floor((base * 0.16) / passo) + i;
+      const h = 150 + hash(n, 5) * 90, cor = tom('#173a2c', 0.25);
+      R(x + 40, H - h - 40, 12, h, cor);
+      ctx.fillStyle = cor;
+      for (let j = 0; j < 4; j++) {
+        const fx = x + 46 + Math.cos(j * 1.7 + n) * 34, fy = H - h - 40 + Math.sin(j * 2.3) * 16;
+        ctx.beginPath(); ctx.ellipse(fx, fy, 38, 18, j * 0.4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // névoa baixa
+    const ng = ctx.createLinearGradient(0, 250, 0, 420);
+    ng.addColorStop(0, noite ? '#0a122a00' : mistura(reg.ceu[1], '#ffffff', 0.2).replace('rgb', 'rgba').replace(')', ',0)'));
+    ng.addColorStop(1, noite ? '#0a122a88' : mistura(reg.ceu[1], '#ffffff', 0.15).replace('rgb', 'rgba').replace(')', ',0.35)'));
+    ctx.fillStyle = ng; ctx.fillRect(0, 250, W, 170);
+  }
+  // franja de folhas na frente de tudo: emoldura a tela e esconde a borda de cima
+  function frente(sc, t) {
+    if (sc.escuro) return;
+    const base = sc.cx * W + run.x, off = (base * 0.4) % 90, cor = run.noite ? '#08160f' : '#0e2a1c';
+    ctx.fillStyle = cor;
+    for (let i = -1; i < W / 90 + 2; i++) {
+      const x = i * 90 - off, n = Math.floor(base * 0.4 / 90) + i;
+      ctx.beginPath(); ctx.ellipse(x + 45, -6, 60, 22 + hash(n, 1) * 14, 0, 0, Math.PI * 2); ctx.fill();
+      if (hash(n, 4) > 0.5) {
+        const len = 30 + hash(n, 6) * 70, bal = Math.sin(t * 1.3 + n) * 4;
+        ctx.strokeStyle = cor; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(x + 30, 10); ctx.quadraticCurveTo(x + 32 + bal, len / 2, x + 30 + bal, len); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(x + 30 + bal, len + 4, 6, 3, 0.6, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+  function cachoeira(sc, t) {
+    const [a, b] = sc.def.cachoeira;
+    ctx.save(); ctx.globalAlpha = 0.55;
+    R(a, 0, b - a, 400, '#5fb6d6');
+    for (let i = 0; i < 18; i++) {
+      const x = a + hash(i, 2) * (b - a), y = ((t * 260 + hash(i, 3) * 480) % 520) - 40;
+      R(x, y, 3, 40 + hash(i, 4) * 40, '#d9f6ff');
+    }
+    ctx.globalAlpha = 0.35;
+    for (let i = 0; i < 8; i++) Neon.circle(ctx, a + (i + 0.5) * (b - a) / 8, 400 + Math.sin(t * 3 + i) * 4, 18, '#e6fbff');
+    ctx.restore();
+  }
+  const lado = (sc, c, r) => bloco(run, sc, c, r);
+  function chaoTile(sc, c, r, ch) {
+    const reg = run.reg, x = c * T, y = r * T, escuro = sc.escuro;
+    const terra = escuro ? '#2a2540' : reg.chao, borda = escuro ? '#3c3560' : mistura(reg.chao, '#000000', 0.25);
+    R(x, y, T, T, terra);
+    const h1 = hash(c + sc.cx * 31, r + sc.cy * 17);
+    R(x + 6 + h1 * 22, y + 12 + hash(c, r) * 16, 5, 3, borda);
+    R(x + 22 - h1 * 14, y + 28, 4, 3, borda);
+    const cima = lado(sc, c, r - 1);
+    if (!SOLIDO.has(cima) && cima !== '+') {
+      const grama = escuro ? '#6c62a8' : reg.grama;
+      R(x, y, T, 6, grama); R(x, y + 6, T, 3, mistura(grama, '#000000', 0.35));
+      if (!escuro) for (let i = 0; i < 4; i++) if (hash(c * 4 + i, r) > 0.45) R(x + 4 + i * 9, y - 4, 2, 5, grama);
+      if (escuro && h1 > 0.7) { ctx.save(); Neon.glow(ctx, '#b9a3ff', 10); R(x + 14, y - 8, 6, 8, '#b9a3ff'); ctx.restore(); }
+    }
+    if (!SOLIDO.has(lado(sc, c - 1, r)) && lado(sc, c - 1, r) !== '~') R(x, y, 3, T, borda);
+    if (!SOLIDO.has(lado(sc, c + 1, r)) && lado(sc, c + 1, r) !== '~') R(x + T - 3, y, 3, T, borda);
+    if (ch === 'M') {
+      for (let i = 0; i < 6; i++) Neon.circle(ctx, x + 6 + hash(c * 6 + i, r) * 28, y + 4 + hash(c, r * 6 + i) * 32, 5, run.hab.has('escalada') ? '#79c96a' : '#4d8a49');
+    }
+  }
+  function tiles(sc, t) {
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const ch = sc.grade[r][c], x = c * T, y = r * T;
+      if (ch === '.' || ch === '~') continue;
+      if (ch === '#' || ch === 'M') chaoTile(sc, c, r, ch);
+      else if (ch === '=') {
+        R(x - 1, y + 2, T + 2, 9, '#7a5233'); R(x - 1, y + 2, T + 2, 3, '#b07a4a');
+        if (hash(c, r) > 0.5) { ctx.fillStyle = '#3f8a4a'; ctx.beginPath(); ctx.ellipse(x + 20, y + 1, 12, 5, 0.3, 0, Math.PI * 2); ctx.fill(); }
+      } else if (ch === '-') {
+        R(x + 2, y + 3, T - 4, 6, '#9c7346'); R(x + 2, y + 3, T - 4, 2, '#c99a62');
+        ctx.strokeStyle = '#d8c08a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, y + 1); ctx.lineTo(x + T, y + 1); ctx.stroke();
+      } else if (ch === 'H') {
+        const sw = Math.sin(t * 1.4 + c) * 1.5;
+        R(x + 15 + sw, y, 4, T, '#5d8a3e'); R(x + 21 + sw, y, 4, T, '#4a7032');
+        for (let i = 0; i < 2; i++) R(x + 9, y + 8 + i * 20, 22, 3, '#7aa850');
+        if (hash(c, r) > 0.6) { ctx.fillStyle = '#86c45a'; ctx.beginPath(); ctx.ellipse(x + 28, y + 18, 7, 3, -0.5, 0, Math.PI * 2); ctx.fill(); }
+      } else if (ch === '%') {
+        R(x, y, T, T, '#3a2b2a'); R(x, y, T, 7, '#5b4033');
+        const b = (t * 0.8 + hash(c, r) * 3) % 1;
+        Neon.circle(ctx, x + 10 + hash(c, 1) * 20, y + 6 - b * 3, 2 + b * 2, '#7a5a44');
+      } else if (ch === '^') {
+        ctx.fillStyle = '#c8d0a6';
+        for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(x + i * 10, y + T); ctx.lineTo(x + 5 + i * 10, y + 16); ctx.lineTo(x + 10 + i * 10, y + T); ctx.fill(); }
+        R(x, y + T - 4, T, 4, '#5d6b45');
+      } else if (ch === 'X') {
+        R(x + 2, y + 2, T - 4, T - 4, '#8a5a32'); R(x + 5, y + 5, T - 10, T - 10, '#b07a46');
+        ctx.strokeStyle = '#6a4224'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + 6, y + 6); ctx.lineTo(x + T - 6, y + T - 6);
+        ctx.moveTo(x + T - 6, y + 6); ctx.lineTo(x + 6, y + T - 6); ctx.stroke();
+      } else if (ch === 'W') {
+        ctx.strokeStyle = '#e8ecf5aa'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) { ctx.moveTo(x + 20, y + 20); ctx.lineTo(x + 20 + Math.cos(i * 1.26) * 22, y + 20 + Math.sin(i * 1.26) * 22); }
+        for (const rr of [7, 13, 19]) ctx.arc(x + 20, y + 20, rr, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (ch === 'D') {
+        R(x, y, T, T, '#4a4f63'); R(x + 4, y + 4, T - 8, T - 8, '#5d6480');
+        texto('◈', x + 20, y + 27, 18, '#efce95', 'center');
+      } else if (ch === 'L') {
+        R(x + 17, y + 18, 6, 22, '#6b5a3a');
+        ctx.strokeStyle = sc.portas ? '#9be7ce' : '#efce95'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(x + 20, y + 22); ctx.lineTo(x + (sc.portas ? 32 : 8), y + 6); ctx.stroke();
+        Neon.circle(ctx, x + (sc.portas ? 32 : 8), y + 6, 5, sc.portas ? '#9be7ce' : '#efce95');
+      } else if (ch === '+') {
+        const aceso = run.hab.has('lanterna');
+        ctx.save();
+        if (aceso) { Neon.glow(ctx, '#c4b1ff', 16); R(x + 2, y + 2, T - 4, 10, '#b9a3ff'); R(x + 6, y + 4, T - 12, 3, '#efe8ff'); }
+        else { ctx.globalAlpha = 0.25 + 0.1 * Math.sin(t * 3 + c); ctx.strokeStyle = '#b9a3ff'; ctx.setLineDash([4, 4]); ctx.strokeRect(x + 2, y + 2, T - 4, 10); }
+        ctx.restore();
+      }
+    }
+    for (const a of sc.argolas) {
+      const pode = run.hab.has('gancho');
+      ctx.save(); if (pode) Neon.glow(ctx, '#efce95', 12);
+      ctx.strokeStyle = pode ? '#efce95' : '#8d7f5d'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(a.x, a.y, 9, 0, Math.PI * 2); ctx.stroke();
+      R(a.x - 1, a.y - 20, 2, 11, '#8d7f5d');
+      ctx.restore();
+    }
+  }
+  function agua(sc, t, frenteDe) {
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+      if (sc.grade[r][c] !== '~') continue;
+      const x = c * T, y = r * T, topo = r === 0 ? lado(sc, c, -1) !== '~' : sc.grade[r - 1][c] !== '~';
+      const choque = sc.ents.some(e => e.tipo === 'poraque' && !e.fora && (e.est === 'choque' || e.est === 'carrega') && x + T > e.x0 && x < e.x1);
+      ctx.fillStyle = frenteDe ? (sc.escuro ? 'rgba(60,70,150,0.42)' : 'rgba(40,120,160,0.45)') : (sc.escuro ? '#141a3a' : '#123c4f');
+      ctx.fillRect(x, topo ? y + 6 : y, T, topo ? T - 6 : T);
+      if (!frenteDe) continue;
+      if (choque) { ctx.fillStyle = `rgba(255, 230, 120, ${0.12 + 0.12 * Math.sin(t * 40)})`; ctx.fillRect(x, topo ? y + 6 : y, T, T); }
+      if (topo) {
+        ctx.strokeStyle = sc.escuro ? '#8a95ff' : '#9fe3f2'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i <= T; i += 8) { const yy = y + 6 + Math.sin(t * 2.2 + (x + i) * 0.06) * 1.6; i ? ctx.lineTo(x + i, yy) : ctx.moveTo(x + i, yy); }
+        ctx.stroke();
+        if (sc.corrente && hash(c, Math.floor(t * 2)) > 0.7) R(x + ((t * sc.corrente) % T + T) % T, y + 12, 10, 2, '#c4f1ff88');
+      }
+    }
+  }
+  function cipos(sc, t) {
+    for (const v of sc.cipos) {
+      const r = v.held && run.cipo && run.cipo.v === v ? run.cipo.r : v.L;
+      const ex = v.ax + Math.sin(v.th) * r, ey = v.ay + Math.cos(v.th) * r;
+      ctx.strokeStyle = v.temp ? '#e9c27a' : '#8fbf5a'; ctx.lineWidth = v.temp ? 2.5 : 4;
+      ctx.beginPath(); ctx.moveTo(v.ax, v.ay);
+      ctx.quadraticCurveTo((v.ax + ex) / 2 - Math.cos(v.th) * 6, (v.ay + ey) / 2 + Math.sin(v.th) * 6, ex, ey); ctx.stroke();
+      if (!v.temp) {
+        R(v.ax - 10, v.ay - 6, 20, 6, '#5d8a3e');
+        for (let i = 1; i < 5; i++) {
+          const k = i / 5, lx = v.ax + (ex - v.ax) * k, ly = v.ay + (ey - v.ay) * k;
+          ctx.fillStyle = '#6fae4a'; ctx.beginPath(); ctx.ellipse(lx + (i % 2 ? 6 : -6), ly, 6, 3, i % 2 ? 0.6 : -0.6, 0, Math.PI * 2); ctx.fill();
+        }
+        Neon.circle(ctx, ex, ey, 5, '#c9de8e');
+      }
+    }
+  }
+  function itens(sc, t) {
+    for (const it of sc.itens) {
+      if (it.pego || it.oculto) continue;
+      const bob = Neon.motion.reduced ? 0 : Math.sin(t * 3 + it.x * 0.05) * 3, x = it.x, y = it.y + bob;
+      ctx.save();
+      if (it.tipo === 'semente') {
+        Neon.glow(ctx, '#efce95', 10);
+        ctx.fillStyle = '#efce95'; ctx.beginPath(); ctx.ellipse(x, y, 5, 7, 0.4, 0, Math.PI * 2); ctx.fill();
+        R(x - 1, y - 3, 2, 2, '#fff6d8');
+      } else if (it.tipo === 'tesouro') {
+        Neon.glow(ctx, '#ffd36b', 20);
+        ctx.fillStyle = '#ffd36b'; ctx.beginPath(); ctx.moveTo(x, y - 14); ctx.lineTo(x + 12, y - 2); ctx.lineTo(x, y + 12); ctx.lineTo(x - 12, y - 2); ctx.fill();
+        ctx.fillStyle = '#fff2c2'; ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 5, y - 2); ctx.lineTo(x, y + 4); ctx.fill();
+        if (Math.sin(t * 5 + x) > 0.8) { R(x + 9, y - 14, 2, 8, '#fff'); R(x + 6, y - 11, 8, 2, '#fff'); }
+      } else if (it.tipo === 'coracao') {
+        Neon.glow(ctx, '#ff6b8a', 14); texto('♥', x, y + 8, 22, '#ff6b8a', 'center');
+      } else if (it.tipo === 'idolo') {
+        Neon.glow(ctx, '#7dffb0', 22);
+        R(x - 8, y - 12, 16, 22, '#3fae78'); R(x - 11, y + 6, 22, 6, '#2d8a5c');
+        R(x - 5, y - 7, 3, 3, '#e8fff2'); R(x + 2, y - 7, 3, 3, '#e8fff2'); R(x - 4, y, 8, 2, '#1d5c3c');
+      } else if (it.tipo === 'reliquia') {
+        const cor = run.reg.cor;
+        Neon.glow(ctx, cor, 30);
+        ctx.strokeStyle = cor; ctx.lineWidth = 2;
+        for (let i = 0; i < 8; i++) {
+          const a = i * Math.PI / 4 + t;
+          ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 18, y + Math.sin(a) * 18); ctx.lineTo(x + Math.cos(a) * 28, y + Math.sin(a) * 28); ctx.stroke();
+        }
+        Neon.circle(ctx, x, y, 13, cor); Neon.circle(ctx, x, y, 7, '#ffffff');
+      }
+      ctx.restore();
+    }
+    for (const f of sc.fogueiras) {
+      const x = f.x, y = f.y;
+      R(x - 14, y - 6, 28, 6, '#6b4428'); R(x - 10, y - 9, 20, 4, '#8a5a32');
+      if (f.aceso) {
+        ctx.save(); Neon.glow(ctx, '#ff9d4d', 24);
+        for (let i = 0; i < 3; i++) {
+          const fl = Math.sin(t * 12 + i * 2) * 3, h = 18 + Math.sin(t * 9 + i) * 5;
+          ctx.fillStyle = ['#ff6b3d', '#ffb347', '#fff1a8'][i];
+          ctx.beginPath(); ctx.moveTo(x - 9 + i * 3, y - 8); ctx.quadraticCurveTo(x + fl, y - 8 - h * (1 - i * 0.25), x + 9 - i * 3, y - 8); ctx.fill();
+        }
+        ctx.restore();
+      } else {
+        ctx.globalAlpha = 0.5; Neon.circle(ctx, x + Math.sin(t) * 3, y - 18 - (t * 10 % 12), 4, '#9aa5b8'); ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // ── desenho: bichos, guardiões e o explorador ──
+  function membro(x0, y0, x1, y1, cor, w) {
+    ctx.strokeStyle = cor; ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  }
+  function olho(x, y, cor = '#fff6d8') { R(x - 1.5, y - 1.5, 3, 3, cor); }
+  function bicho(e, t) {
+    const x = e.x, y = e.y, d = e.dir, tonto = e.stun > 0;
+    ctx.save();
+    if (e.fora) { if (e.fuga <= 0) { ctx.restore(); return; } ctx.globalAlpha = Math.max(0, e.fuga / 0.7); }
+    switch (e.tipo) {
+      case 'cobra': {
+        const arma = e.est === 'arma', bote = e.est === 'bote';
+        const cor = '#7fcf6a', esc = '#3f7a3a';
+        for (let i = 5; i >= 0; i--) {
+          const k = i / 5, px = x - d * (arma ? 8 - Math.cos(k * 6) * 10 : (k - 0.4) * 34), py = y - 5 - (arma ? k * 4 + Math.sin(k * 6) * 5 : Math.sin(t * 8 + k * 5) * 2);
+          Neon.circle(ctx, px, py, 6 - k * 2, i % 2 ? cor : esc);
+        }
+        const hx = x + d * (bote ? 20 : 12), hy = y - (arma ? 18 : 9);
+        ctx.fillStyle = cor; ctx.beginPath(); ctx.ellipse(hx, hy, 8, 6, 0, 0, Math.PI * 2); ctx.fill();
+        olho(hx + d * 3, hy - 2, '#ffe07a');
+        if (bote || arma) membro(hx + d * 7, hy + 1, hx + d * 13, hy + (Math.sin(t * 30) > 0 ? 3 : -1), '#ff6b8a', 1.5);
+        break;
+      }
+      case 'tatu': {
+        if (e.est === 'anda' || e.est === 'abre') {
+          ctx.fillStyle = '#b08a6a'; ctx.beginPath(); ctx.ellipse(x, y - 9, 16, 10, 0, Math.PI, 0); ctx.fill();
+          R(x - 16, y - 9, 32, 4, '#8a6a52');
+          for (let i = -1; i <= 1; i++) membro(x + i * 8, y - 18, x + i * 8, y - 6, '#7a5a42', 2);
+          ctx.fillStyle = '#c9a07e'; ctx.beginPath(); ctx.ellipse(x + d * 17, y - 7, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
+          olho(x + d * 18, y - 8, '#2a1a10');
+          const p = Math.sin(t * 10) * 2;
+          R(x - 10 + p, y - 4, 4, 4, '#7a5a42'); R(x + 6 - p, y - 4, 4, 4, '#7a5a42');
+        } else {
+          const a = e.est === 'rola' ? e.x / 8 * d : 0;
+          ctx.translate(x, y - 9); ctx.rotate(a);
+          Neon.circle(ctx, 0, 0, 10, '#b08a6a');
+          ctx.strokeStyle = '#7a5a42'; ctx.lineWidth = 2;
+          for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(0, 0, 10, i * 2.1, i * 2.1 + 1.2); ctx.stroke(); }
+          membro(-8, 0, 8, 0, '#7a5a42', 2);
+        }
+        break;
+      }
+      case 'colmeia': {
+        R(x - 1, y - 30, 2, 6, '#6b5a3a');
+        ctx.fillStyle = '#d9a441'; ctx.beginPath(); ctx.ellipse(x, y - 13, 12, 14, 0, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 3; i++) R(x - 11 + Math.abs(i - 1) * 2, y - 20 + i * 7, 22 - Math.abs(i - 1) * 4, 2, '#8a5a1a');
+        R(x - 3, y - 6, 6, 4, '#3a2410');
+        for (const b of e.abelhas) {
+          const asa = Math.sin(t * 40 + b.t) * 3;
+          R(b.x - 3, b.y - 2, 6, 4, '#ffd34a'); R(b.x - 1, b.y - 2, 2, 4, '#1a1a1a');
+          R(b.x - 4, b.y - 5 - asa, 3, 3, '#e8f4ff'); R(b.x + 1, b.y - 5 + asa, 3, 3, '#e8f4ff');
+        }
+        break;
+      }
+      case 'jacare': {
+        const sub = tonto ? 10 : 0, bote = e.est === 'bote', arma = e.est === 'arma';
+        ctx.fillStyle = tonto ? '#3b6a4a' : '#5f9a52';
+        ctx.beginPath(); ctx.ellipse(x - d * 6, y - 4 + sub, 30, 7, 0, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 5; i++) R(x - d * (24 - i * 9) - 2, y - 11 + sub, 4, 4, '#3f7a3a');
+        const bx = x + d * 22;
+        if (bote) {
+          ctx.fillStyle = '#6fae5e';
+          ctx.beginPath(); ctx.moveTo(bx, y - 8); ctx.lineTo(bx + d * 26, y - 30); ctx.lineTo(bx + d * 30, y - 24); ctx.fill();
+          ctx.beginPath(); ctx.moveTo(bx, y - 4); ctx.lineTo(bx + d * 28, y - 2); ctx.lineTo(bx + d * 26, y + 4); ctx.fill();
+          for (let i = 0; i < 4; i++) R(bx + d * (6 + i * 5), y - 14 - i * 4, 2, 4, '#fff6d8');
+        } else {
+          ctx.fillStyle = '#6fae5e'; ctx.beginPath(); ctx.ellipse(bx + d * 8, y - 3 + sub, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+        }
+        olho(x + d * 14, y - 10 + sub, arma ? '#ff5a5a' : '#ffe07a');
+        if (tonto) texto('✦', x, y - 22, 14, '#d7c9ff', 'center');
+        break;
+      }
+      case 'piranha': {
+        if (e.est !== 'salta') break;
+        const a = Math.atan2(e.vy, 1) * 0.5;
+        ctx.translate(x, y - 7); ctx.rotate(a);
+        ctx.fillStyle = '#ff7a5a'; ctx.beginPath(); ctx.ellipse(0, 0, 9, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-15, -6); ctx.lineTo(-15, 6); ctx.fill();
+        R(2, 2, 6, 2, '#fff6d8'); olho(4, -3, '#1a1010');
+        break;
+      }
+      case 'poraque': {
+        const brilho = e.est === 'carrega' || e.est === 'choque';
+        if (brilho) Neon.glow(ctx, '#ffe36b', 18);
+        ctx.strokeStyle = brilho ? '#ffe36b' : '#2e3a52'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let i = 0; i <= 8; i++) { const px = x - 24 + i * 6, py = y - 5 + Math.sin(t * 5 + i * 0.9) * 4; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+        ctx.stroke();
+        olho(x + 24, y - 6, '#ffe36b');
+        if (e.est === 'choque') {
+          ctx.strokeStyle = '#fff7b0'; ctx.lineWidth = 2; ctx.beginPath();
+          for (let i = 0; i < 6; i++) { const a = i + t * 30; ctx.moveTo(x, y - 6); ctx.lineTo(x + Math.cos(a) * 30, y - 6 + Math.sin(a) * 16); }
+          ctx.stroke();
+        }
+        if (tonto) texto('✦', x, y - 20, 14, '#d7c9ff', 'center');
+        break;
+      }
+      case 'tronco': {
+        const bob = Math.sin(t * 2 + e.hx) * 1.5;
+        R(x - e.w, y - e.h + bob, e.w * 2, e.h, '#7a5233'); R(x - e.w, y - e.h + bob, e.w * 2, 3, '#a8784a');
+        ctx.fillStyle = '#c99a62'; ctx.beginPath(); ctx.ellipse(x + e.w, y - e.h / 2 + bob, 4, e.h / 2, 0, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case 'vitoria': {
+        const afunda = e.fundo * 10, treme = e.peso > 0.4 && e.est === 'boia' ? Math.sin(t * 40) * 1.5 : 0;
+        ctx.globalAlpha *= 1 - e.fundo * 0.6;
+        ctx.fillStyle = '#4fae5a'; ctx.beginPath(); ctx.ellipse(x + treme, y - 3 + afunda, e.w, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#8fdc7a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x + treme, y - 4 + afunda, e.w - 2, 5, 0, 0.3, Math.PI * 2 - 0.3); ctx.stroke();
+        if (hash(e.c, 3) > 0.5) Neon.circle(ctx, x + 8 + treme, y - 8 + afunda, 4, '#ff9ac9');
+        break;
+      }
+      case 'macaco': {
+        const j = e.joga > 0;
+        ctx.fillStyle = '#8a5a3a'; ctx.beginPath(); ctx.ellipse(x, y - 11, 10, 11, 0, 0, Math.PI * 2); ctx.fill();
+        Neon.circle(ctx, x, y - 26, 8, '#8a5a3a');
+        ctx.fillStyle = '#d9b08a'; ctx.beginPath(); ctx.ellipse(x + d * 2, y - 25, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+        olho(x + d * 4, y - 28, '#1a1010');
+        membro(x + d * 6, y - 16, x + d * (j ? 16 : 10), y - (j ? 30 : 6), '#8a5a3a', 3);
+        ctx.strokeStyle = '#8a5a3a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - d * 8, y - 4);
+        ctx.quadraticCurveTo(x - d * 22, y - 2, x - d * 18, y - 18 + Math.sin(t * 3) * 3); ctx.stroke();
+        break;
+      }
+      case 'onca': {
+        if (!run.noite) break;
+        const pulo = e.est === 'salto', ag = e.est === 'agacha' ? 5 : 0;
+        ctx.fillStyle = '#e0a83a'; ctx.beginPath(); ctx.ellipse(x, y - 13 + ag, 24, 10 - ag / 2, pulo ? -0.2 * d : 0, 0, Math.PI * 2); ctx.fill();
+        for (let i = 0; i < 6; i++) Neon.circle(ctx, x - 16 + i * 6, y - 15 + (i % 2) * 4 + ag, 2, '#5a3a10');
+        Neon.circle(ctx, x + d * 24, y - 18 + ag, 8, '#e0a83a');
+        olho(x + d * 27, y - 20 + ag, '#9bff8a');
+        if (!pulo) for (const dx of [-14, -4, 8, 16]) R(x + dx, y - 6, 4, 6, '#c08a2a');
+        ctx.strokeStyle = '#e0a83a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x - d * 22, y - 14);
+        ctx.quadraticCurveTo(x - d * 34, y - 22, x - d * 32, y - 30 + Math.sin(t * 4) * 4); ctx.stroke();
+        if (tonto) texto('✦', x, y - 34, 14, '#d7c9ff', 'center');
+        break;
+      }
     }
     ctx.restore();
   }
-  function rect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(Math.round(x), Math.round(y), w, h); }
-  function label(text, x, y, size, color, align = 'left') {
-    ctx.fillStyle = color; ctx.font = `bold ${size}px monospace`; ctx.textAlign = align; ctx.fillText(text, x, y);
-  }
-  function draw() {
-    const r = ROOMS[run.room], t = run.t;
-    rect(0, 0, W, H, '#102c29');
-    rect(0, 120, W, 200, '#214c3c');
-    rect(0, 260, W, 110, '#36704d');
-    // Camadas recortadas e paleta curta, como um cartucho de aventura.
-    rect(603, 102, 62, 62, '#d8c184'); rect(594, 116, 80, 34, '#d8c184');
-    for (let i = 0; i < 13; i++) {
-      const x = i * 71 + (run.room * 23) % 40;
-      rect(x, 150 + i % 3 * 19, 13, 198, '#28563e');
-      rect(x - 22, 164 + i % 3 * 19, 64, 13, '#28563e');
-      rect(x + 8, 197 + i % 3 * 19, 42, 10, '#28563e');
-    }
-    for (const x of [60, 171, 596, 751]) {
-      rect(x, 34, 20, 329, '#163a30'); rect(x + 20, 38, 9, 321, '#224737');
-      rect(x - 20, 94, 30, 13, '#163a30'); rect(x + 20, 146, 44, 12, '#163a30');
-      for (let k = 0; k < 5; k++) rect(x + 3, 125 + k * 43, 8, 14, '#2a523b');
-    }
-    for (let i = 0; i < 15; i++) {
-      const x = i * 58;
-      rect(x, 0, 62, 43 + i % 3 * 9, '#153d2e');
-      rect(x + 8, 42, 41, 26 + i % 2 * 14, '#245436');
-      rect(x + 17, 68, 17, 12 + i % 3 * 6, '#347044');
-    }
-    rect(0, FLOOR, W, H - FLOOR, '#342e28'); rect(0, FLOOR, W, 9, '#b3bd71');
-    rect(0, FLOOR + 9, W, 15, '#6d633f');
-    for (let i = 0; i < 50; i++) rect(i * 19, 399 + i % 4 * 14, 7, 3, '#4c4230');
-    for (const [a, b] of r.pits) {
-      rect(a, FLOOR, b - a, 110, '#0b211f');
-      rect(a + 5, FLOOR + 14, b - a - 10, 80, r.water ? '#245652' : '#131c1b');
-      if (r.water) {
-        for (let i = 0; i < 8; i++) rect(a + 12 + (i * 39 + t * 13) % (b - a - 35), FLOOR + 22 + i % 3 * 17, 19, 3, '#4c8670');
-        for (const x of [310, 391, 472]) {
-          rect(x, 378, 46, 12, '#8aaf68'); rect(x + 30, 373, 17, 7, '#a8c87e');
-          rect(x + 37, 371, 4, 4, '#eef4c4'); rect(x + 39, 372, 2, 3, '#102c29');
-          const open = Math.sin(t * 2 + x) > 0;
-          rect(x + 33, open ? 389 : 384, 20, 5, '#a8c87e');
-          for (let k = 0; k < 4; k++) rect(x + 34 + k * 5, 385, 2, open ? 5 : 2, '#f2e8b8');
+  function tiros(sc, t) {
+    for (const p of sc.tiros) {
+      if (p.fim) continue;
+      ctx.save();
+      if (p.tipo === 'fruta') {
+        Neon.circle(ctx, p.x, p.y, p.r, '#ff8a3d'); R(p.x - 1, p.y - p.r - 4, 2, 5, '#4f8a3a');
+      } else if (p.tipo === 'redemoinho') {
+        ctx.strokeStyle = '#d9e6ff'; ctx.lineWidth = 2;
+        for (let i = 0; i < 4; i++) {
+          const w = p.r * (1 - i * 0.2), yy = p.y - p.r + i * 8, a = t * 18 + i;
+          ctx.beginPath(); ctx.ellipse(p.x + Math.sin(a) * 3, yy + 8, w, 4, 0, 0, Math.PI * 2); ctx.stroke();
         }
+      } else if (p.tipo === 'bolha') {
+        Neon.glow(ctx, '#9fe3f2', 14);
+        ctx.fillStyle = '#9fe3f233'; ctx.strokeStyle = '#c8f6ff'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        R(p.x - 5, p.y - 6, 3, 3, '#ffffff');
+        texto('♪', p.x + 1, p.y + 5, 11, '#c8f6ff', 'center');
+      } else Neon.circle(ctx, p.x, p.y, p.r, '#ffd9a1');
+      ctx.restore();
+    }
+  }
+  function chefe(sc, t) {
+    const ch = sc.chefe;
+    if (!ch) return;
+    if (ch.tipo === 'saci') {
+      if (ch.vencido) {
+        if (ch.tt > 2) return;
+        ctx.globalAlpha = Math.max(0, 1 - ch.tt / 2);
+      }
+      const x = ch.x, y = ch.y;
+      if (ch.est === 'viaja' || ch.est === 'some') {
+        ctx.strokeStyle = '#d9e6ff'; ctx.lineWidth = 2;
+        for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.ellipse(x + Math.sin(t * 20 + i) * 4, y - 6 - i * 8, 6 + i * 3, 3, 0, 0, Math.PI * 2); ctx.stroke(); }
+        R(x - 6, y - 56, 12, 6, '#ff3b4a');
+      } else {
+        const ri = ch.est === 'ri', tonto = ch.est === 'tonto', pul = ri ? Math.abs(Math.sin(t * 8)) * 4 : 0;
+        membro(x, y - 18 - pul, x + 1, y - pul, '#5a3420', 5);
+        R(x - 7, y - 34 - pul, 14, 16, '#e9e2d0');
+        Neon.circle(ctx, x, y - 41 - pul, 7, '#5a3420');
+        ctx.fillStyle = '#ff3b4a'; ctx.beginPath(); ctx.moveTo(x - 8, y - 45 - pul); ctx.lineTo(x + 2, y - 60 - pul); ctx.lineTo(x + 8, y - 45 - pul); ctx.fill();
+        membro(x + 5, y - 40 - pul, x + 13, y - 38 - pul, '#c9a07e', 2);
+        R(x + 12, y - 42 - pul, 4, 4, '#c9a07e');
+        if (ri) { ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 10); Neon.circle(ctx, x + 16, y - 50 - pul - ((t * 20) % 10), 3, '#e6eef8'); ctx.globalAlpha = 1; }
+        if (tonto) texto('✦ ✦', x, y - 66, 12, '#d7c9ff', 'center');
+        olho(x + 3, y - 42 - pul);
+      }
+      ctx.globalAlpha = 1;
+    } else if (ch.tipo === 'iara') {
+      const x = ch.x, y = ch.y, canta = ch.est === 'canta' && !ch.vencido;
+      R(x - 30, y - 18, 60, 22, '#4a4f63'); R(x - 26, y - 22, 52, 6, '#5d6480');
+      if (!ch.vencido || ch.tt < 1.5) {
+        const sobe = ch.vencido ? ch.tt * 40 : 0;
+        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, ch.sup); ctx.clip();
+        ctx.fillStyle = '#5fd6b8'; ctx.beginPath(); ctx.ellipse(x + 18, y - 20 + sobe, 20, 7, 0.3, 0, Math.PI * 2); ctx.fill();
+        R(x - 6, y - 52 + sobe, 14, 30, '#5fd6b8');
+        Neon.circle(ctx, x, y - 60 + sobe, 9, '#f2c9a0');
+        ctx.fillStyle = '#2b2a5a'; ctx.beginPath(); ctx.ellipse(x - 4, y - 50 + sobe, 9, 22, 0.2, 0, Math.PI * 2); ctx.fill();
+        olho(x - 3, y - 61 + sobe, '#1a1a3a');
+        ctx.restore();
+      }
+      if (canta) {
+        ctx.save(); Neon.glow(ctx, '#9fe3f2', 12);
+        for (let i = 0; i < 3; i++) {
+          const k = (t * 0.8 + i / 3) % 1;
+          texto('♪', x - 20 - k * 120, y - 60 - Math.sin(k * 6) * 12, 16, `rgba(159, 227, 242, ${1 - k})`, 'center');
+        }
+        ctx.restore();
+      }
+      for (const b of ch.buzios) {
+        R(b.x - 3, b.y + 6, 6, 18, '#7a5233');
+        if (b.ok) {
+          ctx.save(); Neon.glow(ctx, '#ffd3e6', canta ? 18 : 8);
+          ctx.fillStyle = '#ffd3e6'; ctx.beginPath(); ctx.moveTo(b.x - 10, b.y + 6); ctx.quadraticCurveTo(b.x, b.y - 16, b.x + 10, b.y + 6); ctx.fill();
+          ctx.strokeStyle = '#c98aa8'; ctx.lineWidth = 1.5;
+          for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(b.x + i * 4, b.y + 6); ctx.lineTo(b.x, b.y - 8); ctx.stroke(); }
+          ctx.restore();
+        } else { R(b.x - 6, b.y + 2, 4, 4, '#c98aa8'); R(b.x + 3, b.y + 3, 3, 3, '#c98aa8'); }
       }
     }
-    if (r.vine) {
-      const v = vineAt(t);
-      ctx.strokeStyle = '#b9c981'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(400, 70); ctx.lineTo(v.x, v.y); ctx.stroke();
-      rect(v.x - 5, v.y - 3, 10, 7, '#e4d493');
-      if (run.hanging) label('ESPAÇO / PULAR PARA SOLTAR', 400, 125, 12, '#f1e0ac', 'center');
-    }
-    for (const base of r.logs) {
-      const x = logAt(base, t);
-      rect(x - 17, FLOOR - 23, 34, 23, '#6c4530'); rect(x - 13, FLOOR - 26, 26, 29, '#c58c57');
-      rect(x - 9, FLOOR - 21, 18, 19, '#69482d'); rect(x - 5, FLOOR - 17, 10, 11, '#d9a467');
-      rect(x - 2 + Math.sin(t * 6) * 4, FLOOR - 16, 3, 8, '#69482d');
-    }
-    for (const x of r.snakes) sprite(sprites.snake, x, FLOOR - 20, 4, false);
-    if (!run.collected[run.room]) {
-      const bob = Neon.motion.reduced ? 0 : Math.sin(t * 3) * 4;
-      sprite(sprites.treasure, 722, FLOOR - 32 + bob, 4, false);
-      label('1.000', 722, FLOOR - 49, 11, '#efce95', 'center');
-    }
-    if (run.room === ROOMS.length - 1) {
-      rect(763, 289, 37, 81, '#7b916c'); rect(754, 278, 46, 12, '#bbbe87');
-      rect(775, 318, 25, 52, '#152e29'); rect(763, 264, 37, 14, '#abb77f');
-    }
-    if (!run.invincible || Math.floor(t * 12) % 2 === 0 || Neon.motion.reduced) {
-      const bob = run.grounded && (held.size || pointers.size) ? Math.sin(t * 22) * 2 : 0;
-      sprite(sprites.explorer, run.x, run.y - 44 + bob, 4, run.facing < 0);
-      if (run.hanging) { rect(run.x - 12, run.y - 32, 4, 15, '#f6d5a1'); rect(run.x + 8, run.y - 32, 4, 15, '#f6d5a1'); }
-    }
-    label(`${String(run.room + 1).padStart(2, '0')} / ${String(ROOMS.length).padStart(2, '0')}  ${r.name}`, 400, 28, 15, '#d5dfb1', 'center');
-    for (let i = 0; i < ROOMS.length; i++) rect(346 + i * 19, 44, 11, 4, run.collected[i] ? '#efce95' : '#55745c');
-    label('←', 26, 347, 20, '#c6d6a0'); label('→', 774, 347, 20, '#c6d6a0', 'right');
   }
-  function hud() {
-    Neon.$('score').textContent = run.score;
-    Neon.$('treasures').textContent = `${run.collected.filter(Boolean).length}/${ROOMS.length}`;
-    Neon.$('lives').textContent = '♥'.repeat(run.lives) || '—';
-    const seconds = Math.ceil(run.time);
-    Neon.$('time').textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  // O explorador é desenhado em partes: chapéu, cabeça, camisa, braços e pernas
+  // mudam de ângulo com a pose, então correr, balançar e nadar saem do mesmo código.
+  function explorador(t) {
+    const s = run, f = s.face, pisca = s.inv > 0 && !Neon.motion.reduced && Math.floor(t * 14) % 2;
+    if (pisca) return;
+    const x = Math.round(s.x), lama = s.lama > 0 ? Math.min(22, s.lama * 9) : 0;
+    let y = Math.round(s.y) + lama;
+    const pele = '#f6d5a1', camisa = '#a8dba0', calca = '#6f87b8', bota = '#3a2a1e', chapeu = '#d9a85a';
+    ctx.save(); ctx.translate(x, y); ctx.scale(f, 1);
+    const correndo = s.chao && Math.abs(s.vx) > 30 && s.modo === 'normal';
+    const fase = (s.x * 0.09);
+    let quadril = -18, pA = 0, pB = 0, bA = 0.3, bB = -0.3, tronco = 0, bracoCima = false;
+    if (s.modo === 'normal' && s.baixo) quadril = -8;
+    if (correndo) { pA = Math.sin(fase) * 0.8; pB = -pA; bA = -pA * 0.8; bB = pA * 0.8; }
+    else if (s.modo === 'normal' && !s.chao) { pA = 0.6; pB = -0.4; bA = -1.2; bB = 1; if (s.planando) { bA = -2.4; bB = 2.4; } }
+    else if (s.modo === 'cipo' || s.modo === 'escada' || s.modo === 'parede') bracoCima = true;
+    else if (s.modo === 'agua' || s.modo === 'mergulho') { tronco = s.modo === 'mergulho' ? 1.1 : 0.5; pA = Math.sin(t * 8) * 0.5; pB = -pA; bA = Math.sin(t * 6) * 1.4 - 1; bB = -bA - 2; }
+    if (s.modo === 'escada') { const k = Math.sin(s.y * 0.15); pA = k * 0.4; pB = -k * 0.4; }
+    ctx.rotate(tronco * 0.6);
+    const perna = (a, dx) => {
+      const jx = dx + Math.sin(a) * 10, jy = quadril + Math.cos(a) * 10;
+      const fx = jx + Math.sin(a * 0.4) * 9, fy = s.baixo ? quadril + 8 : jy + 9;
+      membro(dx, quadril, jx, jy, calca, 6); membro(jx, jy, fx, fy, calca, 5);
+      R(fx - 3, fy - 2, 8, 4, bota);
+    };
+    perna(pB, -2); perna(pA, 2);
+    const ombro = quadril - 14, alto = s.baixo ? 6 : 0;
+    R(-7, ombro - 2 + alto, 14, 16 - alto, camisa); R(-7, quadril - 3, 14, 3, '#6b4a2a');
+    R(-2, ombro - 2 + alto, 4, 14 - alto, '#8cc488');
+    const braco = (a, cor) => {
+      if (bracoCima) { membro(0, ombro + alto, 3, ombro - 14, cor, 4); return; }
+      membro(0, ombro + 2 + alto, Math.sin(a) * 12, ombro + 2 + alto + Math.cos(a) * 12, cor, 4);
+    };
+    braco(bB, '#e2bf8c');
+    // cabeça e chapéu
+    const cy = ombro - 9 + alto;
+    R(-6, cy - 5, 12, 11, pele); olho(3, cy, '#1d2a2a');
+    R(-11, cy - 7, 22, 3, chapeu); R(-7, cy - 13, 14, 7, chapeu); R(-7, cy - 9, 14, 2, '#8a5a32');
+    if (s.chicote > 0) {
+      const k = 1 - s.chicote / CHICOTE_T, ext = k < 0.25 ? k / 0.25 : 1 - (k - 0.25) * 0.25;
+      const hx = 10, hy = ombro + 4 + alto, tx = 8 + s.alcance * ext, ty = hy + 6 - Math.sin(k * 9) * 4;
+      membro(0, ombro + 2 + alto, hx, hy, pele, 4);
+      ctx.strokeStyle = '#c99a62'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(hx, hy);
+      ctx.quadraticCurveTo((hx + tx) / 2, hy - 18 * (1 - ext) - 6, tx, ty); ctx.stroke();
+      if (k > 0.18 && k < 0.4) { ctx.save(); Neon.glow(ctx, '#fff1a8', 14); texto('✦', tx, ty + 5, 14, '#fff1a8', 'center'); ctx.restore(); }
+    } else braco(bA, pele);
+    ctx.restore();
+    if (s.modo === 'mergulho') {
+      const n = Math.ceil(s.ar / s.arMax * 6);
+      for (let i = 0; i < 6; i++) {
+        ctx.strokeStyle = i < n ? '#cdf6ff' : '#cdf6ff33'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x - 25 + i * 10, s.y - 62, 4, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    if (s.escudo) { ctx.save(); ctx.globalAlpha = 0.25 + 0.1 * Math.sin(t * 4); ctx.strokeStyle = '#8fd8ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, s.y - 24, 30, 0, Math.PI * 2); ctx.stroke(); ctx.restore(); }
   }
-  function clearInput() { held.clear(); pointers.clear(); jumpQueued = false; }
-  function startGame() {
-    Neon.audio.ensure(); clearInput(); run = expedition(); state = 'playing';
-    lastFrame = performance.now(); Neon.overlay.hide(); Neon.audio.music.start();
-    Neon.toast(ROOMS[0].hint); hud();
+
+  // ── progresso salvo ──
+  // v para migrar sem apagar. Nunca renomear a chave: é o progresso de quem joga.
+  const SAVE_KEY = 'neon-jungle-save';
+  const MELHORIAS = [
+    { id: 'coracao', icone: '❤️', nome: 'CORAÇÃO', desc: '+1 coração', precos: [25, 60] },
+    { id: 'chicote', icone: '➰', nome: 'CHICOTE', desc: 'alcança mais longe', precos: [20, 45] },
+    { id: 'folego', icone: '💨', nome: 'FÔLEGO', desc: '+3 s de ar no mergulho', precos: [20, 45] },
+    { id: 'lanterna', icone: '🔦', nome: 'LUZ', desc: 'enxerga mais no escuro', precos: [20, 45] },
+    { id: 'amuleto', icone: '🧿', nome: 'AMULETO', desc: 'segura a 1ª pancada', precos: [70] },
+    { id: 'bussola', icone: '🧭', nome: 'BÚSSOLA', desc: 'mostra o ídolo no mapa', precos: [35] },
+  ];
+  const HAB_INFO = {
+    gancho: { icone: '🎣', nome: 'GANCHO', dica: 'X perto de uma argola dourada: você balança nela.' },
+    mergulho: { icone: '🐠', nome: 'MERGULHO', dica: '↓ na água para mergulhar. Cuidado com o ar.' },
+    lanterna: { icone: '🔦', nome: 'LANTERNA', dica: 'Ilumina as grutas e acende os cristais.' },
+    escalada: { icone: '🧗', nome: 'ESCALADA', dica: 'No ar, encoste no musgo para subir.' },
+    planar: { icone: '🕊️', nome: 'PLANAR', dica: 'Segure o pulo no ar para planar.' },
+  };
+  const saveVazio = () => ({ v: 1, aberta: 0, sementes: 0, hab: [], up: {}, reg: {} });
+  function carregarSave() {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (_) { d = null; }   // JSON quebrado não trava o jogo
+    if (!d || typeof d !== 'object') d = saveVazio();
+    const r = saveVazio();
+    r.aberta = Neon.clamp(d.aberta | 0, 0, REGIOES.length - 1);
+    r.sementes = Math.max(0, Math.floor(+d.sementes || 0));
+    r.hab = Array.isArray(d.hab) ? HABS.filter(h => d.hab.includes(h)) : [];
+    for (const m of MELHORIAS) r.up[m.id] = Neon.clamp((d.up && d.up[m.id]) | 0, 0, m.precos.length);
+    for (const g of REGIOES) {
+      const x = (d.reg && d.reg[g.id]) || {}, se = x.selos || {};
+      r.reg[g.id] = { melhor: Math.max(0, x.melhor | 0), feita: !!x.feita, idolo: !!x.idolo,
+        selos: { tesouros: !!se.tesouros, sol: !!se.sol, intacto: !!se.intacto },
+        achados: Array.isArray(x.achados) ? [...new Set(x.achados.filter(a => typeof a === 'string'))].slice(0, 60) : [] };
+    }
+    return r;
   }
-  function pauseGame() {
+  let save = carregarSave();
+  const gravar = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) { /* sem armazenamento o jogo segue */ } };
+  const recordeTotal = () => REGIOES.reduce((n, g) => n + save.reg[g.id].melhor, 0);
+  let pb = Neon.best.get('jungle');
+
+  // ── estado ──
+  // menu · hub · playing · paused · mapa · fim
+  let run = novaCorrida(0, { hab: save.hab, up: save.up }), state = 'menu', lastFrame = performance.now();
+  let aba = 'mapa';
+  const particles = new Neon.Particles();
+  const fx = { tremor: 0, flash: 0, flashCor: '#ed887f', troca: 0, trocaDir: 0 };
+  const ambiente = [];
+  const els = { hub: Neon.$('hub'), trilha: Neon.$('trilha'), campo: Neon.$('campo'), habs: Neon.$('habs'),
+    hubRecorde: Neon.$('hubRecorde'), hubSementes: Neon.$('hubSementes'), abaMapa: Neon.$('abaMapa'), abaCampo: Neon.$('abaCampo') };
+  const som = (nome, ...a) => { const f = Neon.audio.sfx[nome]; if (f) f(...a); };
+
+  // ── mapa da selva (hub) ──
+  function cartaoRegiao(g, i) {
+    const r = save.reg[g.id], aberta = i <= save.aberta, total = totalTesouros(g);
+    const b = document.createElement('button');
+    b.className = 'regiao' + (aberta && !r.feita && i === save.aberta ? ' proxima' : '');
+    b.disabled = !aberta;
+    b.style.setProperty('--cor', g.cor); b.style.setProperty('--borda', g.cor + '55'); b.style.setProperty('--fundo', g.cor + '12');
+    const selos = [['sol', '☀️'], ['tesouros', '💎'], ['intacto', '❤️']].map(([k, ic]) => `<i class="${r.selos[k] ? 'ok' : ''}">${ic}</i>`).join('');
+    b.innerHTML = aberta
+      ? `<span class="guardiao">${r.feita ? '✓ ' : ''}${g.guardiao}</span><span class="ic">${g.icone}</span><b>${g.nome}</b>`
+        + `<span class="selos">${selos}<i class="${r.idolo ? 'ok' : ''}">🗿</i></span>`
+        + `<span class="pts">${r.melhor ? '🏆 ' + r.melhor : '💎 ' + r.achados.length + '/' + total}</span>`
+      : `<span class="ic">🔒</span><b>${g.nome}</b><span class="pts">vença ${REGIOES[i - 1].guardiao}</span>`;
+    b.setAttribute('aria-label', aberta
+      ? `${g.nome}, guardião ${g.guardiao}. Recorde ${r.melhor}. Tesouros ${r.achados.length} de ${total}.${r.idolo ? ' Ídolo encontrado.' : ''}`
+      : `${g.nome}, trancada`);
+    if (aberta) b.addEventListener('click', () => { Neon.audio.ensure(); som('click'); iniciarRegiao(i); });
+    return b;
+  }
+  function montarCampo() {
+    els.campo.innerHTML = '';
+    for (const m of MELHORIAS) {
+      const nivel = save.up[m.id] | 0, max = m.precos.length, custo = m.precos[nivel], cheio = nivel >= max;
+      const b = document.createElement('button');
+      b.className = 'melhoria' + (!cheio && save.sementes < custo ? ' caro' : '');
+      b.disabled = cheio;
+      b.innerHTML = `<span class="ic">${m.icone}</span><b>${m.nome}</b><span class="pips">${'■'.repeat(nivel)}${'□'.repeat(max - nivel)}</span>`
+        + `<span class="desc">${m.desc}</span><span class="preco">${cheio ? 'MÁXIMO' : '✦ ' + custo}</span>`;
+      b.setAttribute('aria-label', `${m.nome}: ${m.desc}. Nível ${nivel} de ${max}. ${cheio ? 'No máximo' : 'Custa ' + custo + ' sementes'}`);
+      b.addEventListener('click', () => {
+        if (save.sementes < custo) { som('wrong'); Neon.toast(`✦ FALTAM ${custo - save.sementes} SEMENTES`); return; }
+        save.sementes -= custo; save.up[m.id] = nivel + 1; gravar();
+        som('level'); Neon.toast(`${m.icone} ${m.nome} ${'■'.repeat(nivel + 1)}`);
+        montarHub();
+        els.campo.children[MELHORIAS.indexOf(m)].focus();
+      });
+      els.campo.appendChild(b);
+    }
+  }
+  const podeComprar = () => MELHORIAS.some(m => (save.up[m.id] | 0) < m.precos.length && save.sementes >= m.precos[save.up[m.id] | 0]);
+  function montarHub() {
+    els.trilha.innerHTML = '';
+    REGIOES.forEach((g, i) => els.trilha.appendChild(cartaoRegiao(g, i)));
+    montarCampo();
+    els.habs.innerHTML = HABS.map(h => `<span class="hab${save.hab.includes(h) ? ' tem' : ''}" title="${HAB_INFO[h].dica}"><span>${HAB_INFO[h].icone}</span>${HAB_INFO[h].nome}</span>`).join('');
+    els.hubRecorde.textContent = recordeTotal();
+    els.hubSementes.textContent = save.sementes;
+    els.abaCampo.classList.toggle('alerta', podeComprar());
+    mostrarAba(aba);
+  }
+  function mostrarAba(qual) {
+    aba = qual;
+    els.abaMapa.setAttribute('aria-pressed', String(qual === 'mapa'));
+    els.abaCampo.setAttribute('aria-pressed', String(qual === 'campo'));
+    els.trilha.classList.toggle('hidden', qual !== 'mapa');
+    els.campo.classList.toggle('hidden', qual !== 'campo');
+  }
+  els.abaMapa.addEventListener('click', () => { som('click'); mostrarAba('mapa'); });
+  els.abaCampo.addEventListener('click', () => { som('click'); mostrarAba('campo'); });
+  function abrirHub() {
+    clearInput(); state = 'hub';
+    Neon.audio.music.stop(); Neon.overlay.hide();
+    els.hub.classList.remove('hidden');
+    montarHub();
+    const alvo = els.trilha.querySelector('.proxima') || els.trilha.querySelector('button:not(:disabled)');
+    if (alvo && !matchMedia('(pointer: coarse)').matches) alvo.focus();
+  }
+
+  // ── regiões ──
+  function iniciarRegiao(i) {
+    Neon.audio.ensure(); clearInput(); particles.clear(); ambiente.length = 0;
+    run = novaCorrida(i, { hab: save.hab, up: save.up });
+    state = 'playing'; lastFrame = performance.now();
+    els.hub.classList.add('hidden'); Neon.overlay.hide();
+    Neon.audio.music.start();
+    fx.troca = 0.4; fx.trocaDir = 0;
+    Neon.toast(tela(run).def.dica);
+    hud();
+  }
+  // Guarda o que já vale fora da corrida: sementes e tesouros encontrados.
+  function guardarAchados() {
+    const r = save.reg[run.reg.id];
+    r.achados = [...new Set([...r.achados, ...run.tesouros])];
+    if (run.idolo) r.idolo = true;
+    save.sementes += run.sementes; run.sementes = 0;
+  }
+  function sairParaHub() {
+    if (state === 'paused' || state === 'mapa') { guardarAchados(); gravar(); }
+    abrirHub();
+  }
+  function concluirRegiao() {
+    const g = run.reg, r = save.reg[g.id], res = run.resultado, ganhou = run.sementes;
+    const novo = run.pontos > r.melhor;
+    guardarAchados();
+    r.feita = true; r.melhor = Math.max(r.melhor, run.pontos);
+    for (const k of ['tesouros', 'sol', 'intacto']) if (res.selos[k]) r.selos[k] = true;
+    const novaHab = !save.hab.includes(g.hab);
+    if (novaHab) save.hab.push(g.hab);
+    save.aberta = Math.max(save.aberta, Math.min(REGIOES.length - 1, run.ri + 1));
+    gravar();
+    const total = recordeTotal();
+    pb = Neon.best.update('jungle', total); Neon.$('best').textContent = pb;
+    state = 'fim'; clearInput(); Neon.audio.music.down(); som('record');
+    const chip = (ok, txt) => `<span class="key${ok ? '' : ' apagado'}">${txt}</span>`;
+    const h = HAB_INFO[g.hab];
+    Neon.overlay.show('RELÍQUIA RECUPERADA!', `${run.pontos} pontos${novo ? ' · recorde da região!' : ''}`, 'MAPA DA SELVA', 'record',
+      `<div class="chips">${chip(res.selos.sol, '☀️ +' + res.bonus.sol)}${chip(res.selos.tesouros, `💎 ${run.tesouros.size}/${res.total}`)}`
+      + `${chip(res.selos.intacto, '❤️ sem dano')}${chip(run.idolo || r.idolo, '🗿')}${chip(true, '✦ +' + ganhou)}</div>`
+      + (novaHab ? `<div class="chips"><span class="key novo">${h.icone} ${h.nome}: ${h.dica}</span></div>` : ''));
+  }
+  function pausar() {
     if (state !== 'playing') return;
     state = 'paused'; clearInput(); Neon.audio.music.stop();
-    Neon.overlay.show('EXPEDIÇÃO EM PAUSA', 'Seu tempo está guardado. Continue quando quiser.', 'CONTINUAR');
+    Neon.overlay.show('EXPEDIÇÃO EM PAUSA', `${run.reg.nome} · ${tela(run).def.nome}`, 'CONTINUAR', '',
+      '<button class="sair" id="sairBtn">↩ MAPA DA SELVA</button>');
+    const b = Neon.$('sairBtn');
+    if (b) b.addEventListener('click', () => { som('click'); sairParaHub(); });
   }
-  function resumeGame() {
-    if (state !== 'paused') return;
+  function continuar() {
+    if (state !== 'paused' && state !== 'mapa') return;
     state = 'playing'; clearInput(); lastFrame = performance.now(); Neon.overlay.hide(); Neon.audio.music.start();
   }
-  function finish() {
-    state = 'gameover'; clearInput(); Neon.audio.music.down();
-    pb = Neon.best.update('jungle', run.score); Neon.$('best').textContent = pb;
-    const won = run.status === 'won';
-    if (won) Neon.audio.sfx.record(); else Neon.audio.sfx.death();
-    Neon.overlay.show(won ? 'EXPEDIÇÃO COMPLETA!' : 'A SELVA FICOU COM ESSA',
-      `${run.collected.filter(Boolean).length}/${ROOMS.length} tesouros · ${run.score} pontos. ${won ? 'O templo do sol voltou a brilhar.' : run.time <= 0 ? 'O tempo acabou.' : 'Suas vidas acabaram.'}`,
-      'EXPLORAR DE NOVO', won ? 'record' : 'go');
+  function botaoPrincipal() {
+    if (state === 'paused') continuar();
+    else if (state === 'menu' || state === 'fim') abrirHub();
   }
-  const keys = { arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', arrowup: 'jump', w: 'jump', ' ': 'jump' };
+  Neon.$('startBtn').addEventListener('click', () => { botaoPrincipal(); Neon.$('startBtn').blur(); });
+  Neon.onHide(pausar);
+
+  // ── eventos da física viram som, faísca e aviso ──
+  const NOMES = { saci: 'O SACI', iara: 'A IARA' };
+  const FALAS = { saci: 'O Saci roubou a relíquia! Acerte-o enquanto ele ri.', iara: 'O canto da Iara puxa você para o rio. Quebre os búzios!' };
+  function eventos() {
+    for (const e of run.events) {
+      const { x, y } = e;
+      switch (e.nome) {
+        case 'pulo': som('flap'); break;
+        case 'chicote': som('chicote'); break;
+        case 'gancho': som('chicote'); som('tick'); particles.burst(x, y, '#efce95', 6, 80, 2); break;
+        case 'cipo': som('tick'); break;
+        case 'semente': som('point'); particles.burst(x, y, '#efce95', 6, 90, 2); break;
+        case 'tesouro': som('golden'); particles.burst(x, y, '#ffd36b', 16, 160, 3); particles.float(x, y - 20, '+1.000', '#ffd36b', 16);
+          Neon.toast(`💎 TESOURO ${run.tesouros.size}/${totalTesouros(run.reg)}`); break;
+        case 'coracao': som('level'); particles.float(x, y - 16, '♥', '#ff6b8a', 18); break;
+        case 'idolo': som('record'); particles.wave(x, y, '#7dffb0', 120); particles.float(x, y - 24, '+2.500', '#7dffb0', 16); Neon.toast('🗿 ÍDOLO SECRETO!'); break;
+        case 'fogueira': som('fogueira'); particles.burst(x, y, '#ffb347', 12, 120, 3); Neon.toast('🔥 Fogueira acesa: corações cheios, e você volta aqui.'); break;
+        case 'dano':
+          som('hit'); fx.tremor = 0.3; fx.flash = 0.25; fx.flashCor = '#ed887f';
+          particles.burst(x, y, '#ed887f', 14, 170, 3); clearQueued(); break;
+        case 'queda': som('drop'); fx.flash = 0.3; fx.flashCor = '#0b1020'; clearQueued();
+          Neon.toast(e.extra === 'lama' ? 'A lama engoliu você. −1 ♥' : e.extra === 'ar' ? 'O ar acabou! −1 ♥' : 'Caiu! −1 ♥'); break;
+        case 'desmaio': som('death'); fx.flash = 0.6; fx.flashCor = '#0b1020'; Neon.toast('Você desmaiou e acordou na fogueira. −500'); break;
+        case 'escudo': som('freeze'); particles.wave(x, y, '#8fd8ff', 80); Neon.toast('🧿 O amuleto segurou a pancada!'); break;
+        case 'foge': som('whack'); particles.burst(x, y, '#e6eef8', 10, 130, 3);
+          particles.float(x, y - 14, e.extra === 'abelha' ? '+50' : '+150', '#efce95', 13); break;
+        case 'atordoa': som('whack'); particles.burst(x, y, '#d7c9ff', 8, 110, 2); break;
+        case 'rebate': som('paddle'); particles.burst(x, y, '#efce95', 6, 100, 2); break;
+        case 'quica': case 'enrola': som('wall'); break;
+        case 'caixa': som('crunch', false); particles.burst(x, y, '#b07a46', 12, 150, 3); break;
+        case 'teia': som('rip'); particles.burst(x, y, '#e8ecf5', 10, 90, 2); break;
+        case 'alavanca': som('lock'); Neon.toast('Clac! Uma passagem se abriu.'); break;
+        case 'ponte': som('ponte'); particles.burst(x, y, '#c99a62', 10, 120, 3); break;
+        case 'bolha': som('open'); break;
+        case 'mergulho': case 'afunda': case 'splash': som('splash'); particles.burst(x, Math.max(y, 380), '#9fe3f2', 8, 120, 2.5); break;
+        case 'carrega': som('sizzle'); break;
+        case 'choque': som('zap'); fx.flash = Math.max(fx.flash, 0.12); fx.flashCor = '#ffe36b'; break;
+        case 'joga': som('tick'); break;
+        case 'abelhas': som('grind', 1); break;
+        case 'colmeia': som('crunch', true); particles.burst(x, y, '#d9a441', 18, 170, 3); particles.float(x, y - 16, '+300', '#efce95', 14); break;
+        case 'estoura': particles.burst(x, y, '#e6eef8', 6, 80, 2); break;
+        case 'jacare': som('rugido', 0.4); break;
+        case 'rugido': som('rugido', 1); break;
+        case 'redemoinho': som('redemoinho'); break;
+        case 'canto': som('canto'); break;
+        case 'acerto': som('whack'); fx.tremor = 0.2; particles.burst(x, y, '#ffd36b', 14, 160, 3); particles.float(x, y - 20, '+500', '#ffd36b', 15); break;
+        case 'buzio': som('clear', 2); fx.tremor = 0.15; particles.burst(x, y, '#ffd3e6', 16, 150, 3); particles.float(x, y - 20, '+500', '#ffd3e6', 15); break;
+        case 'chefe': Neon.toast(FALAS[e.extra] || 'Um guardião desperta.'); break;
+        case 'guardiao': som('record'); fx.flash = 0.4; fx.flashCor = '#fff6d8'; particles.wave(x, y, run.reg.cor, 220);
+          Neon.toast(`${NOMES[e.extra] || 'O GUARDIÃO'} SE RENDEU! Pegue a relíquia.`); break;
+        case 'noite': som('rugido', 1); Neon.toast('🌙 Anoiteceu. A selva ficou perigosa — e o bônus de sol acabou.'); break;
+        case 'tela': {
+          const d = tela(run).def;
+          fx.troca = 0.25; fx.trocaDir = Math.sign(400 - run.x);
+          if (d.dica) Neon.toast(d.dica);
+          break;
+        }
+        case 'volta': fx.troca = 0.2; fx.trocaDir = Math.sign(400 - run.x); break;
+      }
+    }
+    run.events.length = 0;
+  }
+
+  // ── entrada ──
+  const KEYS = { arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', arrowup: 'up', w: 'up', arrowdown: 'down', s: 'down',
+    ' ': 'jump', z: 'jump', k: 'jump', x: 'whip', j: 'whip', shift: 'whip' };
+  const held = new Set(), pointers = new Map();
+  let jumpQueued = false, whipQueued = false, stick = null, touchJump = 0;
+  const coarse = window.matchMedia ? window.matchMedia('(pointer: coarse)').matches : false;
+  function clearQueued() { jumpQueued = false; whipQueued = false; }
+  function clearInput() { held.clear(); pointers.clear(); stick = null; touchJump = 0; clearQueued(); }
+  // ↑ também pula, menos quando há raiz para subir ou o explorador está pendurado
+  const cimaPula = () => run.modo === 'normal' && bloco(run, tela(run), Math.floor(run.x / T), Math.floor((run.y - 20) / T)) !== 'H';
+  function alternarMapa() {
+    if (state === 'playing') { state = 'mapa'; clearInput(); som('pause'); }
+    else if (state === 'mapa') { state = 'playing'; clearInput(); lastFrame = performance.now(); som('pause'); }
+  }
   document.addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
-    if (k === 'p') { if (!e.repeat) state === 'playing' ? pauseGame() : resumeGame(); return; }
+    if (k === 'p' || k === 'escape') {
+      if (e.repeat) return;
+      if (state === 'mapa') { alternarMapa(); return; }
+      if (state === 'playing') pausar(); else if (state === 'paused') continuar();
+      return;
+    }
+    if (k === 'm') { if (!e.repeat) alternarMapa(); return; }
     if (e.target.closest('button, a') && (k === ' ' || k === 'enter')) return;
-    if (keys[k] || k === 'enter') e.preventDefault();
+    if (KEYS[k] || k === 'enter') e.preventDefault();
     if (e.repeat) return;
-    if ((k === 'enter' || k === ' ') && state !== 'playing') { state === 'paused' ? resumeGame() : startGame(); return; }
-    if (state !== 'playing') return;
-    if (keys[k] === 'jump') jumpQueued = true;
-    else if (keys[k]) held.add(k);
+    if ((k === 'enter' || k === ' ') && (state === 'menu' || state === 'paused' || state === 'fim')) { botaoPrincipal(); return; }
+    if (state !== 'playing' || !KEYS[k]) return;
+    held.add(k);
+    if (KEYS[k] === 'jump') jumpQueued = true;
+    if (KEYS[k] === 'whip') whipQueued = true;
+    if (KEYS[k] === 'up' && cimaPula()) jumpQueued = true;
   });
   document.addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
   document.querySelectorAll('[data-action]').forEach(button => {
     button.addEventListener('pointerdown', e => {
-      e.preventDefault(); if (state !== 'playing') return;
+      e.preventDefault(); e.stopPropagation();
+      if (state !== 'playing') return;
+      pointers.set(e.pointerId, button.dataset.action);
       if (button.dataset.action === 'jump') jumpQueued = true;
-      else pointers.set(e.pointerId, button.dataset.action);
+      if (button.dataset.action === 'whip') whipQueued = true;
     });
-    button.addEventListener('click', e => { if (e.detail === 0 && state === 'playing' && button.dataset.action === 'jump') jumpQueued = true; });
+    button.addEventListener('click', e => {
+      if (e.detail !== 0 || state !== 'playing') return;
+      if (button.dataset.action === 'jump') jumpQueued = true;
+      if (button.dataset.action === 'whip') whipQueued = true;
+    });
   });
-  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, e => pointers.delete(e.pointerId));
-  Neon.$('startBtn').addEventListener('click', () => {
-    state === 'paused' ? resumeGame() : startGame(); Neon.$('startBtn').blur();
+  // Manche na metade esquerda: nasce onde o dedo encosta e lê os dois eixos —
+  // para cima sobe raiz e cipó, para baixo agacha e mergulha.
+  function toFrame(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  }
+  Neon.$('stage').addEventListener('pointerdown', e => {
+    if (state !== 'playing' || e.target.closest('button, a, .hub')) return;
+    e.preventDefault();
+    const p = toFrame(e);
+    if (p.x < W * 0.5) stick = { id: e.pointerId, ox: p.x, oy: p.y, dx: 0, dy: 0 };
+    else { touchJump = e.pointerId + 1; jumpQueued = true; }
   });
-  Neon.onHide(pauseGame);
+  window.addEventListener('pointermove', e => {
+    if (!stick || stick.id !== e.pointerId) return;
+    const p = toFrame(e);
+    stick.dx = Neon.clamp((p.x - stick.ox) / 50, -1, 1);
+    stick.dy = Neon.clamp((p.y - stick.oy) / 50, -1, 1);
+  });
+  for (const type of ['pointerup', 'pointercancel']) window.addEventListener(type, e => {
+    pointers.delete(e.pointerId);
+    if (stick && stick.id === e.pointerId) stick = null;
+    if (touchJump === e.pointerId + 1) touchJump = 0;
+  });
+  function entrada() {
+    const acts = [...held].map(k => KEYS[k]).concat([...pointers.values()]);
+    const up = acts.includes('up') || (stick ? stick.dy < -0.55 : false);
+    return {
+      left: acts.includes('left') || (stick ? stick.dx < -0.3 : false),
+      right: acts.includes('right') || (stick ? stick.dx > 0.3 : false),
+      up, down: acts.includes('down') || (stick ? stick.dy > 0.55 : false),
+      jump: jumpQueued, jumpHeld: acts.includes('jump') || touchJump > 0 || jumpQueued || (acts.includes('up') && run.modo === 'normal'),
+      whip: whipQueued,
+    };
+  }
+
+  // ── painel ──
+  function hud() {
+    Neon.$('score').textContent = run.pontos;
+    Neon.$('treasures').textContent = `${run.tesouros.size}/${totalTesouros(run.reg)}`;
+    Neon.$('lives').textContent = '♥'.repeat(Math.max(0, run.vidas)) + '♡'.repeat(Math.max(0, run.maxVidas - run.vidas));
+    const seg = Math.ceil(run.tempo);
+    Neon.$('time').textContent = run.noite ? '🌙' : `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
+  }
+  function hudCanvas(sc) {
+    const escala = H / (Neon.$('stage').getBoundingClientRect().height || H), abaixo = Math.round(58 * escala);
+    ctx.save();
+    R(0, 0, W, 34, '#060b16a0');
+    texto(`${run.reg.icone}  ${sc.def.nome}`, W / 2, 22, 13, run.reg.cor, 'center', 'Orbitron, sans-serif');
+    let x = 14;
+    for (let i = 0; i < run.maxVidas; i++) { texto(i < run.vidas ? '♥' : '♡', x, abaixo + 18, 18, i < run.vidas ? '#ff6b8a' : '#5a4a5a'); x += 18; }
+    if (run.escudo) texto('🧿', x + 4, abaixo + 17, 14, '#8fd8ff');
+    texto(`✦ ${run.sementes}`, W - 14, abaixo + 16, 14, '#efce95', 'right');
+    texto(`💎 ${run.tesouros.size}/${totalTesouros(run.reg)}`, W - 14, abaixo + 34, 12, '#ffd36b', 'right');
+    const ch = sc.chefe;
+    if (ch && !ch.vencido) {
+      const bw = 200, bx = W / 2 - bw / 2;
+      texto(NOMES[ch.tipo] || 'GUARDIÃO', W / 2, 52, 11, '#ffd3e6', 'center', 'Orbitron, sans-serif');
+      for (let i = 0; i < ch.max; i++) R(bx + i * (bw / ch.max) + 2, 58, bw / ch.max - 4, 6, i < ch.vida ? '#ff6b8a' : '#3a2a3a');
+    }
+    if (!run.noite) {
+      const k = run.tempo / run.reg.dia;
+      R(W / 2 - 60, 30, 120, 2, '#ffffff22'); R(W / 2 - 60, 30, 120 * k, 2, k < 0.2 ? '#ff7a6a' : '#ffd27a');
+    }
+    ctx.restore();
+  }
+
+  // ── clima: folhas de dia, vaga-lumes de noite, poeira nas grutas ──
+  function passoAmbiente(sc, dt) {
+    const escuro = sc.escuro, alvo = escuro ? 18 : run.noite ? 22 : 14;
+    while (ambiente.length < alvo) {
+      const tipo = escuro ? 'poeira' : run.noite ? 'vagalume' : 'folha';
+      ambiente.push({ tipo, x: Math.random() * W, y: tipo === 'folha' ? -10 - Math.random() * 200 : Math.random() * 400, t: Math.random() * 6,
+        v: 18 + Math.random() * 30, cor: Math.random() < 0.5 ? '#9ccf6a' : '#d9c46a' });
+    }
+    for (const a of ambiente) {
+      a.t += dt;
+      if (a.tipo === 'folha') { a.y += a.v * dt; a.x += Math.sin(a.t * 1.7) * 30 * dt + (sc.corrente ? 10 * dt : 0); if (a.y > H + 10) { a.y = -10; a.x = Math.random() * W; } }
+      else { a.x += Math.cos(a.t * 0.9) * 14 * dt; a.y += Math.sin(a.t * 1.3) * 10 * dt; }
+    }
+    if ((escuro ? 'poeira' : run.noite ? 'vagalume' : 'folha') !== (ambiente[0] && ambiente[0].tipo)) ambiente.length = 0;
+  }
+  function desenharAmbiente() {
+    for (const a of ambiente) {
+      if (a.tipo === 'folha') {
+        ctx.fillStyle = a.cor; ctx.beginPath(); ctx.ellipse(a.x, a.y, 4, 2, Math.sin(a.t * 2), 0, Math.PI * 2); ctx.fill();
+      } else if (a.tipo === 'vagalume') {
+        ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(a.t * 2.5));
+        Neon.circle(ctx, a.x, a.y, 2, '#e8ff8a'); ctx.globalAlpha = 1;
+      } else { ctx.globalAlpha = 0.4; Neon.circle(ctx, a.x, a.y, 1.5, '#b9a3ff'); ctx.globalAlpha = 1; }
+    }
+  }
+  // Escuridão com um buraco de luz em volta do explorador. Fogueira, cristal
+  // aceso e vaga-lume brilham por cima.
+  function escuridao(sc, t) {
+    const forte = sc.escuro, noite = run.noite;
+    if (!forte && !noite) return;
+    const lanterna = run.hab.has('lanterna');
+    const raio = forte ? (lanterna ? run.luz + 80 : 95) : (lanterna ? run.luz + 90 : run.luz + 40);
+    const px = run.x, py = run.y - 24, opaco = forte ? 0.95 : 0.78;
+    const g = ctx.createRadialGradient(px, py, raio * 0.35, px, py, raio);
+    g.addColorStop(0, 'rgba(3, 5, 14, 0)'); g.addColorStop(1, `rgba(3, 5, 14, ${opaco})`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const brilho = (x, y, r, cor) => { const b = ctx.createRadialGradient(x, y, 0, x, y, r); b.addColorStop(0, cor); b.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = b; ctx.fillRect(x - r, y - r, r * 2, r * 2); };
+    for (const f of sc.fogueiras) if (f.aceso) brilho(f.x, f.y - 14, 90 + Math.sin(t * 9) * 6, 'rgba(255, 150, 70, 0.35)');
+    for (const it of sc.itens) if (!it.pego && !it.oculto && (it.tipo === 'idolo' || it.tipo === 'reliquia' || it.tipo === 'tesouro')) brilho(it.x, it.y, 40, 'rgba(255, 220, 140, 0.18)');
+    if (lanterna) for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (sc.grade[r][c] === '+') brilho(c * T + 20, r * T + 8, 46, 'rgba(185, 163, 255, 0.22)');
+    ctx.restore();
+  }
+  // Mapa da região (tecla M): telas visitadas, tesouros que faltam, fogueiras.
+  function mapaRegiao(t) {
+    const reg = run.reg, chaves = Object.keys(reg.telas), pos = chaves.map(k => k.split(',').map(Number));
+    const xs = pos.map(p => p[0]), ys = pos.map(p => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const cw = Math.min(86, 640 / (x1 - x0 + 1)), chh = Math.min(52, 280 / (y1 - y0 + 1));
+    const ox = W / 2 - (x1 - x0 + 1) * cw / 2, oy = 120;
+    R(0, 0, W, H, '#050a14e6');
+    texto(`${reg.icone} ${reg.nome}`, W / 2, 70, 18, reg.cor, 'center', 'Orbitron, sans-serif');
+    const vizinha = k => { const [a, b] = k.split(',').map(Number); return [`${a + 1},${b}`, `${a - 1},${b}`, `${a},${b + 1}`, `${a},${b - 1}`].some(n => run.visitadas.has(n)); };
+    const bussola = (save.up.bussola | 0) > 0;
+    chaves.forEach((k, i) => {
+      const [cx, cy] = pos[i], x = ox + (cx - x0) * cw, y = oy + (cy - y0) * chh, vis = run.visitadas.has(k);
+      if (!vis && !vizinha(k) && !(bussola && reg.telas[k].mapa.some(l => l.includes('I')))) return;
+      const sc = tela(run, k);
+      ctx.fillStyle = vis ? reg.cor + '40' : '#ffffff08'; ctx.fillRect(x + 3, y + 3, cw - 6, chh - 6);
+      ctx.strokeStyle = k === run.key ? '#ffffff' : vis ? reg.cor : '#ffffff30'; ctx.lineWidth = k === run.key ? 3 : 1.5;
+      ctx.strokeRect(x + 3, y + 3, cw - 6, chh - 6);
+      if (!vis) { texto('?', x + cw / 2, y + chh / 2 + 6, 16, '#ffffff40', 'center'); }
+      let ix = x + 8;
+      for (const it of sc.itens) {
+        if (it.tipo === 'tesouro' && vis) { texto(it.pego ? '◇' : '◆', ix, y + chh - 9, 12, '#ffd36b'); ix += 11; }
+        if (it.tipo === 'idolo' && !it.pego && (bussola || (vis && false))) texto('🗿', x + cw - 18, y + 20, 12, '#7dffb0');
+      }
+      if (vis && sc.fogueiras.some(f => f.aceso)) texto('🔥', x + cw - 18, y + chh - 8, 11, '#ffb347');
+      if (vis && sc.chefe) texto(sc.chefe.vencido ? '✓' : '✦', x + cw / 2, y + 18, 14, sc.chefe.vencido ? '#9be7ce' : '#ff6b8a', 'center');
+      if (k === run.key) Neon.circle(ctx, x + (run.x / W) * cw, y + (Math.min(run.y, H) / H) * chh, 3 + Math.sin(t * 6), '#ffffff');
+    });
+    texto('M ou P fecha o mapa', W / 2, H - 30, 12, '#8da8b5', 'center');
+  }
+
+  // ── quadro ──
+  function draw() {
+    const sc = tela(run), t = Neon.motion.reduced ? 0 : run.t;
+    ctx.save();
+    if (fx.tremor > 0 && !Neon.motion.reduced) ctx.translate(Math.sin(run.t * 70) * 5 * fx.tremor / 0.3, Math.cos(run.t * 53) * 3 * fx.tremor / 0.3);
+    ceu(sc, t); fundo(sc, t);
+    if (sc.def.cachoeira) cachoeira(sc, t);
+    agua(sc, t, false);
+    tiles(sc, t); cipos(sc, t); itens(sc, t);
+    for (const e of sc.ents) bicho(e, t);
+    chefe(sc, t); tiros(sc, t);
+    if (state !== 'menu') explorador(t);
+    agua(sc, t, true);
+    particles.draw(ctx);
+    desenharAmbiente();
+    frente(sc, t);
+    escuridao(sc, t);
+    ctx.restore();
+    if (fx.flash > 0 && !Neon.motion.reduced) { ctx.save(); ctx.globalAlpha = Math.min(0.45, fx.flash); R(0, 0, W, H, fx.flashCor); ctx.restore(); }
+    if (fx.troca > 0) { ctx.save(); ctx.globalAlpha = Math.min(1, fx.troca * 3); R(0, 0, W, H, '#050a14'); ctx.restore(); }
+    if (state === 'playing' || state === 'paused' || state === 'mapa') hudCanvas(sc);
+    if (state === 'mapa') mapaRegiao(run.t);
+    if (coarse && state === 'playing') {
+      const bx = stick ? stick.ox : W * 0.16, by = stick ? stick.oy : H - 90;
+      ctx.save(); ctx.globalAlpha = stick ? 0.5 : 0.25; ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(bx, by, 46, 0, Math.PI * 2); ctx.stroke();
+      Neon.circle(ctx, bx + (stick ? stick.dx * 34 : 0), by + (stick ? stick.dy * 34 : 0), 20, '#9be7ce4d');
+      ctx.restore();
+    }
+  }
   function loop(now) {
     const dt = Math.min(0.033, Math.max(0, (now - lastFrame) / 1000)); lastFrame = now;
     if (state === 'playing') {
-      const actions = [...held].map(k => keys[k]).concat([...pointers.values()]);
-      step(run, dt, { left: actions.includes('left'), right: actions.includes('right'), jump: jumpQueued }); jumpQueued = false;
-      for (const event of run.events) {
-        if (event === 'jump') Neon.audio.sfx.flap();
-        if (event === 'grab') { Neon.audio.sfx.tick(); Neon.toast('Cipó! Pule de novo para soltar.'); }
-        if (event === 'treasure') { Neon.audio.sfx.golden(); Neon.toast('+1.000 · TESOURO RECUPERADO'); }
-        if (event === 'hurt') { clearInput(); Neon.audio.sfx.hit(); Neon.toast('Cuidado! Você voltou à entrada desta tela.'); }
-        if (event === 'room') Neon.toast(ROOMS[run.room].hint);
-        if (event === 'missing') Neon.toast('Ainda faltam tesouros. Volte pela esquerda para buscá-los.');
-      }
-      run.events.length = 0; hud();
-      Neon.audio.music.intensity(run.hanging ? 0.7 : 0.2);
-      if (run.status !== 'playing') finish();
+      passo(run, dt, entrada());
+      jumpQueued = false; whipQueued = false;
+      eventos(); hud();
+      const sc = tela(run);
+      Neon.audio.music.intensity(sc.chefe && !sc.chefe.vencido ? 0.85 : run.modo === 'cipo' ? 0.6 : run.noite ? 0.5 : 0.25);
+      if (run.status === 'cleared') concluirRegiao();
+    } else if (state === 'hub' || state === 'menu') run.t += dt;
+    if (state !== 'paused' && state !== 'mapa') {
+      particles.update(dt); passoAmbiente(tela(run), dt);
+      for (const k of ['tremor', 'flash', 'troca']) fx[k] = Math.max(0, fx[k] - dt);
     }
-    draw(); requestAnimationFrame(loop);
+    draw();
+    requestAnimationFrame(loop);
   }
+  Neon.$('best').textContent = pb;
   hud(); requestAnimationFrame(loop);
 })();
 </script>

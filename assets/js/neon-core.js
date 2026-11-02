@@ -179,6 +179,15 @@ window.Neon = (function () {
     whirr(k)      { if (!g()) return; k = clamp(+k || 0, 0, 1.2); const f = 130 + k * 560; tone(f, f * 0.96, 0, 0.17, 'triangle', 0.016 + k * 0.02); tone(f * 2.02, 0, 0, 0.12, 'sine', 0.007); },
     burst()       { if (!g()) return; noise(0, 0.55, 0.36, null, 500); tone(260, 40, 0, 0.65, 'sawtooth', 0.22); [1, 2.4, 3.9].forEach((m, i) => tone(760 * m, 0, 0.03 + i * 0.06, 0.32, 'sine', 0.08)); },
     grind(k)      { if (!g()) return; noise(0, 0.1, 0.04 + (+k || 0) * 0.08, null, 5200); tone(1900, 1500, 0, 0.08, 'square', 0.02); },
+    // NEON JUNGLE: estalo do chicote, água, rugido (k = força), canto da Iara,
+    // redemoinho do Saci, fogueira acendendo e ponte de corda arrebentando
+    chicote()     { if (!g()) return; noise(0, 0.05, 0.22, null, 3200); tone(2600, 700, 0.02, 0.06, 'square', 0.05); },
+    splash()      { if (!g()) return; noise(0, 0.28, 0.2, null, 500); tone(420, 180, 0, 0.16, 'sine', 0.08); },
+    rugido(k)     { if (!g()) return; k = clamp(+k || 0.6, 0.2, 1); tone(120, 70, 0, 0.5 * k + 0.1, 'sawtooth', 0.16 * k); noise(0, 0.4 * k, 0.12 * k, null, 260); },
+    canto()       { if (!g()) return; [659, 784, 880, 784].forEach((f, i) => tone(f, f * 1.01, i * 0.18, 0.3, 'sine', 0.07)); },
+    redemoinho()  { if (!g()) return; noise(0, 0.42, 0.1, null, 1400); tone(260, 900, 0, 0.38, 'triangle', 0.05); },
+    fogueira()    { if (!g()) return; noise(0, 0.45, 0.16, null, 380); [392, 523, 659].forEach((f, i) => tone(f, 0, 0.08 + i * 0.07, 0.14, 'triangle', 0.12)); },
+    ponte()       { if (!g()) return; tone(320, 90, 0, 0.22, 'sawtooth', 0.11); noise(0, 0.16, 0.18, null, 1600); },
   };
   const g = () => soundOn && AC;
 

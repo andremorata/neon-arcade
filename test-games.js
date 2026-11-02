@@ -2076,59 +2076,273 @@ for (const [cols, rows] of [[23, 11], [13, 11], [23, 7]]) {
 for (const key of ['orbit', 'echo']) assert.match(games[key], new RegExp(`pb = Neon\\.best\\.update\\('${key}', score\\)`),
   `${key}: o recorde deve usar a mesma chave do menu`);
 
-// Jungle: percorre a expedição real com saltos e cipós em três taxas de quadros.
-const jungle = games.jungle;
-const J = new Function('W', jungle.slice(jungle.indexOf('  const FLOOR'), jungle.indexOf('  // ── fim da física')) +
-  '; return { expedition, step, ROOMS, vineAt, logAt, FLOOR, hurt };')(800);
-assert.match(jungle, /pb = Neon\.best\.update\('jungle', run.score\)/, 'Jungle: recorde usa a chave do menu');
-for (const fps of [30, 60, 120]) {
-  const s = J.expedition();
-  let grabs = 0;
-  for (let i = 0; i < fps * 180 && s.status === 'playing'; i++) {
-    const r = J.ROOMS[s.room], v = J.vineAt(s.t), input = { right: true };
-    if (s.hanging) { input.right = false; input.jump = v.x > 555 && v.vx > 0; }
-    else if (r.vine && s.x < 270) {
-      if (s.grounded && s.x >= 218) { input.right = false; input.jump = v.x < 222 && v.vx > 0; }
-      else if (!s.grounded) input.right = false;
-    }
-    if (s.grounded && !r.vine) input.jump = r.pits.some(([a]) => a - s.x > 0 && a - s.x < 25);
-    if (s.grounded && [...r.logs.map(x => J.logAt(x, s.t)), ...r.snakes]
-      .some(x => x - s.x > 0 && x - s.x < 70)) input.jump = true;
-    J.step(s, 1 / fps, input);
-    if (s.events.includes('grab')) grabs++;
-    s.events.length = 0;
-  }
-  assert.strictEqual(s.status, 'won', `Jungle: todas as telas atravessáveis a ${fps} fps`);
-  assert.strictEqual(s.lives, 3, 'Jungle: saltos permitem evitar todo dano');
-  assert.strictEqual(grabs, J.ROOMS.filter(r => r.vine).length, 'Jungle: percurso usa cada cipó');
-  assert.ok(s.collected.every(Boolean) && s.score > 6000, 'Jungle: tesouros e bônus entram no placar');
-  const final = JSON.stringify(s);
-  J.step(s, 1, { right: true, jump: true });
-  assert.strictEqual(JSON.stringify(s), final, 'Jungle: vitória congela a partida e o bônus');
-}
+// ── NEON JUNGLE ──────────────────────────────────
+// A física é recortada do fonte e jogada por um robô que segue a rota de cada
+// região como uma criança jogaria. Assim dá para saber que as seis regiões
+// fecham — com cipó, tronco, folha que afunda e guardião — sem abrir o navegador.
 {
-  const s = J.expedition();
-  s.room = 1; s.x = 400;
-  for (let i = 0; i < 60 && s.lives === 3; i++) J.step(s, 1 / 60, {});
-  assert.strictEqual(s.lives, 2, 'Jungle: cair no poço custa uma vida');
-  assert.strictEqual(s.x, s.safeX, 'Jungle: queda volta a uma margem segura');
-  J.hurt(s);
-  assert.strictEqual(s.lives, 2, 'Jungle: retorno protege contra dano repetido');
-  s.invincible = 0; s.x = 722;
-  J.step(s, 1 / 60, {}); J.step(s, 1 / 60, {});
-  assert.strictEqual(s.score, 1000, 'Jungle: um tesouro só pontua uma vez');
-  s.x = -1; J.step(s, 1 / 60, {});
-  assert.strictEqual(s.room, 0, 'Jungle: pode voltar para buscar tesouros');
-  assert.ok(s.collected[1], 'Jungle: voltar preserva a coleta');
-  s.room = J.ROOMS.length - 1; s.x = 801; J.step(s, 1 / 60, {});
-  assert.strictEqual(s.status, 'playing', 'Jungle: templo exige todos os tesouros');
-  s.time = 0.001; J.step(s, 1 / 60, {});
-  assert.strictEqual(s.status, 'lost', 'Jungle: relógio zerado termina a partida');
-  assert.strictEqual(s.time, 0, 'Jungle: tempo não fica negativo');
-  const fresh = J.expedition();
-  for (let i = 0; i < 3; i++) { fresh.invincible = 0; J.hurt(fresh); }
-  assert.strictEqual(fresh.status, 'lost', 'Jungle: terceira queda encerra a expedição');
-  assert.ok(J.expedition().collected.every(v => !v), 'Jungle: reinício devolve os tesouros');
+  // Robô de teste: segue a rota principal da região com regras simples, do jeito
+  // que uma criança jogaria — pula buraco, estala bicho, espera o cipó e o tronco.
+  function criarPiloto(J, s) {
+    const mem = { rota: J.rota(s.reg), alvo: null, saltoCipo: false };
+    return () => pilotar(J, s, mem);
+  }
+  function pilotar(J, s, mem) {
+    const { T, W, BW } = J;
+    const sc = J.tela(s);
+    const inp = { left: false, right: false, up: false, down: false, jump: false, jumpHeld: false, whip: false };
+    const ch = sc.chefe;
+    const rel = sc.itens.find(it => it.tipo === 'reliquia' && !it.oculto && !it.pego);
+    // destino desta tela
+    let alvo = null;
+    if (ch && !ch.vencido) alvo = alvoChefe(J, s, sc, ch, mem);
+    else if (rel) alvo = { x: rel.x, y: rel.y + 20 };
+    else {
+      const i = mem.rota.indexOf(s.key), prox = mem.rota[i + 1];
+      const [x0, y0] = s.key.split(',').map(Number), [x1, y1] = (prox || s.key).split(',').map(Number);
+      alvo = { x: x1 > x0 ? W + 60 : x1 < x0 ? -60 : s.x, y: s.y };
+    }
+    const dir = Math.abs(alvo.x - s.x) < 6 ? 0 : alvo.x > s.x ? 1 : -1;
+    const pisa = (c, r) => { const b = J.bloco(s, sc, c, r); return J.duro(s, b) || b === '=' || b === '-' || (b === 'H' && J.bloco(s, sc, c, r - 1) !== 'H'); };
+    const duro = (c, r) => J.duro(s, J.bloco(s, sc, c, r));
+    const plataformas = sc.ents.filter(e => !e.fora && J.BICHOS[e.tipo].plataforma && J.BICHOS[e.tipo].plataforma(e));
+    const andar = d => { inp.right = d > 0; inp.left = d < 0; };
+    const k = J.caixaChicote(s), perto = (x, y, w, h, folga = 26) =>
+      x + w > Math.min(k.x0, k.x0 + s.face * folga) && x - w < Math.max(k.x1, k.x1 + s.face * folga) && y > k.y0 && y - h < k.y1;
+
+    // ── no cipó: empurra a favor e solta embalado
+    if (s.modo === 'cipo') {
+      const v = s.cipo.v, d = dir || 1;
+      andar(d);
+      if (v.th * d > 0.42 && v.w * d > 0.4) inp.jump = true;
+      inp.jumpHeld = true;
+      return inp;
+    }
+    // ── na água
+    if (s.modo === 'agua' || s.modo === 'mergulho') {
+      mem.alvo = null;
+      andar(dir || 1);
+      const c = Math.floor((s.x + (dir || 1) * (BW + 6)) / T);
+      if (duro(c, Math.floor((s.y - 10) / T)) || s.parede) { inp.jump = true; inp.jumpHeld = true; }
+      for (const e of sc.ents) if (!e.fora && J.BICHOS[e.tipo].chicote && perto(e.x, e.y, e.w, e.h)) inp.whip = true;
+      return inp;
+    }
+    // ── no ar: corrige a trajetória para o alvo do salto
+    if (!s.chao && s.modo === 'normal') {
+      inp.jumpHeld = true;
+      const tx = mem.alvo ?? (dir ? s.x + dir * 100 : s.x);
+      if (Math.abs(tx - s.x) > 8) andar(tx > s.x ? 1 : -1);
+      if (mem.alvo !== null && Math.abs(tx - s.x) < 10) andar(0);
+      reagir();
+      return inp;
+    }
+    if (s.modo === 'escada') { inp.up = alvo.y < s.y; inp.down = alvo.y > s.y; return inp; }
+    mem.alvo = null;
+    if (s.chao) mem.saltoCipo = false;
+
+    // ── em pé: obstáculos à frente
+    andar(dir);
+    // alvo num galho acima: pula quando está embaixo dele; abaixo: atravessa o galho
+    if (alvo.y < s.y - 30 && s.chao) {
+      const ra = Math.round(alvo.y / T), c = Math.floor(s.x / T);
+      if (pisa(c, ra) && !duro(c, ra) && Math.abs(alvo.x - s.x) < 150) { inp.jump = true; inp.jumpHeld = true; mem.alvo = alvo.x; }
+    } else if (alvo.y > s.y + 30 && s.chao && s.piso && s.piso.ch === '=' && Math.abs(alvo.x - s.x) < 50) { inp.down = true; inp.jump = true; }
+    const rf = Math.round(s.y / T), d = dir;
+    const sobreBicho = s.piso && s.piso.ent;
+    if (d) {
+      const chaoEm = c => pisa(c, rf) || pisa(c, rf - 1) || pisa(c, rf + 1);
+      // coluna onde o pé da frente ainda pisa; se já passou da beirada, a borda é zero
+      const lead = s.x + d * BW, cl = Math.floor((lead - d * 0.5) / T);
+      const cf = chaoEm(cl) ? cl : cl - d, borda = chaoEm(cl) ? (d > 0 ? (cl + 1) * T - lead : lead - cl * T) : 0;
+      // parede ou teto baixo
+      if (duro(cf + d, rf - 1) && borda < 8) {
+        if (!duro(cf + d, rf - 3) && !duro(cf, rf - 3)) { inp.jump = true; inp.jumpHeld = true; }
+      } else if (duro(cf + d, rf - 2) && !duro(cf + d, rf - 1) && borda < 14) inp.down = true;
+      if (s.baixo && duro(Math.floor(s.x / T), rf - 2)) inp.down = true;
+      // buraco
+      if (!sobreBicho && !chaoEm(cf + d) && borda < 60) {
+        let n = 0;
+        while (n < 20 && !chaoEm(cf + d * (n + 1))) n++;
+        const largura = n * T, outra = d > 0 ? (cf + n + 1) * T + 24 : (cf - n) * T - 24;
+        const agua = J.bloco(s, sc, cf + d, rf) === '~' || J.bloco(s, sc, cf + d, rf + 1) === '~';
+        const pecas = plataformas.filter(e => (e.x - s.x) * d > 0 && Math.abs(e.x - s.x) < largura + 60);
+        if (largura <= 130) {
+          if (borda < 12 && seguroPular(J, s, sc)) { inp.jump = true; inp.jumpHeld = true; mem.alvo = outra; }
+          else if (borda < 12) andar(0);
+        } else if (pecas.length) {
+          if (borda > 10) andar(d);
+          else { andar(0); saltarPeca(J, s, sc, d, outra, pecas, inp, mem); }
+        } else if (sc.cipos.length) {
+          if (borda > 10) andar(d);
+          else {
+            andar(0);
+            const v = sc.cipos[0], ex = v.ax + Math.sin(v.th) * v.L;
+            if ((ex - s.x) * d > 20 && (ex - s.x) * d < 160 && v.w * d < 0) { inp.jump = true; inp.jumpHeld = true; andar(d); mem.alvo = null; mem.saltoCipo = true; }
+          }
+        } else if (agua) {
+          const eel = sc.ents.find(e => e.tipo === 'poraque' && !e.fora);
+          if (eel && !(eel.est === 'calmo' && eel.tt > 2.6) && borda < 12) andar(0);
+        }
+      }
+    }
+    if (sobreBicho) {
+      andar(0);
+      const pecas = plataformas.filter(e => e !== s.piso.ent && (e.x - s.x) * (d || 1) > 0);
+      const cf = Math.floor((s.x + (d || 1) * 60) / T);
+      let c = Math.floor(s.x / T), n = 0;
+      while (n < 20 && !pisa(c + (d || 1) * n, rf) && !pisa(c + (d || 1) * n, rf - 1)) n++;
+      const outra = (d || 1) > 0 ? (c + n) * T + 24 : (c - n + 1) * T - 24;
+      saltarPeca(J, s, sc, d || 1, outra, pecas, inp, mem, cf);
+    }
+    reagir();
+    return inp;
+
+    function reagir() {
+      if (ch && !ch.vencido) {
+        if (ch.tipo === 'saci' && (ch.est === 'ri' || ch.est === 'espera') && perto(ch.x, ch.y, 14, 44, 0)) inp.whip = true;
+        if (ch.tipo === 'iara') for (const b of ch.buzios) if (b.ok && perto(b.x, b.y + 14, 13, 30, 0)) inp.whip = true;
+      }
+      // bicho rolando vindo e chicote recarregando: pula por cima
+      for (const e of sc.ents) if (!e.fora && e.tipo === 'tatu' && e.est === 'rola' && s.chao && s.recarga > 0.04 &&
+        (e.x - s.x) * Math.sign(e.dir) < 0 && Math.abs(e.x - s.x) < 90) { inp.jump = true; inp.jumpHeld = true; }
+      // bichos e tiros ao alcance do chicote
+      for (const e of sc.ents) {
+        if (e.fora || !J.BICHOS[e.tipo].chicote || e.tipo === 'poraque') continue;
+        const ameaca = J.BICHOS[e.tipo].perigo(e, s, sc) || e.tipo === 'cobra' || e.tipo === 'tatu' || e.tipo === 'macaco';
+        if (e.tipo === 'colmeia') {
+          if (e.est !== 'cai' && s.chao && (e.x - s.x) * s.face > -10 && Math.abs(e.x - s.x) < 70) { inp.jump = true; inp.jumpHeld = true; inp.whip = true; }
+          for (const b of e.abelhas) if (perto(b.x, b.y + 4, 6, 8, 30)) inp.whip = true;
+          continue;
+        }
+        if (ameaca && perto(e.x, e.y, e.w, e.h)) inp.whip = true;
+      }
+      for (const t of sc.tiros) {
+        if (t.fim) continue;
+        const vem = (t.x - s.x) * Math.sign(t.vx || 1) < 0 || Math.abs(t.x - s.x) < 60;
+        if (t.quebra !== false && perto(t.x, t.y + t.r, t.r, t.r * 2, 40)) inp.whip = true;
+        else if (vem && s.chao && Math.abs(t.x - s.x) < 95 && t.y + t.r > s.y - J.BH && t.y - t.r < s.y && s.recarga > 0.05) { inp.jump = true; inp.jumpHeld = true; }
+        else if (t.quebra === false && vem && s.chao && Math.abs(t.x - s.x) < 110 && t.y + t.r > s.y - J.BH && t.y - t.r < s.y) { inp.jump = true; inp.jumpHeld = true; }
+      }
+    }
+  }
+  // Não pular sobre água enquanto a piranha está para saltar.
+  function seguroPular(J, s, sc) {
+    for (const e of sc.ents) if (e.tipo === 'piranha' && !e.fora && Math.abs(e.x - s.x) < 170 && !(e.est === 'espera' && e.tt > 0.7)) return false;
+    return true;
+  }
+  function saltarPeca(J, s, sc, d, outra, pecas, inp, mem, ref) {
+    const voo = 0.55;
+    const borda = Math.abs(outra - s.x);
+    if (borda < 125) { inp.jump = true; inp.jumpHeld = true; mem.alvo = outra; return; }
+    let melhor = null;
+    for (const e of pecas) {
+      const px = e.x + (e.v || 0) * voo, dist = (px - s.x) * d;
+      if (dist > 30 && dist < 140 && (!melhor || dist < melhor.dist)) melhor = { e, px, dist };
+    }
+    if (melhor && seguroPular(J, s, sc)) { inp.jump = true; inp.jumpHeld = true; mem.alvo = melhor.px; }
+  }
+  function alvoChefe(J, s, sc, ch, mem) {
+    if (ch.tipo === 'saci') {
+      const p = ch.pontos[ch.i];
+      const lado = p.x > s.x ? -1 : 1;
+      return { x: p.x + lado * 42, y: p.y, chefe: p };
+    }
+    if (ch.tipo === 'iara') {
+      const b = ch.buzios.filter(b => b.ok).sort((a, c) => a.x - c.x)[0];
+      return b ? { x: b.x - 48, y: b.y + 22 } : { x: s.x, y: s.y };
+    }
+    return { x: s.x, y: s.y };
+  }
+  const src = games.jungle;
+  const ini = src.indexOf('  // ── física ──'), fim = src.indexOf('  // ── fim da física ──');
+  assert.ok(ini > 0 && fim > ini, 'jungle: marcadores do bloco de física não encontrados');
+  const J = new Function(src.slice(ini, fim) + `; return { W, H, T, COLS, ROWS, BW, BH, REGIOES, HABS, BICHOS, CHEFES,
+    novaCorrida, passo, tela, bloco, duro, rota, caixaChicote, totalTesouros };`)();
+  assert.match(src, /pb = Neon\.best\.update\('jungle', total\)/, 'jungle: recorde usa a chave do menu');
+  // mapas: grade 20×12, só letras da legenda, um início, uma relíquia e um ídolo por região
+  const LEGENDA = '.#=-H~%^MXWDL+o$*KIRFPV' + Object.keys({ s: 1, t: 1, B: 1, c: 1, p: 1, e: 1, g: 1, h: 1, m: 1, j: 1, S: 1, Y: 1, U: 1 }).join('');
+  for (const reg of J.REGIOES) {
+    const conta = ch => Object.values(reg.telas).reduce((n, t) => n + t.mapa.join('').split(ch).length - 1, 0);
+    for (const [k, t] of Object.entries(reg.telas)) {
+      assert.strictEqual(t.mapa.length, J.ROWS, `jungle ${reg.id} ${k}: a tela tem ${J.ROWS} linhas`);
+      for (const l of t.mapa) {
+        assert.strictEqual(l.length, J.COLS, `jungle ${reg.id} ${k}: linha com ${l.length} colunas`);
+        for (const ch of l) assert.ok(LEGENDA.includes(ch), `jungle ${reg.id} ${k}: letra fora da legenda: ${ch}`);
+      }
+    }
+    assert.strictEqual(conta('P'), 1, `jungle ${reg.id}: um ponto de início`);
+    assert.ok(reg.telas[reg.inicio].mapa.join('').includes('P'), `jungle ${reg.id}: o início fica na tela inicial`);
+    assert.strictEqual(conta('R'), 1, `jungle ${reg.id}: uma relíquia`);
+    assert.strictEqual(conta('I'), 1, `jungle ${reg.id}: um ídolo secreto`);
+    assert.ok(J.HABS.includes(reg.hab) && J.HABS.includes(reg.pede), `jungle ${reg.id}: habilidade dada e pedida existem`);
+    assert.ok(J.totalTesouros(reg) >= 3, `jungle ${reg.id}: pelo menos três tesouros`);
+  }
+  // Um jogador de primeira viagem tem só as habilidades das regiões anteriores.
+  // Toda região fecha com elas, sem desmaiar, em qualquer taxa de quadros.
+  for (let ri = 0; ri < J.REGIOES.length; ri++) for (const fps of [30, 60, 120]) {
+    const reg = J.REGIOES[ri], s = J.novaCorrida(ri, { hab: J.HABS.slice(0, ri) }), piloto = criarPiloto(J, s);
+    for (let i = 0; i < fps * 300 && s.status === 'playing'; i++) { J.passo(s, 1 / fps, piloto()); s.events.length = 0; }
+    assert.strictEqual(s.status, 'cleared', `jungle: ${reg.nome} fecha a ${fps} fps (parou em ${s.key}, x=${s.x.toFixed(0)})`);
+    assert.strictEqual(s.desmaios, 0, `jungle: ${reg.nome} sem desmaiar a ${fps} fps`);
+    assert.ok(s.resultado.bonus.guardiao > 0 && s.pontos > 3000, `jungle: ${reg.nome} pontua guardião e bônus`);
+    const antes = `${s.pontos}|${s.key}|${s.status}`;
+    J.passo(s, 1, { right: true, jump: true });
+    assert.strictEqual(`${s.pontos}|${s.key}|${s.status}`, antes, `jungle: ${reg.nome} congela depois da relíquia`);
+  }
+  // mesma entrada, mesma partida: nada de Math.random na física
+  {
+    const corre = () => { const s = J.novaCorrida(1, { hab: ['gancho'] }), p = criarPiloto(J, s); for (let i = 0; i < 60 * 40; i++) { J.passo(s, 1 / 60, p()); s.events.length = 0; } return `${s.pontos}|${s.key}|${s.x.toFixed(3)}`; };
+    assert.strictEqual(corre(), corre(), 'jungle: a física é determinística');
+  }
+  // poço custa um coração e devolve ao chão firme da mesma tela
+  {
+    const s = J.novaCorrida(0);
+    s.key = '1,0'; s.x = 400; s.y = 430; s.chao = false; s.seguro = { key: '1,0', x: 120, y: 400 };   // abaixo do alcance do cipó
+    for (let i = 0; i < 90 && s.vidas === s.maxVidas; i++) J.passo(s, 1 / 60, {});
+    assert.strictEqual(s.vidas, s.maxVidas - 1, 'jungle: cair no poço custa um coração');
+    assert.ok(s.key === '1,0' && s.x === 120 && s.chao, 'jungle: a queda volta ao último chão firme');
+    const v = s.vidas;
+    for (let i = 0; i < 10; i++) J.passo(s, 1 / 60, {});
+    assert.strictEqual(s.vidas, v, 'jungle: voltar não machuca de novo');
+    // sem corações: desmaia e acorda na fogueira, cheio — não existe game over
+    s.vidas = 1; s.inv = 0; s.x = 400; s.y = 430; s.chao = false;
+    for (let i = 0; i < 90 && !s.desmaios; i++) J.passo(s, 1 / 60, {});
+    assert.ok(s.desmaios === 1 && s.status === 'playing' && s.vidas === s.maxVidas, 'jungle: desmaiar volta à fogueira sem game over');
+    assert.strictEqual(s.key, s.check.key, 'jungle: desmaio acorda na última fogueira');
+  }
+  // o sol acaba e vira noite: a partida continua, só perde o bônus
+  {
+    const s = J.novaCorrida(0);
+    s.tempo = 0.01; J.passo(s, 1 / 60, {});
+    assert.ok(s.noite && s.status === 'playing' && s.tempo === 0, 'jungle: fim do dia vira noite, não derrota');
+  }
+  // relíquia só aparece depois do guardião; cristal só existe com a lanterna
+  {
+    const s = J.novaCorrida(0), sc = J.tela(s, '6,0'), rel = sc.itens.find(i => i.tipo === 'reliquia');
+    assert.ok(sc.chefe && rel.oculto, 'jungle: a relíquia fica escondida enquanto o guardião resiste');
+    assert.ok(!J.duro(s, '+') && J.duro(J.novaCorrida(0, { hab: ['lanterna'] }), '+'), 'jungle: cristal só é chão com a lanterna');
+  }
+  // sem mergulho o explorador boia; com mergulho alcança a gruta embaixo da lagoa
+  for (const hab of [[], ['mergulho']]) {
+    const s = J.novaCorrida(0, { hab });
+    s.key = '4,0'; s.x = 300; s.y = 380; s.chao = false;
+    let fundo = false;
+    for (let i = 0; i < 60 * 4; i++) { J.passo(s, 1 / 60, { down: true }); if (s.key === '4,1') fundo = true; s.events.length = 0; }
+    assert.strictEqual(fundo, hab.length > 0, `jungle: ${hab.length ? 'com' : 'sem'} mergulho ${hab.length ? '' : 'não '}chega à gruta submersa`);
+  }
+  // tesouro pontua uma vez e voltar de tela preserva o que foi pego
+  {
+    const s = J.novaCorrida(0), sc = J.tela(s, '1,0'), it = sc.itens.find(i => i.tipo === 'tesouro');
+    s.key = '1,0'; s.x = it.x; s.y = it.y + 30; s.chao = false;
+    J.passo(s, 1 / 60, {}); J.passo(s, 1 / 60, {});
+    assert.strictEqual(s.tesouros.size, 1, 'jungle: tesouro pego');
+    const p = s.pontos;
+    s.x = it.x; s.y = it.y + 30; J.passo(s, 1 / 60, {});
+    assert.strictEqual(s.pontos, p, 'jungle: tesouro só pontua uma vez');
+    s.key = '1,0'; s.x = -2; s.y = 400; J.passo(s, 1 / 60, {});
+    assert.strictEqual(s.key, '0,0', 'jungle: dá para voltar uma tela');
+    assert.ok(J.tela(s, '1,0').itens.find(i => i.tipo === 'tesouro').pego, 'jungle: voltar preserva a coleta');
+  }
 }
 
 // Pulse: atravessa os dez setores com os comandos reais, em três taxas de quadros.
