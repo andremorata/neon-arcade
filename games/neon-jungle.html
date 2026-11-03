@@ -18,14 +18,28 @@
   @media (max-width: 700px), (max-height: 520px) { .toast { font-size: 11px; padding: 7px 14px; top: 36px; } }
   .sound-toggle { z-index: 22; }
   .stage:has(.hub:not(.hidden)) .pause-toggle { display: none; }
-  .jungle-controls { position: absolute; right: 12px; bottom: 12px; display: none; gap: 10px; z-index: 4; }
-  .jungle-controls button { min-width: 66px; min-height: 54px; padding: 6px 10px; border: 1px solid #9be7ce66; border-radius: 16px;
-    background: #080d1c99; color: #d6eee2; font: 700 11px monospace; touch-action: none; cursor: pointer; }
-  .jungle-controls [data-action="whip"] { color: #efce95; border-color: #efce9577; }
-  .jungle-controls button:active { background: #386b56; }
-  @media (pointer: coarse) { .jungle-controls { display: flex; } }
+  /* Na expedição o palco vira a tela toda: o canvas 5:3 fica centrado e as
+     faixas que sobram (dos lados deitado, embaixo em pé) recebem os polegares,
+     então o dedo não tampa o jogo. */
+  body.imersivo .app { height: 100dvh; }   /* altura definida: sem ela o 100cqh do canvas vale 0 no desktop */
+  body.imersivo .app .stage { flex: 1; min-height: 0; max-width: none; aspect-ratio: auto; container-type: size; background: #050a14; }
+  body.imersivo .stage canvas { position: absolute; inset: 0; margin: auto;
+    width: min(100cqw, 100cqh * 5 / 3); height: min(100cqh, 100cqw * 3 / 5); }
+  /* toast logo abaixo da faixa do título (34 de 480 no quadro), em qualquer escala */
+  body.imersivo .toast { top: calc(50cqh - min(100cqh, 100cqw * 3 / 5) * 0.42); }
+  /* Ações redondas em arco: pulo grande no canto, chicote acima. A coluna é estreita
+     para caber na faixa ao lado do quadro num celular deitado. */
+  .jungle-controls { position: absolute; right: 14px; bottom: 14px; display: none; width: 104px; height: 150px; z-index: 5; }
+  .jungle-controls button { position: absolute; right: 0; bottom: 0; width: 78px; height: 78px; padding: 0; border-radius: 50%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    border: 2px solid #9be7ce88; background: #080d1c66; backdrop-filter: blur(3px); color: #d6eee2;
+    font: 700 8px 'Orbitron', sans-serif; letter-spacing: .08em; touch-action: none; cursor: pointer; }
+  .jungle-controls button span { font-size: 26px; line-height: 1; }
+  .jungle-controls [data-action="whip"] { right: auto; left: 0; bottom: 86px; width: 60px; height: 60px; color: #efce95; border-color: #efce9588; }
+  .jungle-controls [data-action="whip"] span { font-size: 20px; }
+  .jungle-controls button:active { background: #386b56aa; transform: scale(.94); }
+  @media (pointer: coarse) { .jungle-controls { display: block; } }
   .overlay:not(.hidden) ~ .jungle-controls, .hub:not(.hidden) ~ .jungle-controls { visibility: hidden; }
-  @media (max-width: 560px), (max-height: 520px) { .jungle-controls { right: 6px; bottom: 6px; gap: 6px; } .jungle-controls button { min-width: 56px; min-height: 46px; } }
 
   /* Mapa da selva: HTML sobre o quadro, a selva continua viva atrás. */
   .hub { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; gap: 10px; justify-content: safe center;
@@ -141,8 +155,8 @@
       <div class="habs" id="habs"></div>
     </div>
     <div class="jungle-controls" aria-label="Controles do jogo">
-      <button data-action="whip" aria-label="Estalar o chicote">〰 CHICOTE</button>
-      <button data-action="jump" aria-label="Pular ou soltar o cipó">↑ PULAR</button>
+      <button data-action="whip" aria-label="Estalar o chicote"><span>〰</span>CHICOTE</button>
+      <button data-action="jump" aria-label="Pular ou soltar o cipó"><span>↑</span>PULAR</button>
     </div>
   </div>
   <footer>// <a href="../index.html">← arcade</a> · ← → anda · ↑ ↓ sobe e desce · espaço pula · X chicote · M mapa · P pausa<br>aventura na selva neon com guardiões do folclore brasileiro</footer>
@@ -2865,7 +2879,7 @@
   els.abaMapa.addEventListener('click', () => { som('click'); mostrarAba('mapa'); });
   els.abaCampo.addEventListener('click', () => { som('click'); mostrarAba('campo'); });
   function abrirHub() {
-    clearInput(); state = 'hub';
+    clearInput(); state = 'hub'; document.body.classList.remove('imersivo');
     Neon.audio.music.stop(); Neon.overlay.hide();
     els.hub.classList.remove('hidden');
     montarHub();
@@ -2878,7 +2892,7 @@
     Neon.audio.ensure(); clearInput(); particles.clear(); ambiente.length = 0;
     const idolos = REGIOES.filter((g, j) => j !== i && save.reg[g.id].idolo).length;
     run = novaCorrida(i, { hab: save.hab, up: save.up, idolos });
-    state = 'playing'; lastFrame = performance.now();
+    state = 'playing'; lastFrame = performance.now(); document.body.classList.add('imersivo');
     els.hub.classList.add('hidden'); Neon.overlay.hide();
     Neon.audio.music.start();
     fx.troca = 0.4; fx.trocaDir = 0;
@@ -3117,7 +3131,9 @@
     Neon.$('time').textContent = run.noite ? '🌙' : `${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')}`;
   }
   function hudCanvas(sc) {
-    const escala = H / (Neon.$('stage').getBoundingClientRect().height || H), abaixo = Math.round(58 * escala);
+    // desce corações e sementes para baixo dos botões do topo, só quando eles ficam por cima do quadro
+    const cr = canvas.getBoundingClientRect(), sr = Neon.$('stage').getBoundingClientRect();
+    const escala = H / (cr.height || H), abaixo = Math.round(Math.max(0, 58 - (cr.top - sr.top)) * escala);
     ctx.save();
     R(0, 0, W, 34, '#060b16a0');
     texto(`${run.reg.icone}  ${sc.def.nome}`, W / 2, 22, 13, run.reg.cor, 'center', 'Orbitron, sans-serif');
@@ -3272,7 +3288,8 @@
     if (state === 'playing' || state === 'paused' || state === 'mapa') hudCanvas(sc);
     if (state === 'mapa') mapaRegiao(run.t);
     if (coarse && state === 'playing') {
-      const bx = stick ? stick.ox : W * 0.16, by = stick ? stick.oy : H - 90;
+      // o dedo pode nascer na faixa fora do quadro: o manche desenhado encosta na borda
+      const bx = stick ? Neon.clamp(stick.ox, 50, W - 50) : W * 0.16, by = stick ? Neon.clamp(stick.oy, 50, H - 50) : H - 90;
       ctx.save(); ctx.globalAlpha = stick ? 0.5 : 0.25; ctx.strokeStyle = '#9be7ce'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(bx, by, 46, 0, Math.PI * 2); ctx.stroke();
       Neon.circle(ctx, bx + (stick ? stick.dx * 34 : 0), by + (stick ? stick.dy * 34 : 0), 20, '#9be7ce4d');
