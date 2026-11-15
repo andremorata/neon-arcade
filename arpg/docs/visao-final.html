@@ -165,48 +165,203 @@ function poste(x, y) {
 }
 
 // ── personagens ────────────────────────────────────
-// Silhueta escura com contorno quase preto e luz de recorte quente do lado do poste.
-// A cor de quem é quem fica num detalhe só: cachecol âmbar, bandana coral.
-function pessoa(x, y, o) {
-  const s = o.s || 1.25, f = o.olha || 1;
-  ctx.fillStyle = 'rgba(3,6,14,0.55)'; ctx.beginPath(); ctx.ellipse(x + 10, y + 2, 38 * s, 12 * s, 0, 0, Math.PI * 2); ctx.fill();
-  const P = [];
-  const p = (cor, pts, recorte) => P.push({ cor, pts: pts.map(([a, b]) => [x + a * s * f, y + b * s]), recorte });
-  p('#121722', [[-14, -46], [-3, -46], [-4, -6], [-16, -6]]);
-  p('#121722', [[3, -46], [14, -46], [15, -6], [3, -6]]);
-  p('#07090f', [[-18, -8], [-2, -8], [-1, 0], [-20, 0]]);
-  p('#07090f', [[2, -8], [18, -8], [21, 0], [1, 0]]);
-  if (o.capa) p(o.casaco, [[-20, -100], [20, -100], [36, -30], [10, -24], [-10, -26], [-36, -32]], true);
-  else p(o.casaco, [[-21, -100], [21, -100], [27, -30], [4, -26], [-27, -30]], true);
-  if (o.ombreira) p('#4a4038', [[6, -106], [26, -102], [28, -88], [8, -90]], true);
-  const a = o.mira ?? 0.9;
-  const ax = 8, ay = -90, ex = ax + Math.cos(a) * 26, ey = ay + 14 + Math.sin(a) * 16;
-  p(o.casaco, [[ax - 6, ay], [ax + 6, ay - 2], [ex + 6, ey + 2], [ex - 2, ey + 10]], true);
-  const cab = o.capuz
-    ? [[-15, -104], [-16, -122], [-8, -134], [8, -134], [16, -122], [15, -104]]
-    : [[-10, -104], [-11, -122], [-6, -130], [7, -130], [11, -122], [10, -104]];
-  p(o.capuz ? o.casaco : '#a57a60', cab, !o.capuz);
-  if (!o.capuz) p('#14161c', [[-11, -122], [-6, -132], [8, -132], [12, -122], [6, -126], [-4, -124]]);
-  if (o.bone) p('#1a1f2b', [[-12, -128], [10, -132], [24, -126], [-12, -122]]);
-  if (o.cachecol) p(o.cachecol, [[-13, -104], [13, -104], [12, -96], [-12, -96]], true);
-  ctx.lineJoin = 'round';
-  for (const q of P) { poli(q.pts); ctx.strokeStyle = '#04060c'; ctx.lineWidth = 4; ctx.stroke(); }
-  for (const q of P) { poli(q.pts); ctx.fillStyle = q.cor; ctx.fill(); }
-  if (o.arma) {
-    const bx = x + ex * s * f, by = y + ey * s;
-    ctx.save(); ctx.translate(bx, by); ctx.rotate(f > 0 ? a : Math.PI - a); if (f < 0) ctx.scale(1, -1);
-    ctx.fillStyle = '#04060c'; rr(-10, -7, o.arma * s + 6, 12, 3); ctx.fill();
-    ctx.fillStyle = '#3b4252'; rr(-8, -5, o.arma * s, 8, 2); ctx.fill();
-    ctx.fillStyle = '#5a4634'; rr(-14, -2, 16, 12, 3); ctx.fill();
-    ctx.restore();
-  }
-  ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.lineWidth = 2.5 * s; ctx.strokeStyle = rgba(A.sodio, o.recorte ?? 0.55);
-  for (const q of P) if (q.recorte) { ctx.beginPath(); ctx.moveTo(q.pts[0][0], q.pts[0][1]); ctx.lineTo(q.pts[q.pts.length - 1][0], q.pts[q.pts.length - 1][1]); ctx.stroke(); }
-  ctx.restore();
-  ctx.strokeStyle = 'rgba(237,244,240,0.07)'; ctx.lineWidth = 2;
-  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.moveTo(x - 12 * s + i * 11 * s, y - 92 * s); ctx.lineTo(x - 16 * s + i * 14 * s, y - 36 * s); ctx.stroke(); }
-  if (o.acento) { ctx.fillStyle = o.acento; ctx.fillRect(x - 13 * s, y - 116 * s, 26 * s, 4 * s); }
-  if (o.flash) { ctx.globalAlpha = o.flash; for (const q of P) { poli(q.pts); ctx.fillStyle = '#f6efe4'; ctx.fill(); } ctx.globalAlpha = 1; }
+// Cada personagem é um esqueleto (juntas em unidades, pés na origem, olhando pra direita)
+// vestido peça por peça num canvas próprio. Depois vêm três passadas, as mesmas que o jogo
+// fará uma vez por pose e guardará em cache: sombreado na direção da luz, luz de recorte
+// quente no lado do poste e contorno escuro de 2 px pra silhueta ler em qualquer chão.
+const LUZES = [[475, 216], [1285, 216], [2155, 216]];
+function capsula(x1, y1, r1, x2, y2, r2) {
+  const p = new Path2D(), a = Math.atan2(y2 - y1, x2 - x1), n = a + Math.PI / 2;
+  p.moveTo(x1 + Math.cos(n) * r1, y1 + Math.sin(n) * r1);
+  p.lineTo(x2 + Math.cos(n) * r2, y2 + Math.sin(n) * r2);
+  p.arc(x2, y2, r2, n, n + Math.PI, true);
+  p.lineTo(x1 - Math.cos(n) * r1, y1 - Math.sin(n) * r1);
+  p.arc(x1, y1, r1, n + Math.PI, n, true);
+  p.closePath(); return p;
+}
+function forma(pts, curva) {
+  const p = new Path2D();
+  if (!curva) { pts.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y))); p.closePath(); return p; }
+  // contorno suave: passa pelo meio de cada lado (pano não tem quina)
+  const m = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], n = pts.length;
+  const s = m(pts[n - 1], pts[0]); p.moveTo(s[0], s[1]);
+  for (let i = 0; i < n; i++) { const q = m(pts[i], pts[(i + 1) % n]); p.quadraticCurveTo(pts[i][0], pts[i][1], q[0], q[1]); }
+  p.closePath(); return p;
+}
+function membro(g, a, b, c, r1, r2, r3, cor) {   // dois segmentos: coxa+canela, braço+antebraço
+  g.fillStyle = cor; g.fill(capsula(a[0], a[1], r1, b[0], b[1], r2)); g.fill(capsula(b[0], b[1], r2, c[0], c[1], r3));
+}
+function bota(g, t, cor, sola, frente = 1) {
+  g.fillStyle = cor; g.fill(forma([[t[0] - 9, t[1] - 16], [t[0] + 7, t[1] - 16], [t[0] + 9 + 12 * frente, t[1] - 4], [t[0] + 10 + 13 * frente, t[1] + 2], [t[0] - 10, t[1] + 2]], true));
+  g.fillStyle = sola; g.fillRect(t[0] - 11, t[1], 22 + 13 * frente, 4);
+}
+function mao(g, p, cor) { g.fillStyle = cor; g.beginPath(); g.ellipse(p[0], p[1], 6, 5.5, 0, 0, Math.PI * 2); g.fill(); }
+function cabeca(g, h, o) {
+  const [x, y] = h;
+  g.fillStyle = o.pele; g.fill(capsula(x - 3, y + 10, 6, x - 4, y + 20, 7));            // pescoço
+  g.fill(forma([[x - 11, y - 12], [x + 8, y - 14], [x + 13, y - 4], [x + 15, y + 2], [x + 11, y + 4], [x + 9, y + 12], [x, y + 15], [x - 10, y + 9]], true));
+  g.fillStyle = 'rgba(0,0,0,0.22)'; g.fill(forma([[x - 4, y + 4], [x + 9, y + 6], [x + 7, y + 13], [x, y + 15], [x - 6, y + 10]], true));   // barba por fazer / sombra do queixo
+  g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(x + 5, y - 3, 5, 1.8);                     // olho
+  g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x + 3, y - 6, 8, 1.6);                     // sobrancelha
+  g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x - 4, y - 1, 3, 4.5, 0, 0, Math.PI * 2); g.fill();   // orelha
+  if (o.cabelo) { g.fillStyle = o.cabelo; g.fill(forma([[x - 13, y - 4], [x - 12, y - 14], [x - 2, y - 19], [x + 10, y - 16], [x + 13, y - 9], [x + 4, y - 11], [x - 6, y - 8], [x - 8, y + 2]], true)); }
+}
+
+function figura(o, desenhar) {
+  const S = o.s, LADO = 300, c = document.createElement('canvas');
+  c.width = Math.ceil(LADO * S); c.height = Math.ceil(LADO * S);
+  const g = c.getContext('2d'), ox = c.width / 2, oy = c.height - 14 * S, f = o.olha || 1;
+  g.save(); g.translate(ox, oy); g.scale(S * f, S); g.lineJoin = 'round'; g.lineCap = 'round';
+  desenhar(g); g.restore();
+  // direção da luz: do personagem pro poste mais perto
+  const [lx, ly] = LUZES.reduce((m, l) => (Math.hypot(l[0] - o.x, l[1] - o.y) < Math.hypot(m[0] - o.x, m[1] - o.y) ? l : m));
+  let dx = lx - o.x, dy = ly - (o.y - 90 * S); const d = Math.hypot(dx, dy); dx /= d; dy /= d;
+  // sombreado: claro do lado da luz, escuro do outro, pé mais escuro que cabeça
+  g.globalCompositeOperation = 'source-atop';
+  const sg = g.createLinearGradient(ox + dx * 60 * S, oy - 100 * S + dy * 60 * S, ox - dx * 60 * S, oy - 100 * S - dy * 60 * S);
+  sg.addColorStop(0, 'rgba(255,214,160,0.16)'); sg.addColorStop(0.5, 'rgba(0,0,0,0)'); sg.addColorStop(1, 'rgba(4,8,20,0.5)');
+  g.fillStyle = sg; g.fillRect(0, 0, c.width, c.height);
+  const ag = g.createLinearGradient(0, oy - 60 * S, 0, oy); ag.addColorStop(0, 'rgba(4,8,20,0)'); ag.addColorStop(1, 'rgba(4,8,20,0.45)');
+  g.fillStyle = ag; g.fillRect(0, 0, c.width, c.height);
+  if (o.flash) { g.fillStyle = `rgba(250,240,225,${o.flash})`; g.fillRect(0, 0, c.width, c.height); }
+  // luz de recorte: silhueta menos ela mesma deslocada pra longe da luz
+  const rim = document.createElement('canvas'); rim.width = c.width; rim.height = c.height;
+  const rg = rim.getContext('2d');
+  rg.drawImage(c, 0, 0); rg.globalCompositeOperation = 'source-in'; rg.fillStyle = rgba(A.sodio, o.recorte ?? 0.85); rg.fillRect(0, 0, c.width, c.height);
+  rg.globalCompositeOperation = 'destination-out'; rg.drawImage(c, -dx * 3.2 * S, -dy * 3.2 * S);
+  g.globalCompositeOperation = 'lighter'; g.drawImage(rim, 0, 0);
+  // contorno escuro
+  const out = document.createElement('canvas'); out.width = c.width + 8; out.height = c.height + 8;
+  const og = out.getContext('2d');
+  const mask = document.createElement('canvas'); mask.width = c.width; mask.height = c.height;
+  const mg = mask.getContext('2d'); mg.drawImage(c, 0, 0); mg.globalCompositeOperation = 'source-in'; mg.fillStyle = '#04060c'; mg.fillRect(0, 0, c.width, c.height);
+  for (let a = 0; a < 8; a++) og.drawImage(mask, 4 + Math.cos(a * Math.PI / 4) * 2.2, 4 + Math.sin(a * Math.PI / 4) * 2.2);
+  og.drawImage(c, 4, 4);
+  // sombra no chão, alongada pra longe da luz
+  ctx.save(); ctx.translate(o.x - dx * 14 * S, o.y + 2); ctx.rotate(Math.atan2(-dy, -dx) * 0.15);
+  ctx.fillStyle = 'rgba(3,6,14,0.55)'; ctx.beginPath(); ctx.ellipse(0, 0, 42 * S, 12 * S, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  ctx.drawImage(out, o.x - ox - 4, o.y - oy - 4);
+}
+
+// Faro, Mercenário: sobretudo comprido aberto, cachecol âmbar, ombreira de ex-segurança de carga,
+// escopeta de cano serrado na altura do peito. Ainda sem implante: cru.
+function faro(x, y, mira) {
+  figura({ x, y, s: 1.18, recorte: 0.9 }, g => {
+    const pele = '#a87b60', calca = '#1f232d', luva = '#1b1715', casaco = '#2d3444', casacoEsc = '#232938';
+    const pB = { q: [-6, -96], j: [-15, -50], t: [-26, -8] }, pF = { q: [6, -95], j: [17, -50], t: [24, -8] };
+    // aba de trás do sobretudo, varrida pelo passo
+    g.fillStyle = casacoEsc; g.fill(forma([[-16, -132], [-4, -100], [-6, -60], [-22, -34], [-40, -40], [-30, -80]], true));
+    membro(g, pB.q, pB.j, pB.t, 10, 8, 6.5, calca); bota(g, pB.t, '#16120f', '#0a0806', 1);
+    // braço de trás segurando a telha da escopeta
+    membro(g, [-6, -146], [16, -130], [40, -128], 7.5, 6.5, 5.5, casacoEsc);
+    membro(g, pF.q, pF.j, pF.t, 10, 8, 6.5, calca); bota(g, pF.t, '#16120f', '#0a0806', 1);
+    // tronco do sobretudo, aberto na frente
+    g.fillStyle = casaco; g.fill(forma([[-12, -154], [10, -156], [20, -146], [22, -120], [16, -98], [30, -42], [10, -36], [4, -70], [-6, -40], [-18, -60], [-16, -100], [-18, -140]], true));
+    g.fillStyle = '#161a22'; g.fill(forma([[6, -150], [13, -150], [14, -100], [8, -96], [6, -120]]));          // camisa por baixo
+    g.fillStyle = '#3a4255'; g.fill(forma([[10, -156], [20, -146], [17, -128], [12, -140]]));                 // lapela
+    g.fillStyle = '#17130f'; g.fillRect(-16, -101, 34, 6); g.fillStyle = '#7a6a52'; g.fillRect(9, -101, 5, 6);   // cinto
+    g.strokeStyle = 'rgba(0,0,0,0.28)'; g.lineWidth = 1.6;                                                     // dobras do pano molhado
+    for (const [a, b, c2, d] of [[-8, -92, -12, -50], [2, -90, 0, -46], [18, -92, 24, -50], [-12, -140, -10, -110]]) { g.beginPath(); g.moveTo(a, b); g.quadraticCurveTo((a + c2) / 2 + 3, (b + d) / 2, c2, d); g.stroke(); }
+    // ombreira de placa com tiras
+    g.fillStyle = '#4b433a'; g.fill(forma([[2, -158], [22, -154], [26, -138], [6, -138]], true));
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(4, -146, 20, 2.5); g.fillRect(4, -141, 20, 2);
+    cabeca(g, [6, -172], { pele, cabelo: '#141519' });
+    // cachecol âmbar: volta no pescoço e ponta caindo pra trás
+    g.fillStyle = A.ambar; g.fill(forma([[-8, -160], [10, -162], [12, -152], [-8, -150]], true));
+    g.fill(forma([[-8, -156], [-2, -154], [-14, -126], [-20, -130]], true));
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(-6, -156, 16, 2);
+    // escopeta: coronha de madeira, dois canos curtos
+    g.save(); g.translate(14, -124); g.rotate(mira);
+    g.fillStyle = '#5a4230'; g.fill(forma([[-26, 4], [-4, -2], [4, 6], [-22, 14]], true));
+    g.fillStyle = '#2c303b'; g.fillRect(-4, -5, 52, 6); g.fillRect(-4, 1, 52, 5);
+    g.fillStyle = 'rgba(237,244,240,0.25)'; g.fillRect(0, -5, 46, 1.5);
+    g.fillStyle = '#4a3828'; g.fillRect(18, 3, 16, 7);
+    g.restore();
+    mao(g, [40, -128], luva);
+    // braço da frente no gatilho
+    membro(g, [12, -146], [2, -122], [16, -118], 8, 7, 6, casaco);
+    mao(g, [17, -118], luva);
+  });
+}
+
+// Goteira: capa de chuva de plástico com capuz, bandana coral na boca, faca na mão.
+function goteira(x, y, o) {
+  figura({ x, y, s: o.s || 1, olha: -1, flash: o.flash, recorte: 0.8 }, g => {
+    const pele = '#8e6a55', calca = '#2a2c33', plastico = '#4c5466', plasticoEsc = '#3c4354';
+    const L = o.pose === 'corre' ? { qB: [-6, -88], jB: [-26, -54], tB: [-38, -30], qF: [6, -88], jF: [26, -60], tF: [30, -14], tronco: 10 }
+      : o.pose === 'recua' ? { qB: [-6, -92], jB: [-14, -48], tB: [-26, -6], qF: [6, -92], jF: [14, -48], tF: [18, -6], tronco: -12 }
+      : { qB: [-6, -86], jB: [-22, -46], tB: [-34, -6], qF: [6, -86], jF: [24, -48], tF: [30, -6], tronco: 14 };
+    const t = L.tronco, ombro = [6 + t, -136], ombroB = [-8 + t, -138], cab = [10 + t * 1.3, -158];
+    membro(g, L.qB, L.jB, L.tB, 9.5, 7.5, 6, calca); bota(g, L.tB, '#bdb8ad', '#3a3630', 1);
+    // braço de trás: balança pra trás no bote
+    const mB = o.pose === 'recua' ? [-26, -150] : [-24, -104];
+    membro(g, ombroB, [-14 + t * 0.5, -118], mB, 7, 6, 5, plasticoEsc); mao(g, mB, pele);
+    membro(g, L.qF, L.jF, L.tF, 9.5, 7.5, 6, calca); bota(g, L.tF, '#bdb8ad', '#3a3630', 1);
+    // capa: plástico duro, larga, cai até a coxa
+    g.fillStyle = plastico; g.fill(forma([[-14 + t, -146], [16 + t, -148], [28 + t, -120], [30, -70], [8, -62], [-12, -66], [-30, -74], [-22 + t * 0.5, -120]], true));
+    g.strokeStyle = 'rgba(0,0,0,0.25)'; g.lineWidth = 1.5;
+    for (const k of [-14, -2, 12]) { g.beginPath(); g.moveTo(k + t, -138); g.lineTo(k * 1.4, -70); g.stroke(); }
+    g.strokeStyle = 'rgba(230,238,255,0.35)'; g.lineWidth = 2.5;                       // brilho do plástico molhado
+    for (const [a, b] of [[4, -130], [18, -110], [-10, -100]]) { g.beginPath(); g.moveTo(a + t, b); g.lineTo(a + t * 0.6 + 3, b + 26); g.stroke(); }
+    // cabeça dentro do capuz
+    cabeca(g, cab, { pele });
+    g.fillStyle = plastico; g.fill(forma([[cab[0] - 16, cab[1] + 14], [cab[0] - 18, cab[1] - 8], [cab[0] - 6, cab[1] - 22], [cab[0] + 10, cab[1] - 20], [cab[0] + 17, cab[1] - 8], [cab[0] + 8, cab[1] - 12], [cab[0] - 2, cab[1] - 6], [cab[0] - 4, cab[1] + 12]], true));
+    g.fillStyle = '#b8645d'; g.fill(forma([[cab[0] + 1, cab[1] + 4], [cab[0] + 15, cab[1] + 3], [cab[0] + 12, cab[1] + 12], [cab[0] + 1, cab[1] + 13]], true));   // bandana
+    // braço da faca
+    const mF = o.pose === 'recua' ? [ombro[0] + 4, ombro[1] + 32] : [ombro[0] + 40, ombro[1] + 2];
+    membro(g, ombro, [ombro[0] + 18, ombro[1] + 18], mF, 7, 6, 5, plastico);
+    g.save(); g.translate(mF[0], mF[1]); g.rotate(o.pose === 'recua' ? 1.2 : -0.5);
+    g.fillStyle = '#c9d2e0'; g.fill(forma([[2, -3], [26, -1], [30, 1], [2, 3]])); g.fillStyle = '#222'; g.fillRect(-6, -3, 9, 6);
+    g.restore(); mao(g, mF, pele);
+  });
+}
+
+function atirador(x, y) {
+  figura({ x, y, s: 0.95, olha: -1, recorte: 0.55 }, g => {
+    const pele = '#7f5d4a', calca = '#24262d', jaq = '#3b3036';
+    membro(g, [-6, -94], [-16, -50], [-24, -6], 9.5, 7.5, 6, calca); bota(g, [-24, -6], '#15130f', '#080706', 1);
+    membro(g, [-8, -146], [16, -134], [38, -136], 7, 6, 5, '#2c2328'); mao(g, [38, -136], pele);
+    membro(g, [6, -94], [18, -50], [22, -6], 9.5, 7.5, 6, calca); bota(g, [22, -6], '#15130f', '#080706', 1);
+    g.fillStyle = jaq; g.fill(forma([[-14, -152], [12, -154], [22, -140], [20, -98], [-16, -96], [-20, -140]], true));
+    g.fillStyle = '#2a2125'; g.fillRect(-16, -104, 36, 8);
+    g.fillStyle = A.coral; g.fillRect(-18, -136, 8, 10);                                           // braçadeira dos Goteiras
+    cabeca(g, [6, -170], { pele, cabelo: '#111' });
+    g.fillStyle = '#1d212b'; g.fill(forma([[-8, -186], [12, -188], [16, -178], [-10, -176]], true)); g.fillRect(8, -180, 18, 4);   // boné
+    g.save(); g.translate(4, -140); g.rotate(0.38);                                                  // fuzil no ombro, mirando
+    g.fillStyle = '#3a2c22'; g.fill(forma([[-20, -4], [4, -6], [4, 8], [-18, 10]], true));
+    g.fillStyle = '#2b2f39'; g.fillRect(2, -5, 70, 8); g.fillRect(14, -12, 22, 6); g.fillRect(40, 3, 8, 12);
+    g.fillStyle = rgba(A.coral, 0.9); g.fillRect(70, -3, 3, 4);
+    g.restore();
+    membro(g, [10, -146], [0, -124], [16, -126], 8, 7, 6, jaq); mao(g, [16, -126], pele);
+  });
+}
+
+function portao(x, y) {
+  ctx.strokeStyle = rgba(A.ambar, 0.8); ctx.lineWidth = 3; ctx.setLineDash([14, 8]);
+  ctx.beginPath(); ctx.ellipse(x, y, 70, 22, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  figura({ x, y, s: 1.4, olha: -1, recorte: 0.6 }, g => {
+    const pele = '#6f5243', calca = '#26282e', mol = '#3b3f48', colete = '#2a2d34';
+    membro(g, [-8, -92], [-20, -48], [-28, -6], 12, 10, 8, calca); bota(g, [-28, -6], '#121010', '#060505', 1.2);
+    membro(g, [8, -92], [20, -48], [24, -6], 12, 10, 8, calca); bota(g, [24, -6], '#121010', '#060505', 1.2);
+    g.fillStyle = mol; g.fill(forma([[-24, -150], [20, -154], [32, -134], [30, -94], [-24, -90], [-30, -130]], true));   // moletom
+    g.fillStyle = colete; g.fill(forma([[-18, -146], [18, -148], [26, -132], [24, -100], [-20, -98], [-24, -130]], true));  // colete acolchoado
+    g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2; for (let k = -138; k < -100; k += 9) { g.beginPath(); g.moveTo(-20, k); g.lineTo(24, k - 2); g.stroke(); }
+    cabeca(g, [8, -170], { pele });
+    g.fillStyle = mol; g.fill(forma([[-10, -150], [-12, -176], [0, -192], [18, -190], [26, -176], [16, -178], [4, -172], [0, -152]], true));   // capuz
+    g.fillStyle = '#b8645d'; g.fill(forma([[6, -166], [22, -166], [20, -156], [6, -155]], true));
+    membro(g, [14, -144], [30, -124], [44, -128], 10, 9, 7, mol); mao(g, [44, -128], pele);
+  });
+  const sx = x - 104, sy = y - 196;   // escudo: porta de aço de enrolar arrancada, segurada na frente
+  ctx.fillStyle = '#04060c'; rr(sx - 4, sy - 4, 84, 190, 4); ctx.fill();
+  const g = ctx.createLinearGradient(sx, 0, sx + 76, 0); g.addColorStop(0, '#6a6f7a'); g.addColorStop(1, '#3e434e');
+  ctx.fillStyle = g; rr(sx, sy, 76, 182, 3); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'; for (let b = 6; b < 182; b += 10) ctx.fillRect(sx, sy + b, 76, 3);
+  ctx.fillStyle = 'rgba(140,82,52,0.55)'; ctx.fillRect(sx + 6, sy + 116, 34, 26); ctx.fillRect(sx + 46, sy + 24, 18, 34);
+  ctx.strokeStyle = rgba(A.coral, 0.75); ctx.lineWidth = 4;   // pichação dos Goteiras: uma gota
+  ctx.beginPath(); ctx.moveTo(sx + 38, sy + 42); ctx.quadraticCurveTo(sx + 58, sy + 80, sx + 38, sy + 92); ctx.quadraticCurveTo(sx + 18, sy + 80, sx + 38, sy + 42); ctx.stroke();
+  ctx.strokeStyle = rgba(A.sodio, 0.5); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx + 76, sy + 4); ctx.lineTo(sx + 76, sy + 178); ctx.stroke();
+  ctx.fillStyle = '#6f5243'; ctx.beginPath(); ctx.ellipse(sx + 4, sy + 92, 7, 6, 0, 0, Math.PI * 2); ctx.fill();   // mão segurando a borda
+  ctx.strokeStyle = '#04060c'; ctx.lineWidth = 2; ctx.stroke();
 }
 
 function barraVida(x, y, w, frac, cor, txt) {
@@ -226,21 +381,6 @@ function avisoCone(x, y, ang, abre, raio, prog) {
   ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, raio * prog, ang - abre / 2, ang + abre / 2); ctx.closePath();
   ctx.fillStyle = rgba(A.coral, 0.32); ctx.fill(); ctx.restore();
 }
-function portao(x, y) {
-  ctx.strokeStyle = rgba(A.ambar, 0.8); ctx.lineWidth = 3; ctx.setLineDash([14, 8]);
-  ctx.beginPath(); ctx.ellipse(x, y, 66, 22, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-  pessoa(x, y, { s: 1.6, casaco: '#2c2f38', olha: -1, acento: rgba(A.coral, 0.9), capuz: true });
-  const sx = x - 98, sy = y - 186;   // escudo: porta de aço de enrolar arrancada
-  ctx.fillStyle = '#04060c'; rr(sx - 4, sy - 4, 84, 182, 4); ctx.fill();
-  const g = ctx.createLinearGradient(sx, 0, sx + 76, 0); g.addColorStop(0, '#6a6f7a'); g.addColorStop(1, '#3e434e');
-  ctx.fillStyle = g; rr(sx, sy, 76, 174, 3); ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.28)'; for (let b = 6; b < 174; b += 10) ctx.fillRect(sx, sy + b, 76, 3);
-  ctx.fillStyle = 'rgba(140,82,52,0.55)'; ctx.fillRect(sx + 6, sy + 110, 34, 26); ctx.fillRect(sx + 46, sy + 24, 18, 34);
-  ctx.strokeStyle = rgba(A.coral, 0.75); ctx.lineWidth = 4;   // pichação dos Goteiras: uma gota
-  ctx.beginPath(); ctx.moveTo(sx + 38, sy + 42); ctx.quadraticCurveTo(sx + 58, sy + 80, sx + 38, sy + 92); ctx.quadraticCurveTo(sx + 18, sy + 80, sx + 38, sy + 42); ctx.stroke();
-  ctx.strokeStyle = rgba(A.sodio, 0.45); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(sx + 76, sy + 4); ctx.lineTo(sx + 76, sy + 170); ctx.stroke();
-}
-
 // ── HUD na linguagem do arcade: vidro escuro, borda fina menta, sem brilho ──
 function painel(x, y, w, h, r = 8) {
   ctx.fillStyle = 'rgba(17,29,44,0.72)'; rr(x, y, w, h, r); ctx.fill();
@@ -401,20 +541,18 @@ function cena() {
   ctx.fillStyle = '#3a3f4f'; rr(1070, 580, 88, 24, 10); ctx.fill(); ctx.fillStyle = rgba(A.coral, 0.6); ctx.fillRect(1146, 584, 10, 6);
   for (let i = 0; i < 40; i++) { ctx.fillStyle = rgba('#c7cbe0', R(0.1, 0.4)); ctx.fillRect(1112 + R(-56, 56), 590 - R(0, 90), 2, R(3, 8)); }
 
-  const poncho = '#4a5063';   // capa de chuva de plástico, cinza azulado
   const atores = [
-    { y: 404, d: () => { pessoa(1730, 404, { s: 1.15, casaco: '#2e2a33', bone: true, arma: 70, mira: 0.3, olha: -1, acento: rgba(A.coral, 0.85), recorte: 0.35 }); barraVida(1730, 228, 70, 1, A.coral); } },
-    { y: 610, d: () => { pessoa(1236, 610, { s: 1.2, casaco: poncho, capuz: true, capa: true, olha: -1, acento: rgba(A.coral, 0.85), flash: 0.45 }); barraVida(1236, 436, 70, 0.22, A.coral); } },
-    { y: 712, d: () => pessoa(fx, fy, { s: 1.3, casaco: '#2f3545', ombreira: true, arma: 40, mira, olha: 1, cachecol: A.ambar, recorte: 0.7 }) },
-    { y: 735, d: () => { pessoa(1262, 735, { s: 1.2, casaco: poncho, capuz: true, capa: true, olha: -1, acento: rgba(A.coral, 0.85), flash: 0.25 }); barraVida(1262, 562, 70, 0.4, A.coral); } },
+    { y: 404, d: () => { atirador(1730, 404); barraVida(1730, 210, 70, 1, A.coral); } },
+    { y: 610, d: () => { goteira(1236, 610, { pose: 'recua', flash: 0.16 }); barraVida(1236, 430, 70, 0.22, A.coral); } },
+    { y: 712, d: () => faro(fx, fy, mira) },
+    { y: 735, d: () => { goteira(1262, 735, { flash: 0.08 }); barraVida(1262, 560, 70, 0.4, A.coral); } },
     { y: 772, d: () => { portao(1470, 772); barraVida(1470, 520, 120, 0.71, A.ambar, 'NV 3'); } },
-    { y: 640, d: () => pessoa(2010, 640, { s: 1.2, casaco: poncho, capuz: true, capa: true, olha: -1, acento: rgba(A.coral, 0.85), recorte: 0.4 }) },
+    { y: 640, d: () => goteira(2010, 640, { pose: 'corre' }) },
   ].sort((a, b) => a.y - b.y);
   for (const a of atores) a.d();
 
   // tiro: clarão curto e chumbo em riscos finos
-  const s = 1.3, ex = 8 + Math.cos(mira) * 26, ey = -76 + Math.sin(mira) * 16;
-  const bx = fx + (ex + Math.cos(mira) * 40) * s, by = fy + (ey + Math.sin(mira) * 40) * s;
+  const bx = fx + (14 + Math.cos(mira) * 50) * 1.18, by = fy + (-124 + Math.sin(mira) * 50) * 1.18;
   ctx.save(); ctx.globalCompositeOperation = 'screen';
   for (let i = 0; i < 9; i++) {
     const a = mira + R(-0.4, 0.4), d0 = R(20, 110), d1 = d0 + R(70, 150);
