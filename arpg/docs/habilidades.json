@@ -1,0 +1,3680 @@
+{
+  "versao": "0.1",
+  "jogo": "Ruído",
+  "idioma": "pt-BR",
+  "observacao": "Números de partida para o protótipo. Ajustar depois de jogar.",
+  "atributos": [
+    {
+      "id": "corpo",
+      "nome": "Corpo",
+      "inicial": 5,
+      "efeito": "+8 de Vida por ponto. Atributo-chave do Mercenário.",
+      "porPonto": {
+        "vida": 8
+      }
+    },
+    {
+      "id": "reflexo",
+      "nome": "Reflexo",
+      "inicial": 5,
+      "efeito": "+0,5% de chance crítica por ponto e -0,5% de recarga da esquiva por ponto (máx. -25%). Atributo-chave do Infiltrador.",
+      "porPonto": {
+        "chanceCritica": 0.005,
+        "recargaEsquiva": -0.005
+      }
+    },
+    {
+      "id": "tecnica",
+      "nome": "Técnica",
+      "inicial": 5,
+      "efeito": "+1,5% de duração de efeitos e de Vida de construções por ponto. Atributo-chave do Técnico.",
+      "porPonto": {
+        "duracaoEfeitos": 0.015,
+        "vidaConstrucoes": 0.015
+      }
+    },
+    {
+      "id": "mente",
+      "nome": "Mente",
+      "inicial": 5,
+      "efeito": "+1 de Carga máxima, +0,1 de Carga por segundo e +1 de tolerância a Ruído por ponto (máx. +20). Atributo-chave do Hacker.",
+      "porPonto": {
+        "cargaMax": 1,
+        "cargaRegen": 0.1,
+        "toleranciaRuido": 1
+      }
+    }
+  ],
+  "formulas": {
+    "dano": "(base.dano + escala.porNivel.dano × (nível − 1)) × (1 + potência da arma) × (1 + 0,02 × (atributo − 5)) × bônus de Ruído × (crítico ? 1,5 : 1)",
+    "critico": {
+      "chanceBase": 0.05,
+      "multiplicador": 1.5
+    },
+    "jogador": {
+      "vida": "vidaBase + 14 × (nível − 1) + 8 × (Corpo − 5)",
+      "carga": "cargaBase + (Mente − 5)",
+      "cargaRegen": "6 + 0,1 × (Mente − 5) por segundo",
+      "velocidade": 4.5,
+      "pontosDeAtributoPorNivel": 3,
+      "nivelMaximo": 30,
+      "xpParaProximoNivel": "arredonda(100 × nível^1,5)",
+      "armadura": "redução = armadura ÷ (armadura + 50 + 10 × nível do inimigo)"
+    },
+    "inimigo": {
+      "vida": "vida × 1,16^(nível − 1)",
+      "dano": "dano × 1,11^(nível − 1)",
+      "xp": "xp × 1,10^(nível − 1)",
+      "observacao": "Os valores da lista de inimigos são os de nível 1. Cada bairro aplica a fórmula com o nível local."
+    },
+    "portaDeNivel": {
+      "descricao": "d = nível do inimigo − nível do jogador",
+      "danoCausado": "se d ≥ 3: × (1 − 0,15 × (d − 2)), mínimo 0,25",
+      "danoRecebido": "se d ≥ 3: × (1 + 0,20 × (d − 2))",
+      "xp": "se d ≤ −5: × 0,25"
+    },
+    "injetor": {
+      "cargas": 3,
+      "cura": 0.35,
+      "duracao": 1.5,
+      "recarga": "1 carga a cada 20 abates ou em vendedor"
+    },
+    "unidade": "1 m = 1 unidade de mundo (sugestão: 48 px no zoom base do PC)"
+  },
+  "progressao": {
+    "espacosDeHabilidade": 4,
+    "regra": "As teclas 1 a 4 formam o conjunto ativo. O jogador escolhe 4 entre as habilidades do arquétipo (incluindo a suprema) e as ativas dos implantes instalados. Ataque básico e esquiva são fixos.",
+    "desbloqueios": [
+      {
+        "nivel": 1,
+        "o_que": "Ataque básico, esquiva e 1ª habilidade"
+      },
+      {
+        "nivel": 2,
+        "o_que": "2ª habilidade"
+      },
+      {
+        "nivel": 3,
+        "o_que": "1ª passiva; espaço de implante: olhos"
+      },
+      {
+        "nivel": 4,
+        "o_que": "3ª habilidade"
+      },
+      {
+        "nivel": 6,
+        "o_que": "Espaço de implante: braços"
+      },
+      {
+        "nivel": 7,
+        "o_que": "4ª habilidade"
+      },
+      {
+        "nivel": 8,
+        "o_que": "2ª passiva"
+      },
+      {
+        "nivel": 10,
+        "o_que": "Suprema; espaço de implante: coluna"
+      },
+      {
+        "nivel": 14,
+        "o_que": "3ª passiva"
+      },
+      {
+        "nivel": 15,
+        "o_que": "Espaço de implante: sistema nervoso"
+      }
+    ]
+  },
+  "arquetipos": [
+    {
+      "id": "mercenario",
+      "nome": "Mercenário",
+      "apelido": "Braço de Aluguel",
+      "descricao": "Combate direto. Entra no meio do bando, empurra, atordoa e limpa a rua com escopeta e granada.",
+      "atributoChave": "corpo",
+      "cor": "#FF6B4A",
+      "vidaBase": 110,
+      "cargaBase": 100,
+      "passado": "Ex-segurança de carga das Docas. Largou o emprego quando mandaram atirar em grevista.",
+      "habilidades": [
+        {
+          "id": "merc_disparo_curto",
+          "nome": "Disparo Curto",
+          "tipo": "ativa",
+          "categoria": "basico",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "ataque",
+          "cooldown": 0.4,
+          "custo": 0,
+          "efeito": "Pistola pesada com mira automática. Cada acerto devolve Carga.",
+          "base": {
+            "dano": 12,
+            "alcance": 7,
+            "cargaPorAcerto": 4
+          },
+          "escala": {
+            "atributo": "corpo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 1.5
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 13,
+              "id": "merc_disparo_curto_1",
+              "nome": "Pente Estendido",
+              "efeito": "Todo 5º disparo causa +100% de dano e empurra 1 m.",
+              "mod": {
+                "aCadaN": 5,
+                "danoMult": 2.0,
+                "empurrao": 1
+              }
+            },
+            {
+              "nivel": 24,
+              "id": "merc_disparo_curto_2",
+              "nome": "Calibre Grosso",
+              "efeito": "Disparos atravessam 1 inimigo; o segundo alvo recebe 70% do dano.",
+              "mod": {
+                "atravessa": 1,
+                "danoSegundoAlvo": 0.7
+              }
+            }
+          ]
+        },
+        {
+          "id": "merc_rolamento",
+          "nome": "Rolamento",
+          "tipo": "ativa",
+          "categoria": "esquiva",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "Q",
+          "cooldown": 3.5,
+          "custo": 0,
+          "efeito": "Rola 3,5 m na direção do movimento. Invulnerável durante o rolamento.",
+          "base": {
+            "distancia": 3.5,
+            "invulneravel": 0.25,
+            "cargas": 1
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 17,
+              "id": "merc_rolamento_1",
+              "nome": "Segundo Fôlego",
+              "efeito": "Guarda 2 cargas de Rolamento.",
+              "mod": {
+                "cargas": 2
+              }
+            },
+            {
+              "nivel": 27,
+              "id": "merc_rolamento_2",
+              "nome": "Rolamento Carregado",
+              "efeito": "O próximo Disparo Curto em até 2 s depois de rolar causa +80% de dano.",
+              "mod": {
+                "proximoBasicoMult": 1.8,
+                "janela": 2
+              }
+            }
+          ]
+        },
+        {
+          "id": "merc_varredura",
+          "nome": "Varredura",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "1",
+          "cooldown": 4,
+          "custo": 20,
+          "efeito": "Tiro de escopeta de cano serrado em cone. Acerta todos no cone e empurra 1 m.",
+          "base": {
+            "dano": 42,
+            "cone": 60,
+            "alcance": 4.5,
+            "empurrao": 1
+          },
+          "escala": {
+            "atributo": "corpo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 5
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 5,
+              "id": "merc_varredura_1",
+              "nome": "Chumbo Grosso",
+              "efeito": "+20% de dano. Alvos a menos de 2 m recebem mais 30%.",
+              "mod": {
+                "danoMult": 1.2,
+                "danoPertoMult": 1.3,
+                "perto": 2
+              }
+            },
+            {
+              "nivel": 11,
+              "id": "merc_varredura_2",
+              "nome": "Segundo Cano",
+              "efeito": "Guarda 2 cargas (recarga de 4 s por carga).",
+              "mod": {
+                "cargas": 2
+              }
+            },
+            {
+              "nivel": 18,
+              "id": "merc_varredura_3a",
+              "nome": "Cartucho de Brasa",
+              "efeito": "Incendeia os alvos: 10 de dano por segundo por 3 s.",
+              "mod": {
+                "queimadura": {
+                  "danoPorSegundo": 10,
+                  "duracao": 3
+                }
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 18,
+              "id": "merc_varredura_3b",
+              "nome": "Cano Longo",
+              "efeito": "O cone fecha para 30°, o alcance vai a 7 m, o tiro atravessa e causa +25% de dano.",
+              "mod": {
+                "cone": 30,
+                "alcance": 7,
+                "danoMult": 1.25,
+                "atravessa": true
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "merc_investida",
+          "nome": "Investida de Ombro",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 2,
+          "teclaPadrao": "2",
+          "cooldown": 6,
+          "custo": 15,
+          "efeito": "Avança 5 m em 0,3 s. Fere todos no caminho, empurra 2 m e atordoa.",
+          "base": {
+            "dano": 30,
+            "distancia": 5,
+            "empurrao": 2,
+            "atordoamento": 0.6
+          },
+          "escala": {
+            "atributo": "corpo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 4
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 6,
+              "id": "merc_investida_1",
+              "nome": "Ombro de Ferro",
+              "efeito": "Atordoa por 1 s. -25% de dano recebido durante a investida e por 1 s depois.",
+              "mod": {
+                "atordoamento": 1.0,
+                "reducaoDano": 0.25,
+                "duracao": 1
+              }
+            },
+            {
+              "nivel": 12,
+              "id": "merc_investida_2",
+              "nome": "Dominó",
+              "efeito": "Inimigos empurrados contra parede ou contra outro inimigo recebem 50% do dano de novo e ficam atordoados.",
+              "mod": {
+                "colisaoDanoMult": 0.5,
+                "colisaoAtordoa": true
+              }
+            },
+            {
+              "nivel": 20,
+              "id": "merc_investida_3a",
+              "nome": "Vai e Volta",
+              "efeito": "Pode reativar em até 2 s para voltar ao ponto de partida (60% do dano).",
+              "mod": {
+                "reativar": true,
+                "janela": 2,
+                "danoMult": 0.6
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 20,
+              "id": "merc_investida_3b",
+              "nome": "Rolo Compressor",
+              "efeito": "Distância de 7 m. Cada inimigo atingido reduz a recarga em 0,5 s (máx. 3 s).",
+              "mod": {
+                "distancia": 7,
+                "recargaPorAlvo": -0.5,
+                "recargaMax": -3
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "merc_granada",
+          "nome": "Granada de Estilhaço",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 4,
+          "teclaPadrao": "3",
+          "cooldown": 10,
+          "custo": 30,
+          "efeito": "Arremessa até 7 m. Explode 0,6 s depois de pousar e causa Sangramento por 4 s.",
+          "base": {
+            "dano": 60,
+            "raio": 2.5,
+            "alcance": 7,
+            "atraso": 0.6,
+            "danoPorSegundo": 5,
+            "duracao": 4
+          },
+          "escala": {
+            "atributo": "corpo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 7,
+              "danoPorSegundo": 0.6
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 9,
+              "id": "merc_granada_1",
+              "nome": "Pavio Curto",
+              "efeito": "Explode no impacto. Raio de 3 m.",
+              "mod": {
+                "atraso": 0,
+                "raio": 3
+              }
+            },
+            {
+              "nivel": 15,
+              "id": "merc_granada_2",
+              "nome": "Estilhaço Fino",
+              "efeito": "Sangramento dura 6 s. Alvos sangrando recebem +10% de dano de todas as fontes.",
+              "mod": {
+                "duracao": 6,
+                "vulnerabilidade": 0.1
+              }
+            },
+            {
+              "nivel": 22,
+              "id": "merc_granada_3a",
+              "nome": "Cacho",
+              "efeito": "Divide-se em 3 minigranadas (40% do dano cada, raio de 1,5 m).",
+              "mod": {
+                "fragmentos": 3,
+                "danoMult": 0.4,
+                "raio": 1.5
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 22,
+              "id": "merc_granada_3b",
+              "nome": "Fumaça Quente",
+              "efeito": "Deixa nuvem por 4 s: inimigos dentro ficam 40% mais lentos e só enxergam até 3 m.",
+              "mod": {
+                "nuvem": {
+                  "duracao": 4,
+                  "lentidao": 0.4,
+                  "visao": 3
+                }
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "merc_peito_aberto",
+          "nome": "Peito Aberto",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 7,
+          "teclaPadrao": "4",
+          "cooldown": 14,
+          "custo": 20,
+          "efeito": "Provoca inimigos em 6 m por 3 s e ganha um escudo por 5 s.",
+          "base": {
+            "escudo": 40,
+            "raio": 6,
+            "provocacao": 3,
+            "duracao": 5
+          },
+          "escala": {
+            "atributo": "corpo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "escudo": 6
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 16,
+              "id": "merc_peito_aberto_1",
+              "nome": "Casca Grossa",
+              "efeito": "Escudo +50%. Quando acaba, 30% do valor inicial volta como cura.",
+              "mod": {
+                "escudoMult": 1.5,
+                "curaAoFim": 0.3
+              }
+            },
+            {
+              "nivel": 21,
+              "id": "merc_peito_aberto_2",
+              "nome": "Espinho",
+              "efeito": "Enquanto o escudo durar, quem bate de perto recebe 12 de dano por golpe (+1,5 por nível).",
+              "mod": {
+                "espinho": 12,
+                "espinhoPorNivel": 1.5
+              }
+            },
+            {
+              "nivel": 25,
+              "id": "merc_peito_aberto_3a",
+              "nome": "Intimidar",
+              "efeito": "Inimigos comuns provocados causam -30% de dano por 5 s.",
+              "mod": {
+                "enfraquecer": 0.3,
+                "duracao": 5
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 25,
+              "id": "merc_peito_aberto_3b",
+              "nome": "Ira",
+              "efeito": "Cada inimigo provocado dá +6% de dano por 6 s (máx. +36%).",
+              "mod": {
+                "danoPorAlvo": 0.06,
+                "max": 0.36,
+                "duracao": 6
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "merc_hora_extra",
+          "nome": "Hora Extra",
+          "tipo": "ativa",
+          "categoria": "suprema",
+          "nivelDesbloqueio": 10,
+          "teclaPadrao": null,
+          "cooldown": 60,
+          "custo": 0,
+          "efeito": "Por 8 s: +40% de velocidade de ataque, +25% de dano e habilidades não gastam Carga.",
+          "base": {
+            "duracao": 8,
+            "velocidadeAtaque": 0.4,
+            "danoBonus": 0.25,
+            "custoZero": true
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 19,
+              "id": "merc_hora_extra_1",
+              "nome": "Adicional Noturno",
+              "efeito": "Cada abate durante a Hora Extra estende a duração em 0,5 s (máx. +4 s).",
+              "mod": {
+                "extensaoPorAbate": 0.5,
+                "extensaoMax": 4
+              }
+            },
+            {
+              "nivel": 28,
+              "id": "merc_hora_extra_2a",
+              "nome": "Banco de Horas",
+              "efeito": "Recarga de 45 s.",
+              "mod": {
+                "cooldown": 45
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 28,
+              "id": "merc_hora_extra_2b",
+              "nome": "Hora Dobrada",
+              "efeito": "Ao ativar, zera a recarga de todas as outras habilidades.",
+              "mod": {
+                "zeraRecargas": true
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "merc_couro_grosso",
+          "nome": "Couro Grosso",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 3,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "-10% de dano recebido.",
+          "base": {
+            "reducaoDano": 0.1
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 23,
+              "id": "merc_couro_grosso_1",
+              "nome": "Couro Curtido",
+              "efeito": "-15% de dano recebido no total e imunidade a empurrão.",
+              "mod": {
+                "reducaoDano": 0.15,
+                "imuneEmpurrao": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "merc_sangue_quente",
+          "nome": "Sangue Quente",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 8,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "Cada abate dá +4% de dano por 5 s. Acumula até 5 vezes.",
+          "base": {
+            "danoPorAcumulo": 0.04,
+            "acumulos": 5,
+            "duracao": 5
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 26,
+              "id": "merc_sangue_quente_1",
+              "nome": "Sangue Fervendo",
+              "efeito": "Até 6 acúmulos. Cada um também dá +3% de velocidade de movimento.",
+              "mod": {
+                "acumulos": 6,
+                "velocidadePorAcumulo": 0.03
+              }
+            }
+          ]
+        },
+        {
+          "id": "merc_ultimo_pente",
+          "nome": "Último Pente",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 14,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "Abaixo de 30% de Vida: +20% de velocidade de ataque e 5% de roubo de vida.",
+          "base": {
+            "limiarVida": 0.3,
+            "velocidadeAtaque": 0.2,
+            "rouboVida": 0.05
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 29,
+              "id": "merc_ultimo_pente_1",
+              "nome": "Bala Guardada",
+              "efeito": "Uma vez a cada 90 s, um golpe fatal deixa você com 1 de Vida e 2 s de invulnerabilidade.",
+              "mod": {
+                "evitaMorte": true,
+                "cooldown": 90,
+                "invulneravel": 2
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hacker",
+      "nome": "Hacker",
+      "apelido": "Interferente",
+      "descricao": "Invade sistemas e drones. Luta de longe, espalha dano em cadeia e vira as máquinas do inimigo contra ele.",
+      "atributoChave": "mente",
+      "cor": "#2EE6D6",
+      "vidaBase": 90,
+      "cargaBase": 120,
+      "passado": "Aprendiz expulso do Coro Mudo por vender acesso a quem não devia.",
+      "habilidades": [
+        {
+          "id": "hack_pulso",
+          "nome": "Pulso",
+          "tipo": "ativa",
+          "categoria": "basico",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "ataque",
+          "cooldown": 0.45,
+          "custo": 0,
+          "efeito": "Emissor de pulso no antebraço, com mira automática. Cada acerto devolve Carga.",
+          "base": {
+            "dano": 10,
+            "alcance": 8,
+            "cargaPorAcerto": 5
+          },
+          "escala": {
+            "atributo": "mente",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 1.3
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 13,
+              "id": "hack_pulso_1",
+              "nome": "Eco de Sinal",
+              "efeito": "25% de chance de o Pulso saltar para outro inimigo em 3 m (60% do dano).",
+              "mod": {
+                "chanceSalto": 0.25,
+                "raio": 3,
+                "danoMult": 0.6
+              }
+            },
+            {
+              "nivel": 24,
+              "id": "hack_pulso_2",
+              "nome": "Sobretensão",
+              "efeito": "+30% de dano do Pulso contra alvos sob efeito de uma habilidade sua.",
+              "mod": {
+                "danoMultAlvoAfetado": 1.3
+              }
+            }
+          ]
+        },
+        {
+          "id": "hack_salto_de_quadro",
+          "nome": "Salto de Quadro",
+          "tipo": "ativa",
+          "categoria": "esquiva",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "Q",
+          "cooldown": 4,
+          "custo": 0,
+          "efeito": "Teleporta 4,5 m na direção do movimento, sem tempo de viagem.",
+          "base": {
+            "distancia": 4.5,
+            "invulneravel": 0.15,
+            "cargas": 1
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 17,
+              "id": "hack_salto_de_quadro_1",
+              "nome": "Imagem Residual",
+              "efeito": "Deixa uma isca holográfica por 2 s que atrai inimigos comuns.",
+              "mod": {
+                "isca": {
+                  "duracao": 2
+                }
+              }
+            },
+            {
+              "nivel": 27,
+              "id": "hack_salto_de_quadro_2",
+              "nome": "Quadro Duplo",
+              "efeito": "Guarda 2 cargas.",
+              "mod": {
+                "cargas": 2
+              }
+            }
+          ]
+        },
+        {
+          "id": "hack_curto_circuito",
+          "nome": "Curto-Circuito",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "1",
+          "cooldown": 5,
+          "custo": 20,
+          "efeito": "Arco elétrico no alvo que salta para até 3 inimigos em 4 m. Cada salto causa 70% do anterior.",
+          "base": {
+            "dano": 34,
+            "alcance": 8,
+            "saltos": 3,
+            "raioSalto": 4,
+            "perdaPorSalto": 0.3
+          },
+          "escala": {
+            "atributo": "mente",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 4.5
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 5,
+              "id": "hack_curto_circuito_1",
+              "nome": "Bitola Larga",
+              "efeito": "+2 saltos.",
+              "mod": {
+                "saltos": 5
+              }
+            },
+            {
+              "nivel": 11,
+              "id": "hack_curto_circuito_2",
+              "nome": "Mudo",
+              "efeito": "Alvos atingidos não usam habilidades por 2 s (chefes: 0,5 s).",
+              "mod": {
+                "silencio": 2,
+                "silencioChefe": 0.5
+              }
+            },
+            {
+              "nivel": 18,
+              "id": "hack_curto_circuito_3a",
+              "nome": "Cadeia Quebrada",
+              "efeito": "Se acertar 4 ou mais alvos, o último explode: 50% do dano em raio de 2 m.",
+              "mod": {
+                "minAlvos": 4,
+                "explosaoMult": 0.5,
+                "raio": 2
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 18,
+              "id": "hack_curto_circuito_3b",
+              "nome": "Fio Terra",
+              "efeito": "Sem saltos. Dano único x2,2 e atordoa por 1 s.",
+              "mod": {
+                "saltos": 0,
+                "danoMult": 2.2,
+                "atordoamento": 1
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "hack_sequestro",
+          "nome": "Sequestro",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 2,
+          "teclaPadrao": "2",
+          "cooldown": 14,
+          "custo": 35,
+          "efeito": "Uma máquina inimiga comum (drone, torreta, empilhadeira) luta por você por 12 s com +30% de dano. Em humanos, trava a ferragem: 20 de dano e 2,5 s de atordoamento.",
+          "base": {
+            "dano": 20,
+            "alcance": 8,
+            "duracao": 12,
+            "danoMaquina": 0.3,
+            "atordoamento": 2.5,
+            "alvos": 1
+          },
+          "escala": {
+            "atributo": "mente",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 2.5
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 6,
+              "id": "hack_sequestro_1",
+              "nome": "Raiz",
+              "efeito": "Dura 18 s. Ao final, a máquina explode: 40 de dano em raio de 2,5 m.",
+              "mod": {
+                "duracao": 18,
+                "explosao": 40,
+                "raio": 2.5
+              }
+            },
+            {
+              "nivel": 12,
+              "id": "hack_sequestro_2",
+              "nome": "Dois Canais",
+              "efeito": "Mantém 2 máquinas ao mesmo tempo.",
+              "mod": {
+                "alvos": 2
+              }
+            },
+            {
+              "nivel": 20,
+              "id": "hack_sequestro_3a",
+              "nome": "Titereiro",
+              "efeito": "Humanos travados atacam os próprios aliados por 4 s em vez de ficarem atordoados.",
+              "mod": {
+                "controleHumano": 4
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 20,
+              "id": "hack_sequestro_3b",
+              "nome": "Formatar",
+              "efeito": "Máquinas com menos de 35% de Vida são destruídas na hora e devolvem 20 de Carga.",
+              "mod": {
+                "executaMaquina": 0.35,
+                "cargaDevolvida": 20
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "hack_praga",
+          "nome": "Praga de Sinal",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 4,
+          "teclaPadrao": "3",
+          "cooldown": 12,
+          "custo": 30,
+          "efeito": "Infecta o alvo por 6 s. Se ele morrer infectado, a praga salta para todos em 3,5 m com duração renovada.",
+          "base": {
+            "danoPorSegundo": 12,
+            "duracao": 6,
+            "alcance": 8,
+            "raioPropagacao": 3.5
+          },
+          "escala": {
+            "atributo": "mente",
+            "porPonto": 0.02,
+            "porNivel": {
+              "danoPorSegundo": 1.4
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 9,
+              "id": "hack_praga_1",
+              "nome": "Cepa Rápida",
+              "efeito": "+25% de dano por segundo. A cada 2 s, também contagia 1 inimigo próximo.",
+              "mod": {
+                "danoMult": 1.25,
+                "contagioIntervalo": 2
+              }
+            },
+            {
+              "nivel": 15,
+              "id": "hack_praga_2",
+              "nome": "Sintoma",
+              "efeito": "Infectados ficam 25% mais lentos e causam -15% de dano.",
+              "mod": {
+                "lentidao": 0.25,
+                "enfraquecer": 0.15
+              }
+            },
+            {
+              "nivel": 22,
+              "id": "hack_praga_3a",
+              "nome": "Surto de Rede",
+              "efeito": "Ao expirar em alvo vivo, explode: 60% do dano total em raio de 2,5 m.",
+              "mod": {
+                "explosaoMult": 0.6,
+                "raio": 2.5
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 22,
+              "id": "hack_praga_3b",
+              "nome": "Parasita",
+              "efeito": "15% do dano da Praga volta como cura.",
+              "mod": {
+                "rouboVida": 0.15
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "hack_parede",
+          "nome": "Parede de Chiado",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 7,
+          "teclaPadrao": "4",
+          "cooldown": 16,
+          "custo": 25,
+          "efeito": "Barreira de 5 m por 5 s, a até 7 m. Bloqueia projéteis inimigos. Quem atravessa leva dano e fica 50% mais lento por 2 s.",
+          "base": {
+            "dano": 25,
+            "comprimento": 5,
+            "duracao": 5,
+            "alcance": 7,
+            "lentidao": 0.5
+          },
+          "escala": {
+            "atributo": "mente",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 3
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 16,
+              "id": "hack_parede_1",
+              "nome": "Malha Fina",
+              "efeito": "Dura 7 s e mede 7 m.",
+              "mod": {
+                "duracao": 7,
+                "comprimento": 7
+              }
+            },
+            {
+              "nivel": 21,
+              "id": "hack_parede_2",
+              "nome": "Retorno",
+              "efeito": "Projéteis bloqueados voltam para quem atirou com 50% do dano.",
+              "mod": {
+                "reflete": 0.5
+              }
+            },
+            {
+              "nivel": 25,
+              "id": "hack_parede_3a",
+              "nome": "Gaiola",
+              "efeito": "Vira um anel de 3 m de raio que prende inimigos comuns dentro.",
+              "mod": {
+                "forma": "anel",
+                "raio": 3
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 25,
+              "id": "hack_parede_3b",
+              "nome": "Cerca Viva",
+              "efeito": "A parede anda com você como um escudo frontal de 180°.",
+              "mod": {
+                "forma": "escudo",
+                "arco": 180
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "hack_apagao",
+          "nome": "Apagão",
+          "tipo": "ativa",
+          "categoria": "suprema",
+          "nivelDesbloqueio": 10,
+          "teclaPadrao": null,
+          "cooldown": 70,
+          "custo": 0,
+          "efeito": "Pulso em 8 m: causa dano, desliga drones, torretas e escudos por 5 s e deixa humanos 50% mais lentos por 5 s.",
+          "base": {
+            "dano": 80,
+            "raio": 8,
+            "duracao": 5,
+            "lentidao": 0.5
+          },
+          "escala": {
+            "atributo": "mente",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 9
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 19,
+              "id": "hack_apagao_1",
+              "nome": "Blecaute Longo",
+              "efeito": "Dura 7 s. Inimigos desligados recebem +25% de dano.",
+              "mod": {
+                "duracao": 7,
+                "vulnerabilidade": 0.25
+              }
+            },
+            {
+              "nivel": 28,
+              "id": "hack_apagao_2a",
+              "nome": "Reinício Forçado",
+              "efeito": "Máquinas desligadas voltam do seu lado por 8 s.",
+              "mod": {
+                "converteMaquinas": 8
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 28,
+              "id": "hack_apagao_2b",
+              "nome": "Pane Geral",
+              "efeito": "+100% de dano. Cada abate do Apagão reduz a própria recarga em 3 s.",
+              "mod": {
+                "danoMult": 2.0,
+                "recargaPorAbate": -3
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "hack_banda_larga",
+          "nome": "Banda Larga",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 3,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "+15% de alcance das habilidades.",
+          "base": {
+            "alcanceBonus": 0.15
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 23,
+              "id": "hack_banda_larga_1",
+              "nome": "Fibra",
+              "efeito": "+25% de alcance no total e +1 salto ou contágio nas habilidades em cadeia.",
+              "mod": {
+                "alcanceBonus": 0.25,
+                "saltosExtras": 1
+              }
+            }
+          ]
+        },
+        {
+          "id": "hack_reciclagem",
+          "nome": "Reciclagem de Ciclos",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 8,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "Abater um alvo infectado, travado ou sequestrado devolve 12 de Carga.",
+          "base": {
+            "cargaDevolvida": 12
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 26,
+              "id": "hack_reciclagem_1",
+              "nome": "Ciclo Curto",
+              "efeito": "Esses abates também reduzem todas as recargas em 1 s.",
+              "mod": {
+                "recargaPorAbate": -1
+              }
+            }
+          ]
+        },
+        {
+          "id": "hack_porta_dos_fundos",
+          "nome": "Porta dos Fundos",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 14,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "+20% de dano contra inimigos com escudo ou blindagem. Ignora 30% da armadura.",
+          "base": {
+            "danoContraBlindados": 0.2,
+            "ignoraArmadura": 0.3
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 29,
+              "id": "hack_porta_dos_fundos_1",
+              "nome": "Dia Zero",
+              "efeito": "O primeiro acerto em cada inimigo é crítico garantido.",
+              "mod": {
+                "primeiroAcertoCritico": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tecnico",
+      "nome": "Técnico",
+      "apelido": "Gambiarra",
+      "descricao": "Gadgets e torretas. Monta o campo de batalha antes do inimigo chegar e deixa as construções trabalharem.",
+      "atributoChave": "tecnica",
+      "cor": "#FFD23F",
+      "vidaBase": 100,
+      "cargaBase": 100,
+      "passado": "Cresceu numa barraca de conserto do Mercado Baixo. Conserta qualquer coisa, menos gente.",
+      "habilidades": [
+        {
+          "id": "tec_rebite",
+          "nome": "Pistola de Rebite",
+          "tipo": "ativa",
+          "categoria": "basico",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "ataque",
+          "cooldown": 0.5,
+          "custo": 0,
+          "efeito": "Ferramenta de obra adaptada, com mira automática. Cada acerto devolve Carga.",
+          "base": {
+            "dano": 11,
+            "alcance": 7,
+            "cargaPorAcerto": 5
+          },
+          "escala": {
+            "atributo": "tecnica",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 1.4
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 13,
+              "id": "tec_rebite_1",
+              "nome": "Ricochete",
+              "efeito": "Todo 4º rebite ricocheteia em até 2 inimigos.",
+              "mod": {
+                "aCadaN": 4,
+                "ricochetes": 2
+              }
+            },
+            {
+              "nivel": 24,
+              "id": "tec_rebite_2",
+              "nome": "Rebite Quente",
+              "efeito": "+35% de dano contra inimigos a até 3 m de uma construção sua.",
+              "mod": {
+                "danoMultPertoConstrucao": 1.35,
+                "raio": 3
+              }
+            }
+          ]
+        },
+        {
+          "id": "tec_propulsor",
+          "nome": "Propulsor",
+          "tipo": "ativa",
+          "categoria": "esquiva",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "Q",
+          "cooldown": 4,
+          "custo": 0,
+          "efeito": "Jato curto de 3,5 m na direção do movimento.",
+          "base": {
+            "distancia": 3.5,
+            "invulneravel": 0.2,
+            "cargas": 1
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 17,
+              "id": "tec_propulsor_1",
+              "nome": "Deixa Cair",
+              "efeito": "Larga uma Mina Saltadora (60% do dano) no ponto de partida.",
+              "mod": {
+                "minaMult": 0.6
+              }
+            },
+            {
+              "nivel": 27,
+              "id": "tec_propulsor_2",
+              "nome": "Tanque Reserva",
+              "efeito": "Guarda 2 cargas.",
+              "mod": {
+                "cargas": 2
+              }
+            }
+          ]
+        },
+        {
+          "id": "tec_torreta",
+          "nome": "Torreta Pardal",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "1",
+          "cooldown": 12,
+          "custo": 30,
+          "efeito": "Monta uma torreta por 20 s que atira 3 vezes por segundo em até 7 m. Limite de 1 torreta.",
+          "base": {
+            "dano": 9,
+            "tirosPorSegundo": 3,
+            "vida": 80,
+            "duracao": 20,
+            "alcance": 7,
+            "limite": 1
+          },
+          "escala": {
+            "atributo": "tecnica",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 1,
+              "vida": 12
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 5,
+              "id": "tec_torreta_1",
+              "nome": "Bico Duplo",
+              "efeito": "4 tiros por segundo e +30% de Vida.",
+              "mod": {
+                "tirosPorSegundo": 4,
+                "vidaMult": 1.3
+              }
+            },
+            {
+              "nivel": 11,
+              "id": "tec_torreta_2",
+              "nome": "Ninho",
+              "efeito": "Limite de 2 torretas.",
+              "mod": {
+                "limite": 2
+              }
+            },
+            {
+              "nivel": 18,
+              "id": "tec_torreta_3a",
+              "nome": "Pardal Lança-Chamas",
+              "efeito": "Troca os tiros por um cone de fogo de 4 m: 36 de dano por segundo em área.",
+              "mod": {
+                "modo": "chamas",
+                "danoPorSegundo": 36,
+                "alcance": 4
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 18,
+              "id": "tec_torreta_3b",
+              "nome": "Pardal Atirador",
+              "efeito": "1 tiro por segundo de 45 de dano, alcance de 11 m, atravessa inimigos.",
+              "mod": {
+                "modo": "atirador",
+                "dano": 45,
+                "tirosPorSegundo": 1,
+                "alcance": 11,
+                "atravessa": true
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "tec_mina",
+          "nome": "Mina Saltadora",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 2,
+          "teclaPadrao": "2",
+          "cooldown": 7,
+          "custo": 15,
+          "efeito": "Arma em 0,6 s e explode quando um inimigo chega a 1,5 m. Deixa 40% mais lento por 2 s. 2 cargas, até 3 minas ativas, cada uma dura 30 s.",
+          "base": {
+            "dano": 48,
+            "raio": 2.2,
+            "gatilho": 1.5,
+            "lentidao": 0.4,
+            "cargas": 2,
+            "limite": 3,
+            "duracao": 30
+          },
+          "escala": {
+            "atributo": "tecnica",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 5.5
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 6,
+              "id": "tec_mina_1",
+              "nome": "Mola Forte",
+              "efeito": "Raio de 3 m. Joga inimigos comuns para o alto (atordoa 0,8 s).",
+              "mod": {
+                "raio": 3,
+                "atordoamento": 0.8
+              }
+            },
+            {
+              "nivel": 12,
+              "id": "tec_mina_2",
+              "nome": "Estoque",
+              "efeito": "3 cargas e até 5 minas ativas.",
+              "mod": {
+                "cargas": 3,
+                "limite": 5
+              }
+            },
+            {
+              "nivel": 20,
+              "id": "tec_mina_3a",
+              "nome": "Mina Ímã",
+              "efeito": "Puxa inimigos em 4 m antes de explodir.",
+              "mod": {
+                "puxa": 4
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 20,
+              "id": "tec_mina_3b",
+              "nome": "Mina Andarilha",
+              "efeito": "A mina anda até o inimigo mais próximo em 5 m.",
+              "mod": {
+                "persegue": 5
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "tec_guarda_chuva",
+          "nome": "Guarda-Chuva",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 4,
+          "teclaPadrao": "3",
+          "cooldown": 18,
+          "custo": 25,
+          "efeito": "Projetor de campo: domo de 3 m por 6 s. Bloqueia projéteis inimigos e reduz em 30% o dano recebido por quem está dentro.",
+          "base": {
+            "raio": 3,
+            "duracao": 6,
+            "reducaoDano": 0.3
+          },
+          "escala": {
+            "atributo": "tecnica",
+            "porPonto": 0.02,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 9,
+              "id": "tec_guarda_chuva_1",
+              "nome": "Lona Reforçada",
+              "efeito": "Dura 8 s. Raio de 3,5 m.",
+              "mod": {
+                "duracao": 8,
+                "raio": 3.5
+              }
+            },
+            {
+              "nivel": 15,
+              "id": "tec_guarda_chuva_2",
+              "nome": "Goteira",
+              "efeito": "Inimigos dentro do domo levam 10 de dano por segundo (+1 por nível) e ficam 20% mais lentos.",
+              "mod": {
+                "danoPorSegundo": 10,
+                "danoPorNivel": 1,
+                "lentidao": 0.2
+              }
+            },
+            {
+              "nivel": 22,
+              "id": "tec_guarda_chuva_3a",
+              "nome": "Guarda-Sol",
+              "efeito": "O domo cura 4% da Vida máxima por segundo.",
+              "mod": {
+                "curaPorSegundo": 0.04
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 22,
+              "id": "tec_guarda_chuva_3b",
+              "nome": "Para-Raios",
+              "efeito": "Ao terminar, descarrega 100% do dano bloqueado (máx. 300) em raio de 4 m.",
+              "mod": {
+                "descarga": 1.0,
+                "descargaMax": 300,
+                "raio": 4
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "tec_vira_lata",
+          "nome": "Drone Vira-Lata",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 7,
+          "teclaPadrao": "4",
+          "cooldown": 16,
+          "custo": 25,
+          "efeito": "Drone de quatro patas por 15 s. Persegue o seu alvo e morde 2 vezes por segundo.",
+          "base": {
+            "dano": 14,
+            "tirosPorSegundo": 2,
+            "vida": 60,
+            "duracao": 15,
+            "limite": 1
+          },
+          "escala": {
+            "atributo": "tecnica",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 1.6,
+              "vida": 9
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 16,
+              "id": "tec_vira_lata_1",
+              "nome": "Focinho",
+              "efeito": "O alvo do drone fica marcado: +15% de dano de todas as fontes.",
+              "mod": {
+                "vulnerabilidade": 0.15
+              }
+            },
+            {
+              "nivel": 21,
+              "id": "tec_vira_lata_2",
+              "nome": "Matilha",
+              "efeito": "2 drones.",
+              "mod": {
+                "limite": 2
+              }
+            },
+            {
+              "nivel": 25,
+              "id": "tec_vira_lata_3a",
+              "nome": "Bomba com Rabo",
+              "efeito": "Ao expirar ou ser destruído, corre até o inimigo e explode: 90 de dano em raio de 2,5 m.",
+              "mod": {
+                "explosao": 90,
+                "raio": 2.5
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 25,
+              "id": "tec_vira_lata_3b",
+              "nome": "Cão de Guarda",
+              "efeito": "Fica ao seu lado e intercepta 1 golpe a cada 4 s.",
+              "mod": {
+                "intercepta": true,
+                "intervalo": 4
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "tec_mutirao",
+          "nome": "Mutirão",
+          "tipo": "ativa",
+          "categoria": "suprema",
+          "nivelDesbloqueio": 10,
+          "teclaPadrao": null,
+          "cooldown": 75,
+          "custo": 0,
+          "efeito": "Lança 2 Torretas Pardal extras, fora do limite. Por 10 s, todas as construções atiram 2 vezes mais rápido e ficam invulneráveis.",
+          "base": {
+            "duracao": 10,
+            "torretasExtras": 2,
+            "cadenciaMult": 2,
+            "construcoesInvulneraveis": true
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 19,
+              "id": "tec_mutirao_1",
+              "nome": "Hora da Xepa",
+              "efeito": "Construções que já estavam de pé são consertadas e têm a duração renovada.",
+              "mod": {
+                "consertaTudo": true
+              }
+            },
+            {
+              "nivel": 28,
+              "id": "tec_mutirao_2a",
+              "nome": "Linha de Montagem",
+              "efeito": "Durante o Mutirão, Torreta e Mina não têm recarga.",
+              "mod": {
+                "semRecarga": [
+                  "tec_torreta",
+                  "tec_mina"
+                ]
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 28,
+              "id": "tec_mutirao_2b",
+              "nome": "Colosso de Sucata",
+              "efeito": "Em vez de 2 torretas, monta 1 torreta pesada por 20 s: 300 de Vida, 30 de dano, 4 tiros por segundo.",
+              "mod": {
+                "torretaPesada": {
+                  "vida": 300,
+                  "dano": 30,
+                  "tirosPorSegundo": 4,
+                  "duracao": 20
+                }
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "tec_peca_sobressalente",
+          "nome": "Peça Sobressalente",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 3,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "Construções destruídas ou expiradas devolvem 30% da própria recarga.",
+          "base": {
+            "recargaDevolvida": 0.3
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 23,
+              "id": "tec_peca_sobressalente_1",
+              "nome": "Almoxarifado",
+              "efeito": "Devolvem 50% da recarga.",
+              "mod": {
+                "recargaDevolvida": 0.5
+              }
+            }
+          ]
+        },
+        {
+          "id": "tec_mao_firme",
+          "nome": "Mão Firme",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 8,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "+20% de Vida e de duração das construções.",
+          "base": {
+            "vidaConstrucoes": 0.2,
+            "duracaoConstrucoes": 0.2
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 26,
+              "id": "tec_mao_firme_1",
+              "nome": "Ajuste Fino",
+              "efeito": "Construções herdam a sua chance crítica.",
+              "mod": {
+                "herdaCritico": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "tec_sucateiro",
+          "nome": "Sucateiro",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 14,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "+25% de peças encontradas. Máquinas abatidas têm 15% de chance de largar uma bateria (+20 de Carga).",
+          "base": {
+            "pecasBonus": 0.25,
+            "chanceBateria": 0.15,
+            "cargaBateria": 20
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 29,
+              "id": "tec_sucateiro_1",
+              "nome": "Pilha Nova",
+              "efeito": "Baterias também consertam 30% das construções e dão +20% de velocidade de ataque por 4 s.",
+              "mod": {
+                "conserto": 0.3,
+                "velocidadeAtaque": 0.2,
+                "duracao": 4
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "infiltrador",
+      "nome": "Infiltrador",
+      "apelido": "Vulto",
+      "descricao": "Furtividade. Some na chuva, escolhe o alvo mais perigoso, mata pelas costas e some de novo.",
+      "atributoChave": "reflexo",
+      "cor": "#B388FF",
+      "vidaBase": 95,
+      "cargaBase": 100,
+      "passado": "Abria cofre nas Torres até o dia em que o cofre era uma pessoa.",
+      "habilidades": [
+        {
+          "id": "inf_lamina_dupla",
+          "nome": "Lâmina Dupla",
+          "tipo": "ativa",
+          "categoria": "basico",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "ataque",
+          "cooldown": 0.45,
+          "custo": 0,
+          "efeito": "Dois cortes por ciclo, corpo a corpo, com mira automática. +50% de dano pelas costas. Cada ciclo devolve Carga.",
+          "base": {
+            "dano": 7,
+            "golpes": 2,
+            "alcance": 1.6,
+            "cargaPorAcerto": 6,
+            "bonusCostas": 0.5
+          },
+          "escala": {
+            "atributo": "reflexo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 0.9
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 13,
+              "id": "inf_lamina_dupla_1",
+              "nome": "Corte Fundo",
+              "efeito": "O 3º ciclo seguido no mesmo alvo causa Sangramento: 8 de dano por segundo por 3 s.",
+              "mod": {
+                "aCadaN": 3,
+                "sangramento": {
+                  "danoPorSegundo": 8,
+                  "duracao": 3
+                }
+              }
+            },
+            {
+              "nivel": 24,
+              "id": "inf_lamina_dupla_2",
+              "nome": "Fio de Navalha",
+              "efeito": "+10% de chance crítica com a Lâmina Dupla. Críticos devolvem mais 4 de Carga.",
+              "mod": {
+                "chanceCritica": 0.1,
+                "cargaPorCritico": 4
+              }
+            }
+          ]
+        },
+        {
+          "id": "inf_passo_oco",
+          "nome": "Passo Oco",
+          "tipo": "ativa",
+          "categoria": "esquiva",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "Q",
+          "cooldown": 3.5,
+          "custo": 0,
+          "efeito": "Desliza 4 m e atravessa inimigos. Invulnerável durante o passo.",
+          "base": {
+            "distancia": 4,
+            "invulneravel": 0.2,
+            "cargas": 1,
+            "atravessa": true
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 17,
+              "id": "inf_passo_oco_1",
+              "nome": "Sombra Curta",
+              "efeito": "Fica invisível por 1 s depois do passo.",
+              "mod": {
+                "invisivel": 1
+              }
+            },
+            {
+              "nivel": 27,
+              "id": "inf_passo_oco_2",
+              "nome": "Duas Saídas",
+              "efeito": "Guarda 2 cargas.",
+              "mod": {
+                "cargas": 2
+              }
+            }
+          ]
+        },
+        {
+          "id": "inf_leque",
+          "nome": "Leque de Agulhas",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 1,
+          "teclaPadrao": "1",
+          "cooldown": 5,
+          "custo": 20,
+          "efeito": "5 agulhas em leque de 50°, até 6 m. Um mesmo alvo leva no máximo 3. Cada agulha aplica Toxina: 6 de dano por segundo por 4 s, acumula 3 vezes.",
+          "base": {
+            "dano": 14,
+            "projeteis": 5,
+            "cone": 50,
+            "alcance": 6,
+            "maxPorAlvo": 3,
+            "danoPorSegundo": 6,
+            "duracao": 4,
+            "acumulos": 3
+          },
+          "escala": {
+            "atributo": "reflexo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 1.6,
+              "danoPorSegundo": 0.7
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 5,
+              "id": "inf_leque_1",
+              "nome": "Sete Agulhas",
+              "efeito": "7 agulhas em leque de 70°.",
+              "mod": {
+                "projeteis": 7,
+                "cone": 70
+              }
+            },
+            {
+              "nivel": 11,
+              "id": "inf_leque_2",
+              "nome": "Toxina Lenta",
+              "efeito": "Toxina dura 6 s. Alvos com 3 acúmulos ficam 30% mais lentos.",
+              "mod": {
+                "duracao": 6,
+                "lentidao": 0.3
+              }
+            },
+            {
+              "nivel": 18,
+              "id": "inf_leque_3a",
+              "nome": "Agulha Mestra",
+              "efeito": "Uma agulha só: 250% do dano, atravessa, alcance de 10 m.",
+              "mod": {
+                "projeteis": 1,
+                "danoMult": 2.5,
+                "atravessa": true,
+                "alcance": 10
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 18,
+              "id": "inf_leque_3b",
+              "nome": "Roda de Agulhas",
+              "efeito": "12 agulhas em 360°.",
+              "mod": {
+                "projeteis": 12,
+                "cone": 360
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "inf_manto",
+          "nome": "Manto de Chuva",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 2,
+          "teclaPadrao": "2",
+          "cooldown": 10,
+          "custo": 20,
+          "efeito": "Invisível por 4 s, com +25% de velocidade. Inimigos perdem o alvo. O primeiro ataque ao sair do Manto é crítico e causa x2,5.",
+          "base": {
+            "duracao": 4,
+            "velocidade": 0.25,
+            "multiplicadorCritico": 2.5
+          },
+          "escala": {
+            "atributo": "reflexo",
+            "porPonto": 0.02,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 6,
+              "id": "inf_manto_1",
+              "nome": "Chuva Grossa",
+              "efeito": "Dura 6 s.",
+              "mod": {
+                "duracao": 6
+              }
+            },
+            {
+              "nivel": 12,
+              "id": "inf_manto_2",
+              "nome": "Bote",
+              "efeito": "O ataque que quebra o Manto também atordoa por 1,2 s.",
+              "mod": {
+                "atordoamento": 1.2
+              }
+            },
+            {
+              "nivel": 20,
+              "id": "inf_manto_3a",
+              "nome": "Garoa",
+              "efeito": "Um abate em até 2 s depois de sair do Manto reativa o Manto por 2 s.",
+              "mod": {
+                "reativaPorAbate": 2,
+                "janela": 2
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 20,
+              "id": "inf_manto_3b",
+              "nome": "Temporal",
+              "efeito": "No Manto, você deixa um rastro tóxico: 1 acúmulo de Toxina por segundo em quem pisar.",
+              "mod": {
+                "rastroToxina": 1
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "inf_golpe_de_esquina",
+          "nome": "Golpe de Esquina",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 4,
+          "teclaPadrao": "3",
+          "cooldown": 8,
+          "custo": 25,
+          "efeito": "Aparece atrás do alvo (até 7 m) e golpeia pelas costas. Se o alvo morrer, recupera 50% da recarga.",
+          "base": {
+            "dano": 55,
+            "alcance": 7,
+            "recargaAoMatar": 0.5
+          },
+          "escala": {
+            "atributo": "reflexo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 6
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 9,
+              "id": "inf_golpe_de_esquina_1",
+              "nome": "Sem Testemunha",
+              "efeito": "Se o alvo morrer, a recarga zera.",
+              "mod": {
+                "recargaAoMatar": 1.0
+              }
+            },
+            {
+              "nivel": 15,
+              "id": "inf_golpe_de_esquina_2",
+              "nome": "Garganta",
+              "efeito": "Silencia por 2 s. +40% de dano contra alvos com Toxina.",
+              "mod": {
+                "silencio": 2,
+                "danoMultToxina": 1.4
+              }
+            },
+            {
+              "nivel": 22,
+              "id": "inf_golpe_de_esquina_3a",
+              "nome": "Esquina Dupla",
+              "efeito": "Salta para um segundo alvo em 5 m (70% do dano).",
+              "mod": {
+                "segundoAlvo": 5,
+                "danoMult": 0.7
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 22,
+              "id": "inf_golpe_de_esquina_3b",
+              "nome": "Emboscada",
+              "efeito": "Usado de dentro do Manto: +100% de dano e o Manto não quebra.",
+              "mod": {
+                "danoMultNoManto": 2.0,
+                "mantemManto": true
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "inf_cortina",
+          "nome": "Cortina de Vapor",
+          "tipo": "ativa",
+          "categoria": "habilidade",
+          "nivelDesbloqueio": 7,
+          "teclaPadrao": "4",
+          "cooldown": 15,
+          "custo": 20,
+          "efeito": "Nuvem de 3,5 m por 5 s. Inimigos dentro erram 60% dos ataques e ficam 25% mais lentos. Você ganha +20% de chance crítica dentro dela.",
+          "base": {
+            "raio": 3.5,
+            "duracao": 5,
+            "erro": 0.6,
+            "lentidao": 0.25,
+            "chanceCritica": 0.2
+          },
+          "escala": {
+            "atributo": "reflexo",
+            "porPonto": 0.02,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 16,
+              "id": "inf_cortina_1",
+              "nome": "Vapor Denso",
+              "efeito": "Dura 7 s. Raio de 4,5 m.",
+              "mod": {
+                "duracao": 7,
+                "raio": 4.5
+              }
+            },
+            {
+              "nivel": 21,
+              "id": "inf_cortina_2",
+              "nome": "Vapor Ácido",
+              "efeito": "Inimigos dentro recebem 1 acúmulo de Toxina por segundo.",
+              "mod": {
+                "toxinaPorSegundo": 1
+              }
+            },
+            {
+              "nivel": 25,
+              "id": "inf_cortina_3a",
+              "nome": "Sumiço",
+              "efeito": "Ao lançar, zera a recarga do Manto de Chuva.",
+              "mod": {
+                "zeraRecarga": "inf_manto"
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 25,
+              "id": "inf_cortina_3b",
+              "nome": "Sufoco",
+              "efeito": "Inimigos comuns dentro ficam silenciados e não chamam reforços.",
+              "mod": {
+                "silencio": true,
+                "bloqueiaReforcos": true
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "inf_queda_de_luz",
+          "nome": "Queda de Luz",
+          "tipo": "ativa",
+          "categoria": "suprema",
+          "nivelDesbloqueio": 10,
+          "teclaPadrao": null,
+          "cooldown": 65,
+          "custo": 0,
+          "efeito": "Marca até 6 inimigos em 8 m e golpeia um por um, 0,15 s por alvo. Invulnerável durante a sequência.",
+          "base": {
+            "dano": 90,
+            "alvos": 6,
+            "raio": 8,
+            "intervalo": 0.15
+          },
+          "escala": {
+            "atributo": "reflexo",
+            "porPonto": 0.02,
+            "porNivel": {
+              "dano": 10
+            }
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 19,
+              "id": "inf_queda_de_luz_1",
+              "nome": "Fusível",
+              "efeito": "Até 9 golpes. Se faltar alvo, repete nos mesmos com 60% do dano.",
+              "mod": {
+                "alvos": 9,
+                "repeteMult": 0.6
+              }
+            },
+            {
+              "nivel": 28,
+              "id": "inf_queda_de_luz_2a",
+              "nome": "Breu",
+              "efeito": "Termina dentro de um Manto de Chuva de 3 s.",
+              "mod": {
+                "mantoAoFim": 3
+              },
+              "escolha": "A"
+            },
+            {
+              "nivel": 28,
+              "id": "inf_queda_de_luz_2b",
+              "nome": "Carrasco",
+              "efeito": "Alvos abaixo de 25% de Vida (chefes: 10%) morrem na hora.",
+              "mod": {
+                "executa": 0.25,
+                "executaChefe": 0.1
+              },
+              "escolha": "B"
+            }
+          ]
+        },
+        {
+          "id": "inf_ponto_cego",
+          "nome": "Ponto Cego",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 3,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "+30% de dano pelas costas e contra alvos atordoados, lentos ou cegos.",
+          "base": {
+            "danoBonus": 0.3
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 23,
+              "id": "inf_ponto_cego_1",
+              "nome": "Ângulo Morto",
+              "efeito": "+45% no total.",
+              "mod": {
+                "danoBonus": 0.45
+              }
+            }
+          ]
+        },
+        {
+          "id": "inf_mao_leve",
+          "nome": "Mão Leve",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 8,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "+15% de lascas encontradas. Abre baús e terminais 2 vezes mais rápido.",
+          "base": {
+            "lascasBonus": 0.15,
+            "velocidadeAbrir": 2
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 26,
+              "id": "inf_mao_leve_1",
+              "nome": "Bolso Fundo",
+              "efeito": "Elites abatidos têm 10% de chance de largar 1 item a mais.",
+              "mod": {
+                "itemExtraElite": 0.1
+              }
+            }
+          ]
+        },
+        {
+          "id": "inf_nervo_frio",
+          "nome": "Nervo Frio",
+          "tipo": "passiva",
+          "categoria": "passiva",
+          "nivelDesbloqueio": 14,
+          "teclaPadrao": null,
+          "cooldown": 0,
+          "custo": 0,
+          "efeito": "Esquivar de um ataque nos últimos 0,3 s dá +30% de chance crítica por 3 s.",
+          "base": {
+            "janela": 0.3,
+            "chanceCritica": 0.3,
+            "duracao": 3
+          },
+          "escala": {
+            "atributo": null,
+            "porPonto": 0,
+            "porNivel": {}
+          },
+          "aprimoramentos": [
+            {
+              "nivel": 29,
+              "id": "inf_nervo_frio_1",
+              "nome": "Por um Fio",
+              "efeito": "A esquiva perfeita também devolve a carga da esquiva.",
+              "mod": {
+                "devolveEsquiva": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "espacosDeImplante": [
+    {
+      "id": "olhos",
+      "nome": "Olhos",
+      "nivelDesbloqueio": 3,
+      "resumo": "Informação e precisão."
+    },
+    {
+      "id": "bracos",
+      "nome": "Braços",
+      "nivelDesbloqueio": 6,
+      "resumo": "Força bruta e alcance."
+    },
+    {
+      "id": "coluna",
+      "nome": "Coluna",
+      "nivelDesbloqueio": 10,
+      "resumo": "Resistência e ritmo."
+    },
+    {
+      "id": "sistema_nervoso",
+      "nome": "Sistema nervoso",
+      "nivelDesbloqueio": 15,
+      "resumo": "Tempo de reação. O mais caro em Ruído."
+    }
+  ],
+  "origensDeImplante": [
+    {
+      "id": "lacrado",
+      "nome": "Lacrado",
+      "efeito": "Licenciado pela Vítrea. Pode ser financiado pela Fiança Áurea e não gera Atenção. A Vítrea pode travá-lo por 6 s em lutas contra a Guarda Límpida, e a dívida em atraso trava de vez."
+    },
+    {
+      "id": "sem_lacre",
+      "nome": "Sem lacre",
+      "efeito": "Mercado paralelo, instalado por costureira. Pagamento à vista. Ninguém trava, mas cada portal de varredura que detecta o implante soma a Atenção indicada."
+    }
+  ],
+  "implantes": [
+    {
+      "id": "olho_de_gato",
+      "nome": "Olho-de-Gato",
+      "espaco": "olhos",
+      "tipo": "passivo",
+      "origem": "sem_lacre",
+      "efeito": "Mostra o contorno de inimigos atrás de paredes em até 8 m. +5% de chance crítica.",
+      "custo": {
+        "lascas": 350,
+        "ruido": 8,
+        "atencao": 0,
+        "financiavel": false
+      },
+      "passivo": {
+        "visaoParedes": 8,
+        "chanceCritica": 0.05
+      }
+    },
+    {
+      "id": "mira_vitrea_m2",
+      "nome": "Mira Vítrea M2",
+      "espaco": "olhos",
+      "tipo": "passivo",
+      "origem": "lacrado",
+      "efeito": "+12% de chance crítica contra alvos a mais de 5 m. Mostra Vida e nível exatos dos inimigos.",
+      "custo": {
+        "lascas": 900,
+        "ruido": 12,
+        "atencao": 0,
+        "financiavel": true
+      },
+      "passivo": {
+        "chanceCriticaLonge": 0.12,
+        "distancia": 5,
+        "mostraVida": true
+      }
+    },
+    {
+      "id": "mau_olhado",
+      "nome": "Mau-Olhado",
+      "espaco": "olhos",
+      "tipo": "ativo",
+      "origem": "sem_lacre",
+      "efeito": "Marca um alvo por 8 s: ele recebe +25% de dano de todas as fontes. Se morrer marcado, a marca pula para o inimigo mais próximo.",
+      "custo": {
+        "lascas": 2400,
+        "ruido": 18,
+        "atencao": 1,
+        "financiavel": false
+      },
+      "habilidade": {
+        "cooldown": 14,
+        "custo": 15,
+        "base": {
+          "vulnerabilidade": 0.25,
+          "duracao": 8,
+          "alcance": 9
+        },
+        "escala": {
+          "atributo": "mente",
+          "porPonto": 0,
+          "porNivel": {}
+        }
+      }
+    },
+    {
+      "id": "bate_estaca",
+      "nome": "Bate-Estaca",
+      "espaco": "bracos",
+      "tipo": "ativo",
+      "origem": "sem_lacre",
+      "efeito": "Soco pneumático em um alvo: 70 de dano, arremessa 4 m e quebra escudos.",
+      "custo": {
+        "lascas": 700,
+        "ruido": 14,
+        "atencao": 0,
+        "financiavel": false
+      },
+      "habilidade": {
+        "cooldown": 7,
+        "custo": 20,
+        "base": {
+          "dano": 70,
+          "alcance": 1.8,
+          "empurrao": 4,
+          "quebraEscudo": true
+        },
+        "escala": {
+          "atributo": "corpo",
+          "porPonto": 0.02,
+          "porNivel": {
+            "dano": 8
+          }
+        }
+      }
+    },
+    {
+      "id": "mao_de_solda",
+      "nome": "Mão de Solda",
+      "espaco": "bracos",
+      "tipo": "passivo",
+      "origem": "sem_lacre",
+      "efeito": "Ataques básicos têm 15% de chance de incendiar: 8 de dano por segundo por 3 s.",
+      "custo": {
+        "lascas": 600,
+        "ruido": 10,
+        "atencao": 0,
+        "financiavel": false
+      },
+      "passivo": {
+        "chanceQueimar": 0.15,
+        "danoPorSegundo": 8,
+        "duracao": 3
+      }
+    },
+    {
+      "id": "braco_estivador_k7",
+      "nome": "Braço de Estivador K-7",
+      "espaco": "bracos",
+      "tipo": "passivo",
+      "origem": "lacrado",
+      "efeito": "+10% de dano. Abre contêineres e portões pesados, que viram atalhos nas Docas.",
+      "custo": {
+        "lascas": 1100,
+        "ruido": 12,
+        "atencao": 0,
+        "financiavel": true
+      },
+      "passivo": {
+        "danoBonus": 0.1,
+        "abrePesados": true
+      }
+    },
+    {
+      "id": "fio_de_prumo",
+      "nome": "Fio de Prumo",
+      "espaco": "bracos",
+      "tipo": "ativo",
+      "origem": "sem_lacre",
+      "efeito": "Cabo de 9 m. Puxa você até um ponto ou puxa um inimigo comum até você. 20 de dano.",
+      "custo": {
+        "lascas": 1800,
+        "ruido": 16,
+        "atencao": 1,
+        "financiavel": false
+      },
+      "habilidade": {
+        "cooldown": 8,
+        "custo": 15,
+        "base": {
+          "dano": 20,
+          "alcance": 9
+        },
+        "escala": {
+          "atributo": "reflexo",
+          "porPonto": 0.02,
+          "porNivel": {
+            "dano": 2.5
+          }
+        }
+      }
+    },
+    {
+      "id": "espinhaco",
+      "nome": "Espinhaço",
+      "espaco": "coluna",
+      "tipo": "passivo",
+      "origem": "sem_lacre",
+      "efeito": "+60 de Vida e +10% de velocidade de movimento.",
+      "custo": {
+        "lascas": 1200,
+        "ruido": 15,
+        "atencao": 0,
+        "financiavel": false
+      },
+      "passivo": {
+        "vida": 60,
+        "velocidade": 0.1
+      }
+    },
+    {
+      "id": "coluna_maestro_v",
+      "nome": "Coluna Maestro V",
+      "espaco": "coluna",
+      "tipo": "passivo",
+      "origem": "lacrado",
+      "efeito": "-15% de recarga em todas as habilidades.",
+      "custo": {
+        "lascas": 3500,
+        "ruido": 22,
+        "atencao": 0,
+        "financiavel": true
+      },
+      "passivo": {
+        "recarga": -0.15
+      }
+    },
+    {
+      "id": "dinamo_lombar",
+      "nome": "Dínamo Lombar",
+      "espaco": "coluna",
+      "tipo": "ativo",
+      "origem": "sem_lacre",
+      "efeito": "Por 6 s: +20 de Carga por segundo e +30% de velocidade de ataque. Depois, 2 s com 30% de lentidão.",
+      "custo": {
+        "lascas": 2800,
+        "ruido": 20,
+        "atencao": 1,
+        "financiavel": false
+      },
+      "habilidade": {
+        "cooldown": 40,
+        "custo": 0,
+        "base": {
+          "duracao": 6,
+          "cargaPorSegundo": 20,
+          "velocidadeAtaque": 0.3,
+          "ressaca": 2
+        },
+        "escala": {
+          "atributo": null,
+          "porPonto": 0,
+          "porNivel": {}
+        }
+      }
+    },
+    {
+      "id": "anestesia_de_rua",
+      "nome": "Anestesia de Rua",
+      "espaco": "sistema_nervoso",
+      "tipo": "passivo",
+      "origem": "sem_lacre",
+      "efeito": "-12% de dano recebido. Abaixo de 30% de Vida, a barra de Vida pisca e você não vê o valor exato.",
+      "custo": {
+        "lascas": 800,
+        "ruido": 12,
+        "atencao": 0,
+        "financiavel": false
+      },
+      "passivo": {
+        "reducaoDano": 0.12,
+        "escondeVidaAbaixo": 0.3
+      }
+    },
+    {
+      "id": "reflexo_emprestado",
+      "nome": "Reflexo Emprestado",
+      "espaco": "sistema_nervoso",
+      "tipo": "passivo",
+      "origem": "lacrado",
+      "efeito": "Desvia sozinho de 1 golpe a cada 12 s. O reflexo não é seu: vem do CORAL.",
+      "custo": {
+        "lascas": 3000,
+        "ruido": 20,
+        "atencao": 0,
+        "financiavel": true
+      },
+      "passivo": {
+        "desvioAutomatico": true,
+        "intervalo": 12
+      }
+    },
+    {
+      "id": "meio_segundo",
+      "nome": "Meio-Segundo",
+      "espaco": "sistema_nervoso",
+      "tipo": "ativo",
+      "origem": "sem_lacre",
+      "efeito": "Por 3 s, tudo ao redor fica 60% mais lento. Você não.",
+      "custo": {
+        "lascas": 5000,
+        "ruido": 28,
+        "atencao": 2,
+        "financiavel": false
+      },
+      "habilidade": {
+        "cooldown": 45,
+        "custo": 30,
+        "base": {
+          "duracao": 3,
+          "lentidaoMundo": 0.6
+        },
+        "escala": {
+          "atributo": null,
+          "porPonto": 0,
+          "porNivel": {}
+        }
+      }
+    },
+    {
+      "id": "diapasao",
+      "nome": "Diapasão",
+      "espaco": "sistema_nervoso",
+      "tipo": "ativo",
+      "origem": "sem_lacre",
+      "efeito": "Implante de história, entregue pelo Coro Mudo no Ato IV. Limpa efeitos negativos e reduz o Ruído em 20 por 30 s.",
+      "custo": {
+        "lascas": 0,
+        "ruido": 0,
+        "atencao": 0,
+        "financiavel": false
+      },
+      "habilidade": {
+        "cooldown": 90,
+        "custo": 0,
+        "base": {
+          "limpaNegativos": true,
+          "ruidoTemporario": -20,
+          "duracao": 30
+        },
+        "escala": {
+          "atributo": null,
+          "porPonto": 0,
+          "porNivel": {}
+        }
+      },
+      "historia": true
+    }
+  ],
+  "ruido": {
+    "min": 0,
+    "max": 100,
+    "calculo": "soma do Ruído dos implantes instalados + Ruído de escolhas de história - tolerância (1 por ponto de Mente acima de 5, máx. 20)",
+    "estagios": [
+      {
+        "id": "limpo",
+        "nome": "Limpo",
+        "de": 0,
+        "ate": 29,
+        "bonusDano": 0.0,
+        "efeito": "Nenhum efeito."
+      },
+      {
+        "id": "chiado",
+        "nome": "Chiado",
+        "de": 30,
+        "ate": 59,
+        "bonusDano": 0.08,
+        "efeito": "+8% de dano. Leve interferência na interface e, de vez em quando, um ponto falso no minimapa. Surgem falas novas, em primeira pessoa do plural."
+      },
+      {
+        "id": "estatica",
+        "nome": "Estática",
+        "de": 60,
+        "ate": 84,
+        "bonusDano": 0.16,
+        "efeito": "+16% de dano. A cada 60 a 90 s de combate, um Surto de 4 s: as barras de Vida dos inimigos somem e nasce um Eco, cópia hostil com 30% da sua Vida que usa a sua última habilidade. Vendedores do Mercado Baixo cobram 15% a mais."
+      },
+      {
+        "id": "afinado",
+        "nome": "Afinado",
+        "de": 85,
+        "ate": 100,
+        "bonusDano": 0.24,
+        "efeito": "+24% de dano e -25% de recarga. O Injetor cura a metade. A Guarda Límpida não ataca primeiro. O final Dissonância fica indisponível."
+      }
+    ],
+    "reducao": [
+      "Remover um implante na costureira (30% do preço de volta).",
+      "Calmante: -15 de Ruído por 5 minutos, 120 lascas.",
+      "Investir em Mente.",
+      "Diapasão (Ato IV)."
+    ]
+  },
+  "divida": {
+    "credor": "Fiança Áurea",
+    "juros": 0.03,
+    "jurosEvento": "por biscate concluído",
+    "limite": "1500 + 400 × nível",
+    "consequencias": [
+      {
+        "condicao": "dívida acima do limite",
+        "efeito": "Um trio de Cobradores (nível do jogador + 1) aparece a cada 8 minutos em área aberta."
+      },
+      {
+        "condicao": "dívida acima de 2× o limite",
+        "efeito": "Um implante lacrado é travado até você pagar 25% do total."
+      },
+      {
+        "condicao": "dívida acima de 3× o limite",
+        "efeito": "A Fiança oferece o contrato de Afinação: quita tudo, soma +30 de Ruído permanente."
+      }
+    ]
+  },
+  "atencao": {
+    "min": 0,
+    "max": 5,
+    "ganho": [
+      "Implante sem lacre detectado em portal de varredura (Docas e Torres): soma a Atenção do implante.",
+      "Abater 10 agentes da Vítrea: +1.",
+      "Escolhas de história contra a Vítrea."
+    ],
+    "perda": [
+      "Suborno com a Tácita, no Subsolo: 400 lascas × nível de Atenção atual para baixar 1.",
+      "Biscates para a Vítrea: -1 cada."
+    ],
+    "niveis": [
+      {
+        "nivel": 0,
+        "nome": "Invisível",
+        "efeito": "Nada."
+      },
+      {
+        "nivel": 1,
+        "nome": "Notado",
+        "efeito": "Portais de varredura passam a soar alarme."
+      },
+      {
+        "nivel": 2,
+        "nome": "Fichado",
+        "efeito": "Preços na loja da Vítrea sobem 20%."
+      },
+      {
+        "nivel": 3,
+        "nome": "Procurado",
+        "efeito": "Patrulhas da Guarda Límpida aparecem em qualquer bairro."
+      },
+      {
+        "nivel": 4,
+        "nome": "Caçado",
+        "efeito": "Esquadrão de elite a cada 10 minutos."
+      },
+      {
+        "nivel": 5,
+        "nome": "Alvo prioritário",
+        "efeito": "Um Afinador (minichefe) persegue você até ser derrotado. Derrotá-lo baixa a Atenção para 3."
+      }
+    ]
+  },
+  "raridades": [
+    {
+      "id": "comum",
+      "nome": "Comum",
+      "cor": "#C9CED9",
+      "forma": "ponto",
+      "afixos": [
+        0,
+        0
+      ],
+      "chance": 0.7,
+      "multPotencia": 1.0,
+      "venda": 5,
+      "pecas": 1,
+      "poderUnico": false
+    },
+    {
+      "id": "incomum",
+      "nome": "Incomum",
+      "cor": "#4BE38A",
+      "forma": "losango",
+      "afixos": [
+        1,
+        1
+      ],
+      "chance": 0.22,
+      "multPotencia": 1.15,
+      "venda": 15,
+      "pecas": 3,
+      "poderUnico": false
+    },
+    {
+      "id": "raro",
+      "nome": "Raro",
+      "cor": "#4AA3FF",
+      "forma": "triângulo",
+      "afixos": [
+        2,
+        3
+      ],
+      "chance": 0.07,
+      "multPotencia": 1.35,
+      "venda": 50,
+      "pecas": 8,
+      "poderUnico": false
+    },
+    {
+      "id": "lendario",
+      "nome": "Lendário",
+      "cor": "#FFB02E",
+      "forma": "estrela",
+      "afixos": [
+        3,
+        3
+      ],
+      "chance": 0.01,
+      "multPotencia": 1.6,
+      "venda": 400,
+      "pecas": 40,
+      "poderUnico": true
+    }
+  ],
+  "espacosDeEquipamento": [
+    {
+      "id": "arma",
+      "nome": "Arma",
+      "principal": "Potência: +6% de dano por nível do item, vezes o multiplicador da raridade."
+    },
+    {
+      "id": "jaqueta",
+      "nome": "Jaqueta",
+      "principal": "Armadura: 4 por nível do item."
+    },
+    {
+      "id": "luvas",
+      "nome": "Luvas",
+      "principal": "Armadura: 2 por nível do item."
+    },
+    {
+      "id": "botas",
+      "nome": "Botas",
+      "principal": "Armadura: 2 por nível do item."
+    },
+    {
+      "id": "modulo",
+      "nome": "Módulo",
+      "principal": "Sem valor principal. Sempre vem com 1 afixo a mais. Dois espaços."
+    }
+  ],
+  "afixos": [
+    {
+      "id": "vida",
+      "nome": "Blindado",
+      "efeito": "+Vida",
+      "min": 10,
+      "max": 20,
+      "porNivel": 4,
+      "unidade": "",
+      "onde": [
+        "jaqueta",
+        "luvas",
+        "botas",
+        "modulo"
+      ]
+    },
+    {
+      "id": "armadura",
+      "nome": "Reforçado",
+      "efeito": "+Armadura",
+      "min": 5,
+      "max": 12,
+      "porNivel": 2,
+      "unidade": "",
+      "onde": [
+        "jaqueta",
+        "luvas",
+        "botas"
+      ]
+    },
+    {
+      "id": "vel_ataque",
+      "nome": "Ligeiro",
+      "efeito": "+Velocidade de ataque",
+      "min": 4,
+      "max": 8,
+      "porNivel": 0,
+      "unidade": "%",
+      "onde": [
+        "arma",
+        "luvas"
+      ]
+    },
+    {
+      "id": "chance_critica",
+      "nome": "Calibrado",
+      "efeito": "+Chance crítica",
+      "min": 2,
+      "max": 5,
+      "porNivel": 0,
+      "unidade": "%",
+      "onde": [
+        "arma",
+        "luvas",
+        "modulo"
+      ]
+    },
+    {
+      "id": "dano_critico",
+      "nome": "de Açougue",
+      "efeito": "+Dano crítico",
+      "min": 10,
+      "max": 20,
+      "porNivel": 0,
+      "unidade": "%",
+      "onde": [
+        "arma",
+        "modulo"
+      ]
+    },
+    {
+      "id": "carga_max",
+      "nome": "de Bateria Gorda",
+      "efeito": "+Carga máxima",
+      "min": 8,
+      "max": 15,
+      "porNivel": 0,
+      "unidade": "",
+      "onde": [
+        "jaqueta",
+        "modulo"
+      ]
+    },
+    {
+      "id": "carga_regen",
+      "nome": "do Dínamo",
+      "efeito": "+Carga por segundo",
+      "min": 0.5,
+      "max": 1.2,
+      "porNivel": 0,
+      "unidade": "/s",
+      "onde": [
+        "luvas",
+        "modulo"
+      ]
+    },
+    {
+      "id": "recarga",
+      "nome": "de Pavio Curto",
+      "efeito": "-Recarga de habilidades",
+      "min": 3,
+      "max": 7,
+      "porNivel": 0,
+      "unidade": "%",
+      "onde": [
+        "arma",
+        "modulo"
+      ]
+    },
+    {
+      "id": "vel_movimento",
+      "nome": "de Estafeta",
+      "efeito": "+Velocidade de movimento",
+      "min": 3,
+      "max": 6,
+      "porNivel": 0,
+      "unidade": "%",
+      "onde": [
+        "botas"
+      ]
+    },
+    {
+      "id": "roubo_vida",
+      "nome": "Sanguessuga",
+      "efeito": "+Roubo de vida",
+      "min": 1,
+      "max": 2,
+      "porNivel": 0,
+      "unidade": "%",
+      "onde": [
+        "arma"
+      ]
+    },
+    {
+      "id": "lascas",
+      "nome": "de Feirante",
+      "efeito": "+Lascas encontradas",
+      "min": 8,
+      "max": 15,
+      "porNivel": 0,
+      "unidade": "%",
+      "onde": [
+        "botas",
+        "modulo"
+      ]
+    },
+    {
+      "id": "atributo",
+      "nome": "de Corpo / Reflexo / Técnica / Mente",
+      "efeito": "+1 atributo sorteado",
+      "min": 1,
+      "max": 3,
+      "porNivel": 0,
+      "unidade": "",
+      "onde": [
+        "jaqueta",
+        "luvas",
+        "botas",
+        "modulo"
+      ]
+    },
+    {
+      "id": "tolerancia_ruido",
+      "nome": "do Coro",
+      "efeito": "+Tolerância a Ruído",
+      "min": 2,
+      "max": 5,
+      "porNivel": 0,
+      "unidade": "",
+      "onde": [
+        "modulo"
+      ]
+    }
+  ],
+  "lendarios": [
+    {
+      "id": "sete_vidas",
+      "nome": "Sete-Vidas",
+      "espaco": "arma",
+      "bairro": "mercado_baixo",
+      "poder": "Todo 7º ataque básico atravessa todos os inimigos na linha e causa +200% de dano."
+    },
+    {
+      "id": "capa_de_enchente",
+      "nome": "Capa de Enchente",
+      "espaco": "jaqueta",
+      "bairro": "mercado_baixo",
+      "poder": "Debaixo de chuva: +15% de velocidade de movimento e a esquiva recarrega 30% mais rápido."
+    },
+    {
+      "id": "luvas_da_estivadora",
+      "nome": "Luvas da Estivadora",
+      "espaco": "luvas",
+      "bairro": "docas",
+      "poder": "Toda esquiva termina com um impacto: 40 de dano (+5 por nível) em raio de 2 m."
+    },
+    {
+      "id": "botas_de_trilho",
+      "nome": "Botas de Trilho",
+      "espaco": "botas",
+      "bairro": "subsolo",
+      "poder": "A esquiva deixa um rastro elétrico por 2 s: 15 de dano por segundo (+2 por nível)."
+    },
+    {
+      "id": "modulo_surdo",
+      "nome": "Módulo Surdo",
+      "espaco": "modulo",
+      "bairro": "ferro_velho",
+      "poder": "Seu Ruído conta como 15 a menos para efeitos negativos, mas o bônus de dano do estágio real continua valendo."
+    }
+  ],
+  "moedas": [
+    {
+      "id": "lascas",
+      "nome": "Lascas",
+      "simbolo": "ł",
+      "uso": "Moeda de rua. Compra itens, implantes, calmantes, recarga de Injetor e paga dívida.",
+      "fontes": "Inimigos (1 a 3 por nível do inimigo), baús, venda de itens, biscates (80 a 150 × nível)."
+    },
+    {
+      "id": "pecas",
+      "nome": "Peças",
+      "simbolo": "⚙",
+      "uso": "Material de oficina. Aprimora item (+1 a +5), troca um afixo, monta Injetor extra.",
+      "fontes": "Desmontar itens e abater máquinas."
+    }
+  ],
+  "vendedores": [
+    {
+      "id": "nicanor",
+      "nome": "Seu Nicanor",
+      "local": "Barraca do Nicanor",
+      "bairro": "mercado_baixo",
+      "faccao": "sindicato_da_lona",
+      "vende": "Armas e roupas comuns e incomuns, recarga de Injetor (20 lascas × nível). Compra qualquer coisa. O estoque gira a cada biscate concluído."
+    },
+    {
+      "id": "zila",
+      "nome": "Dona Zilá",
+      "local": "Ateliê de costura, fundos da feira",
+      "bairro": "mercado_baixo",
+      "faccao": "sindicato_da_lona",
+      "vende": "Implantes sem lacre, remoção de implante (30% de volta), calmantes (120 lascas)."
+    },
+    {
+      "id": "iara",
+      "nome": "Capitã Iara Mourão",
+      "local": "Balsa Maré Seca",
+      "bairro": "docas",
+      "faccao": "mare_seca",
+      "vende": "Caixa lacrada (150 lascas × nível): item sorteado com 25% de chance de raro e 2% de lendário. Contrabando de implantes de outros bairros."
+    },
+    {
+      "id": "bigorna",
+      "nome": "Mestre Bigorna",
+      "local": "Oficina da Irmandade",
+      "bairro": "ferro_velho",
+      "faccao": "irmandade_da_solda",
+      "vende": "Desmontar itens, aprimorar (10 peças × nível do aprimoramento × raridade), trocar 1 afixo (25 peças, dobra a cada troca no mesmo item)."
+    },
+    {
+      "id": "tacita",
+      "nome": "Tácita",
+      "local": "Estação Silêncio",
+      "bairro": "subsolo",
+      "faccao": "coro_mudo",
+      "vende": "Módulos, mapas de atalhos, suborno para baixar a Atenção, redistribuição de atributos (500 lascas × nível ÷ 5)."
+    },
+    {
+      "id": "concierge",
+      "nome": "Concierge Vítrea",
+      "local": "Átrio da Torre Vítrea",
+      "bairro": "torres",
+      "faccao": "vitrea",
+      "vende": "Implantes lacrados com financiamento da Fiança Áurea. Quitação de dívida. Só atende com Atenção 2 ou menos."
+    }
+  ],
+  "faccoes": [
+    {
+      "id": "sindicato_da_lona",
+      "nome": "Sindicato da Lona",
+      "bairro": "mercado_baixo",
+      "descricao": "Feirantes e camelôs organizados. Pagam pouco, lembram de tudo."
+    },
+    {
+      "id": "mare_seca",
+      "nome": "Maré Seca",
+      "bairro": "docas",
+      "descricao": "Contrabandistas de balsa. Leal a quem paga em dia."
+    },
+    {
+      "id": "irmandade_da_solda",
+      "nome": "Irmandade da Solda",
+      "bairro": "ferro_velho",
+      "descricao": "Catadores e soldadores. Acham que máquina velha merece enterro."
+    },
+    {
+      "id": "coro_mudo",
+      "nome": "Coro Mudo",
+      "bairro": "subsolo",
+      "descricao": "Hackers que arrancaram a própria conexão com o CORAL e vivem fora da rede."
+    },
+    {
+      "id": "vitrea",
+      "nome": "Vítrea Biossistemas",
+      "bairro": "torres",
+      "descricao": "Fabrica os implantes, opera o CORAL e é dona da Fiança Áurea."
+    }
+  ],
+  "reputacao": {
+    "niveis": [
+      {
+        "id": "desconhecido",
+        "nome": "Desconhecido",
+        "pontos": 0,
+        "beneficio": "Nenhum."
+      },
+      {
+        "id": "conhecido",
+        "nome": "Conhecido",
+        "pontos": 500,
+        "beneficio": "5% de desconto e biscates da facção."
+      },
+      {
+        "id": "de_confianca",
+        "nome": "De confiança",
+        "pontos": 1500,
+        "beneficio": "10% de desconto e estoque exclusivo."
+      },
+      {
+        "id": "da_casa",
+        "nome": "Da casa",
+        "pontos": 4000,
+        "beneficio": "15% de desconto, 1 lendário da facção e ajuda no ato final."
+      }
+    ],
+    "ganho": "Biscate da facção: +50 a +150. Abater inimigo declarado da facção: +1. Escolhas de história: de -300 a +300."
+  },
+  "bairros": [
+    {
+      "id": "mercado_baixo",
+      "nome": "Mercado Baixo",
+      "niveis": [
+        1,
+        5
+      ],
+      "ato": "I",
+      "clima": "Chuva constante. É para cá que as calhas das Torres despejam a água.",
+      "faccao": "sindicato_da_lona",
+      "gangue": "Goteiras",
+      "chefe": "calha",
+      "paleta": {
+        "fundo": "#0B1020",
+        "fundo2": "#1A1F45",
+        "neon1": "#FF3D81",
+        "neon2": "#2EE6D6",
+        "apoio": "#FFB84D",
+        "clima": "#8FB8FF"
+      }
+    },
+    {
+      "id": "docas",
+      "nome": "Docas",
+      "niveis": [
+        5,
+        10
+      ],
+      "ato": "II",
+      "clima": "Névoa laranja de lâmpada de sódio. Guindastes automáticos não param.",
+      "faccao": "mare_seca",
+      "gangue": "Cordame Logística",
+      "chefe": "capataz_brandao",
+      "paleta": {
+        "fundo": "#1A0F0A",
+        "fundo2": "#4A2410",
+        "neon1": "#FF7A1A",
+        "neon2": "#FFC14D",
+        "apoio": "#1FD1C1",
+        "clima": "#5C6B73"
+      }
+    },
+    {
+      "id": "ferro_velho",
+      "nome": "Ferro-Velho",
+      "niveis": [
+        10,
+        15
+      ],
+      "ato": "III",
+      "clima": "Ar tóxico verde. Fora das zonas com filtro, a Vida cai 1% por segundo.",
+      "faccao": "irmandade_da_solda",
+      "gangue": "Drones selvagens",
+      "chefe": "matriz",
+      "paleta": {
+        "fundo": "#0E140B",
+        "fundo2": "#26331A",
+        "neon1": "#9BE22D",
+        "neon2": "#B5532A",
+        "apoio": "#FFE45C",
+        "clima": "#6F7F3A"
+      }
+    },
+    {
+      "id": "subsolo",
+      "nome": "Subsolo",
+      "niveis": [
+        15,
+        20
+      ],
+      "ato": "IV",
+      "clima": "Escuridão roxa. O raio de visão cai para 6 m fora de fontes de luz.",
+      "faccao": "coro_mudo",
+      "gangue": "Chiados",
+      "chefe": "regente",
+      "paleta": {
+        "fundo": "#0D0718",
+        "fundo2": "#24103F",
+        "neon1": "#8A4DFF",
+        "neon2": "#C77DFF",
+        "apoio": "#39F3FF",
+        "clima": "#FF2E4D"
+      }
+    },
+    {
+      "id": "torres",
+      "nome": "Torres",
+      "niveis": [
+        20,
+        30
+      ],
+      "ato": "V",
+      "clima": "Seco, branco e azul frio. Aqui não chove: o céu é alugado.",
+      "faccao": "vitrea",
+      "gangue": "Guarda Límpida",
+      "chefe": "diretora_otilia",
+      "paleta": {
+        "fundo": "#EAF2FA",
+        "fundo2": "#0A1626",
+        "neon1": "#2F7BFF",
+        "neon2": "#BFE3FF",
+        "apoio": "#F7FBFF",
+        "clima": "#FF4747"
+      }
+    }
+  ],
+  "inimigos": [
+    {
+      "id": "goteira_faca",
+      "nome": "Goteira Faca",
+      "bairro": "mercado_baixo",
+      "papel": "corpo a corpo, em bando",
+      "tipo": "humano",
+      "vida": 40,
+      "dano": 6,
+      "intervaloAtaque": 1.0,
+      "alcance": 1.4,
+      "velocidade": 3.2,
+      "telegrafo": 0.35,
+      "xp": 10,
+      "lascas": [
+        1,
+        3
+      ],
+      "comportamento": "Anda em grupos de 4 a 6 e tenta cercar. Morre com uma Varredura no nível 1."
+    },
+    {
+      "id": "goteira_atirador",
+      "nome": "Goteira Atirador",
+      "bairro": "mercado_baixo",
+      "papel": "à distância",
+      "tipo": "humano",
+      "vida": 28,
+      "dano": 10,
+      "intervaloAtaque": 1.6,
+      "alcance": 8,
+      "velocidade": 2.4,
+      "telegrafo": 0.5,
+      "xp": 14,
+      "lascas": [
+        2,
+        4
+      ],
+      "comportamento": "Fica a 5 a 7 m e recua se você chega a 3 m. Linha de mira visível por 0,5 s antes do tiro."
+    },
+    {
+      "id": "portao",
+      "nome": "Portão",
+      "bairro": "mercado_baixo",
+      "papel": "elite blindado",
+      "tipo": "humano",
+      "vida": 160,
+      "dano": 22,
+      "intervaloAtaque": 2.2,
+      "alcance": 2.2,
+      "velocidade": 1.8,
+      "telegrafo": 0.8,
+      "xp": 40,
+      "lascas": [
+        8,
+        14
+      ],
+      "comportamento": "Escudo de porta de aço: bloqueia 60% do dano que vem de frente. Golpe em arco de 120°. A cada 6 s, investida de 6 m (1 s de aviso, 28 de dano). Sempre larga um item incomum ou melhor.",
+      "elite": true
+    },
+    {
+      "id": "calha",
+      "nome": "Calha",
+      "bairro": "mercado_baixo",
+      "papel": "chefe do Ato I",
+      "tipo": "humano",
+      "vida": 500,
+      "dano": 18,
+      "intervaloAtaque": 1.4,
+      "alcance": 2.5,
+      "velocidade": 3.0,
+      "telegrafo": 0.7,
+      "xp": 300,
+      "lascas": [
+        60,
+        90
+      ],
+      "comportamento": "Líder dos Goteiras, com um braço lacrado pela Vítrea. Fase 1: corrente giratória e reforços de Facas. Fase 2 (50% de Vida): abre as calhas e alaga a arena, que passa a conduzir choque em faixas.",
+      "chefe": true
+    },
+    {
+      "id": "estivador_exo",
+      "nome": "Estivador de Exo",
+      "bairro": "docas",
+      "papel": "corpo a corpo pesado",
+      "tipo": "humano",
+      "vida": 90,
+      "dano": 16,
+      "intervaloAtaque": 1.8,
+      "alcance": 2.0,
+      "velocidade": 2.2,
+      "telegrafo": 0.7,
+      "xp": 22,
+      "lascas": [
+        3,
+        6
+      ],
+      "comportamento": "Agarra e arremessa o jogador 4 m se o golpe carregado acertar."
+    },
+    {
+      "id": "vigia_cordame",
+      "nome": "Vigia da Cordame",
+      "bairro": "docas",
+      "papel": "à distância, chama reforço",
+      "tipo": "humano",
+      "vida": 35,
+      "dano": 12,
+      "intervaloAtaque": 1.4,
+      "alcance": 9,
+      "velocidade": 2.6,
+      "telegrafo": 0.5,
+      "xp": 16,
+      "lascas": [
+        3,
+        5
+      ],
+      "comportamento": "Se sobreviver 4 s em combate, dispara sinalizador e traz 2 Estivadores."
+    },
+    {
+      "id": "empilhadeira",
+      "nome": "Empilhadeira",
+      "bairro": "docas",
+      "papel": "investida em linha",
+      "tipo": "maquina",
+      "vida": 120,
+      "dano": 24,
+      "intervaloAtaque": 3.0,
+      "alcance": 8,
+      "velocidade": 5.0,
+      "telegrafo": 1.0,
+      "xp": 30,
+      "lascas": [
+        4,
+        8
+      ],
+      "comportamento": "Máquina. Investe 8 m em linha reta com 1 s de aviso. Pode ser sequestrada pelo Hacker."
+    },
+    {
+      "id": "capataz_brandao",
+      "nome": "Capataz Brandão",
+      "bairro": "docas",
+      "papel": "chefe do Ato II",
+      "tipo": "humano",
+      "vida": 650,
+      "dano": 24,
+      "intervaloAtaque": 1.6,
+      "alcance": 3.0,
+      "velocidade": 2.4,
+      "telegrafo": 0.8,
+      "xp": 600,
+      "lascas": [
+        150,
+        220
+      ],
+      "comportamento": "Luta de dentro de um exo de carga, com o Guindaste 9 soltando contêineres em áreas marcadas.",
+      "chefe": true
+    },
+    {
+      "id": "drone_carcara",
+      "nome": "Drone Carcará",
+      "bairro": "ferro_velho",
+      "papel": "voador, mergulho",
+      "tipo": "maquina",
+      "vida": 30,
+      "dano": 14,
+      "intervaloAtaque": 3.0,
+      "alcance": 7,
+      "velocidade": 5.0,
+      "telegrafo": 0.6,
+      "xp": 16,
+      "lascas": [
+        2,
+        4
+      ],
+      "comportamento": "Máquina voadora. Circula a 6 m e mergulha em linha. Alguns assobiam trechos de música."
+    },
+    {
+      "id": "cupins",
+      "nome": "Cupins",
+      "bairro": "ferro_velho",
+      "papel": "enxame",
+      "tipo": "maquina",
+      "vida": 8,
+      "dano": 3,
+      "intervaloAtaque": 0.6,
+      "alcance": 0.8,
+      "velocidade": 4.0,
+      "telegrafo": 0.2,
+      "xp": 3,
+      "lascas": [
+        0,
+        1
+      ],
+      "comportamento": "Enxames de 8 a 12 robôs pequenos. Pedem dano em área."
+    },
+    {
+      "id": "triturador",
+      "nome": "Triturador",
+      "bairro": "ferro_velho",
+      "papel": "elite, puxa sucata",
+      "tipo": "maquina",
+      "vida": 220,
+      "dano": 30,
+      "intervaloAtaque": 2.4,
+      "alcance": 3.0,
+      "velocidade": 1.6,
+      "telegrafo": 0.9,
+      "xp": 50,
+      "lascas": [
+        10,
+        18
+      ],
+      "comportamento": "Puxa o jogador 3 m com um ímã antes de triturar em cone.",
+      "elite": true
+    },
+    {
+      "id": "matriz",
+      "nome": "Matriz",
+      "bairro": "ferro_velho",
+      "papel": "chefe do Ato III",
+      "tipo": "maquina",
+      "vida": 800,
+      "dano": 26,
+      "intervaloAtaque": 1.8,
+      "alcance": 6,
+      "velocidade": 1.2,
+      "telegrafo": 0.8,
+      "xp": 1200,
+      "lascas": [
+        300,
+        420
+      ],
+      "comportamento": "Núcleo de enxame que roda o fragmento de uma operária morta. Gera Carcarás e Cupins. Fala.",
+      "chefe": true
+    },
+    {
+      "id": "chiado",
+      "nome": "Chiado",
+      "bairro": "subsolo",
+      "papel": "corpo a corpo errático",
+      "tipo": "humano",
+      "vida": 55,
+      "dano": 13,
+      "intervaloAtaque": 0.8,
+      "alcance": 1.5,
+      "velocidade": 3.8,
+      "telegrafo": 0.3,
+      "xp": 20,
+      "lascas": [
+        3,
+        6
+      ],
+      "comportamento": "Gente que o Ruído levou. Teleporta 3 m sem padrão fixo e ataca em rajadas."
+    },
+    {
+      "id": "sentinela_coro",
+      "nome": "Sentinela do Coro",
+      "bairro": "subsolo",
+      "papel": "bloqueia habilidade",
+      "tipo": "humano",
+      "vida": 40,
+      "dano": 9,
+      "intervaloAtaque": 1.5,
+      "alcance": 9,
+      "velocidade": 2.6,
+      "telegrafo": 0.8,
+      "xp": 24,
+      "lascas": [
+        4,
+        7
+      ],
+      "comportamento": "Canaliza por 0,8 s e trava 1 habilidade sua por 3 s. Qualquer atordoamento interrompe."
+    },
+    {
+      "id": "verme_de_trilho",
+      "nome": "Verme de Trilho",
+      "bairro": "subsolo",
+      "papel": "elite sobre trilhos",
+      "tipo": "maquina",
+      "vida": 180,
+      "dano": 26,
+      "intervaloAtaque": 2.6,
+      "alcance": 10,
+      "velocidade": 6.0,
+      "telegrafo": 1.0,
+      "xp": 45,
+      "lascas": [
+        9,
+        16
+      ],
+      "comportamento": "Máquina de manutenção do metrô. Só anda sobre os trilhos, e o trilho brilha antes de ela passar.",
+      "elite": true
+    },
+    {
+      "id": "regente",
+      "nome": "O Regente",
+      "bairro": "subsolo",
+      "papel": "chefe do Ato IV",
+      "tipo": "humano",
+      "vida": 900,
+      "dano": 28,
+      "intervaloAtaque": 1.3,
+      "alcance": 4,
+      "velocidade": 3.4,
+      "telegrafo": 0.6,
+      "xp": 2200,
+      "lascas": [
+        600,
+        800
+      ],
+      "comportamento": "Caçador da Vítrea, afinado por completo. Comanda os próprios soldados em sincronia e copia a última habilidade que você usou.",
+      "chefe": true
+    },
+    {
+      "id": "guarda_limpida",
+      "nome": "Guarda Límpida",
+      "bairro": "torres",
+      "papel": "escudo e rajada",
+      "tipo": "humano",
+      "vida": 70,
+      "dano": 14,
+      "intervaloAtaque": 1.5,
+      "alcance": 8,
+      "velocidade": 2.8,
+      "telegrafo": 0.5,
+      "xp": 30,
+      "lascas": [
+        5,
+        9
+      ],
+      "comportamento": "Rajada de 3 tiros. Escudo de energia de 40 que volta depois de 4 s sem levar dano."
+    },
+    {
+      "id": "drone_aureola",
+      "nome": "Drone Auréola",
+      "bairro": "torres",
+      "papel": "suporte",
+      "tipo": "maquina",
+      "vida": 35,
+      "dano": 0,
+      "intervaloAtaque": 0,
+      "alcance": 7,
+      "velocidade": 3.2,
+      "telegrafo": 0,
+      "xp": 28,
+      "lascas": [
+        4,
+        8
+      ],
+      "comportamento": "Não ataca. Cura aliados em 6% da Vida por segundo e renova escudos. Alvo prioritário."
+    },
+    {
+      "id": "afinado",
+      "nome": "Afinado",
+      "bairro": "torres",
+      "papel": "ataque sincronizado",
+      "tipo": "humano",
+      "vida": 60,
+      "dano": 15,
+      "intervaloAtaque": 1.2,
+      "alcance": 1.6,
+      "velocidade": 3.4,
+      "telegrafo": 0.6,
+      "xp": 26,
+      "lascas": [
+        4,
+        8
+      ],
+      "comportamento": "Civis e funcionários cedidos ao CORAL. Grupos de 3 atacam no mesmo instante, com um aviso só."
+    },
+    {
+      "id": "diretora_otilia",
+      "nome": "Diretora Otília e o CORAL",
+      "bairro": "torres",
+      "papel": "chefe final",
+      "tipo": "humano",
+      "vida": 1100,
+      "dano": 30,
+      "intervaloAtaque": 1.2,
+      "alcance": 9,
+      "velocidade": 3.0,
+      "telegrafo": 0.6,
+      "xp": 5000,
+      "lascas": [
+        0,
+        0
+      ],
+      "comportamento": "Três fases. Na última, o CORAL usa contra você todo implante lacrado que você tiver instalado.",
+      "chefe": true
+    }
+  ],
+  "prototipo": {
+    "bairro": "mercado_baixo",
+    "arquetipo": "mercenario",
+    "habilidades": [
+      "merc_varredura",
+      "merc_investida",
+      "merc_granada"
+    ],
+    "fixas": [
+      "merc_disparo_curto",
+      "merc_rolamento"
+    ],
+    "inimigos": [
+      "goteira_faca",
+      "goteira_atirador",
+      "portao"
+    ],
+    "raridades": [
+      "comum",
+      "incomum",
+      "raro"
+    ],
+    "espacosDeEquipamento": [
+      "arma",
+      "jaqueta"
+    ],
+    "afixos": [
+      "vida",
+      "vel_ataque",
+      "chance_critica",
+      "recarga"
+    ],
+    "niveis": [
+      1,
+      5
+    ]
+  }
+}
