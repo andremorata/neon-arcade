@@ -3704,4 +3704,42 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
   }
 }
 
+// ── ARPG (protótipo em arpg/) ─────────────────────
+// Fora de games/: são vários scripts clássicos. Base e mundo não tocam no DOM,
+// então rodam aqui pra garantir cidade determinística e colisão.
+{
+  const vm = require('vm');
+  const dir = 'arpg/js';
+  const arquivos = fs.readdirSync(path.join(__dirname, dir)).filter(f => f.endsWith('.js'));
+  for (const f of arquivos) {
+    try { new Function(read(`${dir}/${f}`)); }
+    catch (e) { assert.fail(`arpg/${f}: erro de sintaxe — ${e.message}`); }
+    assert.ok(read('arpg/index.html').includes(`js/${f}`), `arpg: index.html não carrega js/${f}`);
+  }
+  const ctx = vm.createContext({ Math, Object, Map, Set, console });
+  ctx.window = ctx;
+  for (const f of ['base.js', 'mundo.js']) vm.runInContext(read(`${dir}/${f}`), ctx, { filename: f });
+  const G = ctx.G, M = G.mundo;
+  for (const [k, b] of Object.entries(G.BAIRROS)) {
+    assert.strictEqual(M.bairroEm(b.centro[0], b.centro[1]), k, `arpg: o centro de ${k} tem que ser dele`);
+  }
+  const a = JSON.stringify(M.gerar(3, -4)), b = JSON.stringify(M.gerar(3, -4));
+  assert.strictEqual(a, b, 'arpg: a mesma quadra tem que nascer igual');
+  const abrigo = M.chunk(0, 0);
+  assert.ok(abrigo.seguro && abrigo.abrigo, 'arpg: a quadra 0,0 é o abrigo');
+  assert.ok(M.livre(G.CHUNK / 2, G.CHUNK / 2 + 60, 15), 'arpg: o jogador nasce em lugar livre');
+  // quem entra num prédio é empurrado pra fora
+  let testados = 0;
+  for (let cy = -3; cy <= 3; cy++) for (let cx = -3; cx <= 3; cx++) {
+    for (const c of M.chunk(cx, cy).caixas) {
+      const e = { x: c.x + c.w / 2, y: c.y + c.d / 2, r: 15 };
+      M.colidir(e); M.colidir(e); M.colidir(e);
+      assert.ok(!M.bloqueado(e.x, e.y), `arpg: colisão deixou alguém dentro de ${c.tipo} em ${cx},${cy}`);
+      testados++;
+    }
+  }
+  assert.ok(testados > 20, 'arpg: poucas caixas geradas em volta do abrigo');
+  assert.ok(M.fora(G.LIMITE + 1, 0) && M.gerar(G.LIMITE + 1, 0).fora, 'arpg: além do limite é fora da cidade');
+}
+
 console.log(`${names.length} jogos OK: ${names.sort().join(', ')}`);

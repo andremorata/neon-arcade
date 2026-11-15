@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05040a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Neon ARPG · protótipo</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<link rel="stylesheet" href="css/jogo.css">
+</head>
+<body class="teclado">
+<canvas id="tela"></canvas>
+
+<div id="hud" hidden>
+  <div id="joy"><div id="joyBase"><div id="joyPino"></div></div></div>
+
+  <div id="status">
+    <div id="retrato"><span id="nivel">1</span></div>
+    <div class="barras">
+      <div class="barra vida"><i id="vidaFill"></i><b id="vidaTxt"></b></div>
+      <div class="barra energia"><i id="energiaFill"></i></div>
+      <div id="creditos">¢ 0</div>
+    </div>
+  </div>
+
+  <div id="bairro"><b id="bairroNome"></b><span id="bairroNivel"></span></div>
+  <div id="alvo" hidden><span id="alvoNome"></span><div class="barra"><i id="alvoFill"></i></div></div>
+
+  <div id="canto">
+    <canvas id="mini" width="200" height="200"></canvas>
+    <div class="botoes">
+      <button id="btnSom" class="redondo" aria-label="Som">♪</button>
+      <button id="btnPausa" class="redondo" aria-label="Pausar">❚❚</button>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <div id="habs">
+    <button class="hab ataque" data-hab="0"><span class="icone"></span><span class="tecla"></span></button>
+    <button class="hab" data-hab="1"><span class="icone"></span><span class="tecla"></span></button>
+    <button class="hab" data-hab="2"><span class="icone"></span><span class="tecla"></span></button>
+    <button class="hab" data-hab="3"><span class="icone"></span><span class="tecla"></span></button>
+  </div>
+
+  <div id="xp"><i id="xpFill"></i></div>
+</div>
+
+<section id="telaInicio" class="painel">
+  <div class="caixa">
+    <p class="sobre">protótipo · fatia vertical</p>
+    <h1>NEON <span>ARPG</span></h1>
+    <p class="lema">A chuva não para no Mercado Baixo.</p>
+    <div class="acoes">
+      <button id="btnContinuar" class="principal" hidden>Continuar</button>
+      <button id="btnNovo" class="principal">Jogar</button>
+    </div>
+    <p id="saveInfo" class="info"></p>
+    <p id="dicaIos" class="dica" hidden>No iPhone, toque em <b>Compartilhar → Adicionar à Tela de Início</b> e abra por lá para jogar em tela cheia.</p>
+    <div class="controles">
+      <p class="so-teclado"><b>WASD</b> anda · <b>Espaço</b> ou clique atira · <b>Q E R</b> ou <b>1 2 3</b> habilidades · <b>Esc</b> pausa</p>
+      <p class="so-toque">Joystick à esquerda · botões à direita · mira automática</p>
+    </div>
+  </div>
+</section>
+
+<section id="telaPausa" class="painel" hidden>
+  <div class="caixa">
+    <h2>PAUSADO</h2>
+    <p id="pausaMotivo" class="info"></p>
+    <div class="acoes">
+      <button id="btnVoltar" class="principal">Voltar ao jogo</button>
+      <button id="btnMenu">Menu</button>
+    </div>
+  </div>
+</section>
+
+<section id="telaMorte" class="painel" hidden>
+  <div class="caixa">
+    <h2 class="vermelho">VOCÊ CAIU</h2>
+    <p class="info">Alguém te arrastou de volta ao Abrigo.</p>
+    <div class="acoes"><button id="btnReerguer" class="principal">Levantar</button></div>
+  </div>
+</section>
+
+<div id="girar"><div><span>⟳</span><p>Gire o aparelho para jogar</p></div></div>
+
+<script src="js/base.js"></script>
+<script src="js/mundo.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/entidades.js"></script>
+<script src="js/render.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
