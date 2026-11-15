@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dark Noise · quadro-alvo</title>
+<style>
+@font-face { font-family: 'Orbitron'; src: url('../../assets/fonts/orbitron-var-latin.woff2') format('woff2'); font-weight: 400 900; }
+@font-face { font-family: 'Space Mono'; src: url('../../assets/fonts/space-mono-400-latin.woff2') format('woff2'); font-weight: 400; }
+@font-face { font-family: 'Space Mono'; src: url('../../assets/fonts/space-mono-700-latin.woff2') format('woff2'); font-weight: 700; }
+html, body { margin: 0; background: #05060c; }
+canvas { display: block; width: 100vw; height: auto; max-height: 100vh; object-fit: contain; }
+</style>
+</head>
+<body>
+<!-- Quadro-alvo do jogo final: Mercado Baixo, celular deitado (20:9).
+     Tudo é Canvas 2D com as técnicas do guia de estilo: halo em modo "lighter",
+     contorno de 2 px nos personagens, aviso de ataque em vermelho no chão,
+     poças refletindo letreiros em riscos, chuva em duas camadas. -->
+<canvas id="c" width="2400" height="1080"></canvas>
+<script>
+'use strict';
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const W = 2400, H = 1080;
+let seed = 1907;
+const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const R = (a, b) => a + rnd() * (b - a);
+const P = { fundo: '#0B1020', fundo2: '#1A1F45', rosa: '#FF3D81', ciano: '#2EE6D6', ambar: '#FFB84D', clima: '#8FB8FF', alerta: '#FF2E4D', raro: '#4AA3FF', ouro: '#FFB02E' };
+
+function rgba(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function halo(x, y, r, cor, a = 1, sy = 1) {
+  const op = ctx.globalCompositeOperation; ctx.globalCompositeOperation = 'lighter';
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, sy);
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+  g.addColorStop(0, rgba(cor, a)); g.addColorStop(0.3, rgba(cor, a * 0.35)); g.addColorStop(1, rgba(cor, 0));
+  ctx.fillStyle = g; ctx.fillRect(-r, -r, r * 2, r * 2); ctx.restore();
+  ctx.globalCompositeOperation = op;
+}
+function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+const placas = [];   // letreiros: reflexo nas poças depois
+
+// ── chão ───────────────────────────────────────────
+function chao() {
+  ctx.fillStyle = P.fundo; ctx.fillRect(0, 0, W, H);
+  // asfalto com grão
+  ctx.fillStyle = '#0d1226'; ctx.fillRect(0, 495, W, 300); ctx.fillRect(1555, 0, 270, 500);
+  for (let i = 0; i < 5000; i++) {
+    const x = R(0, W), y = R(0, H);
+    ctx.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x, y, R(1, 4), R(1, 3));
+  }
+  // calçadas de ladrilho
+  const calc = (x, y, w, h) => {
+    ctx.fillStyle = '#151a36'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(143,184,255,0.06)'; ctx.lineWidth = 1.5;
+    for (let i = x; i < x + w; i += 46) { ctx.beginPath(); ctx.moveTo(i, y); ctx.lineTo(i, y + h); ctx.stroke(); }
+    for (let j = y; j < y + h; j += 30) { ctx.beginPath(); ctx.moveTo(x, j); ctx.lineTo(x + w, j); ctx.stroke(); }
+    ctx.fillStyle = '#232a52'; ctx.fillRect(x, y + h - 4, w, 4); ctx.fillRect(x, y, w, 3);
+  };
+  calc(0, 435, 1555, 62); calc(1825, 435, 600, 62); calc(1495, 0, 60, 497); calc(1825, 0, 60, 497);
+  calc(0, 793, W, 60);
+  // faixa central e faixa de pedestre
+  ctx.fillStyle = rgba(P.ambar, 0.22);
+  for (let x = 20; x < W; x += 110) if (x < 1520 || x > 1860) ctx.fillRect(x, 642, 60, 6);
+  for (let y = 10; y < 420; y += 110) ctx.fillRect(1687, y, 6, 60);
+  ctx.fillStyle = 'rgba(220,226,255,0.07)';
+  for (let x = 1575; x < 1810; x += 34) ctx.fillRect(x, 512, 18, 120);
+  // brilho molhado: manchas largas que pegam a cor do céu
+  for (let i = 0; i < 14; i++) halo(R(0, W), R(500, 790), R(120, 260), '#3a4a9a', 0.10, 0.35);
+  // bueiro com vapor
+  ctx.fillStyle = '#080b18'; rrect(560, 700, 70, 26, 4); ctx.fill();
+  ctx.strokeStyle = 'rgba(143,184,255,0.18)'; ctx.lineWidth = 2;
+  for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(566 + i * 13, 703); ctx.lineTo(566 + i * 13, 723); ctx.stroke(); }
+}
+
+function pocas() {
+  const lista = [[300, 560, 170, 34], [880, 520, 120, 22], [1380, 560, 210, 40], [1690, 470, 150, 60], [2060, 600, 200, 36],
+    [520, 760, 150, 26], [1900, 740, 140, 22], [1100, 770, 110, 18]];
+  for (const [x, y, rx, ry] of lista) {
+    ctx.fillStyle = 'rgba(20,28,60,0.75)';
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.clip();
+    ctx.globalCompositeOperation = 'lighter';
+    // reflexo dos letreiros em riscos horizontais
+    for (const p of placas) {
+      if (Math.abs(p.x - x) > rx + 140) continue;
+      for (let k = 0; k < 12; k++) {
+        ctx.fillStyle = rgba(p.cor, R(0.12, 0.4));
+        const ww = R(20, p.w * 0.9);
+        ctx.fillRect(p.x - ww / 2 + R(-20, 20), y - ry + R(0, ry * 2), ww, R(1.5, 3.5));
+      }
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(143,184,255,0.14)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+// ── prédios de trás (fachada virada pra rua) ───────
+function placa(txt, x, y, cor, tam = 34, vertical = false) {
+  ctx.save();
+  ctx.font = `700 ${tam}px Orbitron`;
+  const letras = vertical ? [...txt] : [txt];
+  const w = vertical ? tam * 1.3 : ctx.measureText(txt).width + tam * 0.9;
+  const h = vertical ? letras.length * tam * 1.12 + tam * 0.5 : tam * 1.5;
+  ctx.fillStyle = '#070912'; rrect(x - w / 2, y - h / 2, w, h, 4); ctx.fill();
+  ctx.strokeStyle = rgba(cor, 0.9); ctx.lineWidth = 3; ctx.shadowColor = cor; ctx.shadowBlur = 16; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowBlur = 22; ctx.fillStyle = cor;
+  letras.forEach((l, i) => {
+    const ly = vertical ? y - h / 2 + tam * 0.8 + i * tam * 1.12 : y + 1;
+    ctx.fillText(l, x, ly); ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.fillText(l, x, ly);
+    ctx.shadowBlur = 22; ctx.fillStyle = cor;
+  });
+  ctx.restore();
+  halo(x, y, Math.max(w, h) * 1.1, cor, 0.35);
+  placas.push({ x, y, w, cor });
+}
+
+function fachada(x, w, topo, base, op) {
+  // teto (visto de cima, inclinado)
+  ctx.fillStyle = '#0c1024'; ctx.fillRect(x, 0, w, topo);
+  ctx.fillStyle = 'rgba(143,184,255,0.035)';
+  for (let i = 0; i < 4; i++) ctx.fillRect(x + R(10, w - 120), R(10, topo - 80), R(50, 110), R(30, 60));
+  for (let i = 0; i < 3; i++) {    // caixas de ar e caixa d'água
+    const ax = x + R(20, w - 90), ay = R(20, Math.max(30, topo - 70));
+    ctx.fillStyle = '#1a1f3d'; ctx.fillRect(ax, ay, 64, 44); ctx.fillStyle = '#12162e'; ctx.fillRect(ax, ay + 44, 64, 12);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.strokeRect(ax + 8, ay + 8, 48, 28);
+  }
+  ctx.fillStyle = '#262c58'; ctx.fillRect(x, topo - 6, w, 6);   // beiral iluminado
+  // fachada
+  const g = ctx.createLinearGradient(0, topo, 0, base);
+  g.addColorStop(0, op.cor || '#151a38'); g.addColorStop(1, '#1d2047');
+  ctx.fillStyle = g; ctx.fillRect(x, topo, w, base - topo);
+  for (let y = topo + 70; y < base - 110; y += 70) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x, y, w, 5); }
+  // janelas
+  for (let y = topo + 18; y < base - 130; y += 70) for (let jx = x + 22; jx < x + w - 40; jx += 58) {
+    const acesa = rnd() < 0.38, cor = rnd() < 0.7 ? '#FFB84D' : rnd() < 0.5 ? P.ciano : P.rosa;
+    ctx.fillStyle = acesa ? rgba(cor, 0.28) : '#0a0d1e'; ctx.fillRect(jx, y, 34, 40);
+    if (acesa) { ctx.fillStyle = 'rgba(0,0,0,0.35)'; for (let b = 0; b < 40; b += 6) ctx.fillRect(jx, y + b, 34, 2); }
+    if (rnd() < 0.25) { ctx.fillStyle = '#20264a'; ctx.fillRect(jx + 2, y + 42, 30, 16); }   // ar-condicionado
+    if (rnd() < 0.3) { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(jx + R(4, 30), y + 58, 2, R(20, 60)); }  // escorrido
+  }
+  // térreo: loja com porta de enrolar
+  const lt = base - 108;
+  ctx.fillStyle = '#0a0c19'; ctx.fillRect(x, lt, w, 108);
+  const lojas = op.lojas || 2, lw = w / lojas;
+  for (let i = 0; i < lojas; i++) {
+    const lx = x + i * lw + 14, ww = lw - 28;
+    const lg = ctx.createLinearGradient(0, lt + 20, 0, base);
+    lg.addColorStop(0, rgba(op.luz[i % op.luz.length], 0.05)); lg.addColorStop(1, rgba(op.luz[i % op.luz.length], 0.3));
+    ctx.fillStyle = lg; ctx.fillRect(lx, lt + 16, ww, 92);
+    const meia = R(30, 70);
+    ctx.fillStyle = '#1b1f36'; ctx.fillRect(lx, lt + 16, ww, meia);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)'; for (let b = 0; b < meia; b += 7) ctx.fillRect(lx, lt + 16 + b, ww, 2);
+    halo(lx + ww / 2, base + 10, ww * 0.7, op.luz[i % op.luz.length], 0.22, 0.4);
+  }
+}
+
+// calha das Torres despejando no Mercado: assinatura do bairro
+function calha(x, y0, y1) {
+  ctx.fillStyle = '#2a2f55'; ctx.fillRect(x - 14, y0 - 6, 28, 12);
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  g.addColorStop(0, rgba(P.clima, 0.35)); g.addColorStop(1, rgba(P.clima, 0.12));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x - 8, y0); ctx.lineTo(x + 8, y0); ctx.lineTo(x + 16, y1); ctx.lineTo(x - 16, y1); ctx.fill();
+  ctx.strokeStyle = rgba('#dbe8ff', 0.35); ctx.lineWidth = 1.5;
+  for (let i = 0; i < 26; i++) { const sx = x + R(-10, 10), sy = R(y0, y1 - 60); ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + R(-2, 2), sy + R(30, 70)); ctx.stroke(); }
+  ctx.restore();
+  for (let i = 0; i < 40; i++) {   // respingo
+    ctx.fillStyle = rgba('#cfe0ff', R(0.15, 0.5));
+    const a = R(Math.PI, Math.PI * 2), d = R(4, 46);
+    ctx.fillRect(x + Math.cos(a) * d * 1.6, y1 + Math.sin(a) * d * 0.6, 2, 2);
+  }
+  halo(x, y1, 110, P.clima, 0.25, 0.4);
+}
+
+// ── fios com lâmpadas sobre a rua (por cima de tudo) ──
+function varal(x0, y0, x1, y1, curva, cor) {
+  ctx.strokeStyle = '#05060c'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 + curva, x1, y1); ctx.stroke();
+  for (let t = 0.06; t < 1; t += 0.07) {
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2 + curva;
+    const x = (1 - t) ** 2 * x0 + 2 * (1 - t) * t * mx + t * t * x1, y = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * my + t * t * y1;
+    const c = Array.isArray(cor) ? cor[Math.floor(t * 14) % cor.length] : cor;
+    ctx.fillStyle = '#fff6e0'; ctx.beginPath(); ctx.arc(x, y + 6, 4, 0, Math.PI * 2); ctx.fill();
+    halo(x, y + 6, 34, c, 0.6);
+  }
+}
+
+// ── personagens ────────────────────────────────────
+// passada 1 contorna a silhueta inteira; passada 2 pinta o miolo escuro por cima
+function pessoa(x, y, o) {
+  const s = o.s || 1, f = o.olha || 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.ellipse(x, y, 34 * s, 12 * s, 0, 0, Math.PI * 2); ctx.fill();
+  const partes = [];
+  const add = (cor, fn) => partes.push([cor, fn]);
+  add('#0b0d17', () => { rrect(x - 15 * s, y - 44 * s, 11 * s, 44 * s, 4 * s); });
+  add('#0b0d17', () => { rrect(x + 4 * s, y - 44 * s, 11 * s, 44 * s, 4 * s); });
+  add(o.casaco, () => {
+    ctx.beginPath(); ctx.moveTo(x - 22 * s, y - 98 * s); ctx.lineTo(x + 22 * s, y - 98 * s);
+    ctx.lineTo(x + (o.capa ? 34 : 28) * s, y - (o.capa ? 34 : 30) * s); ctx.lineTo(x - (o.capa ? 34 : 28) * s, y - (o.capa ? 34 : 30) * s); ctx.closePath();
+  });
+  if (o.ombreira) add('#3a2f28', () => { rrect(x + f * 8 * s, y - 104 * s, 20 * s, 16 * s, 5 * s); });
+  add(o.cabeca || '#1a1c28', () => { ctx.beginPath(); ctx.arc(x, y - 112 * s, (o.capuz ? 17 : 13) * s, 0, Math.PI * 2); });
+  if (o.bone) add('#141625', () => { rrect(x - 16 * s + f * 6 * s, y - 128 * s, 28 * s, 8 * s, 3 * s); });
+  add(o.casaco, () => {   // braço da frente, indo pra arma
+    const a = o.mira ?? 0.6 * f, bx = x + f * 6 * s, by = y - 92 * s;
+    ctx.beginPath(); ctx.moveTo(bx - 6 * s, by); ctx.lineTo(bx + Math.cos(a) * 30 * s, by + 14 * s + Math.sin(a) * 18 * s);
+    ctx.lineTo(bx + Math.cos(a) * 30 * s, by + 24 * s + Math.sin(a) * 18 * s); ctx.lineTo(bx - 4 * s, by + 18 * s); ctx.closePath();
+  });
+  if (o.arma) add('#3a3e50', () => {
+    const a = o.mira ?? 0, bx = x + f * 10 * s, by = y - 76 * s;
+    ctx.beginPath(); ctx.moveTo(bx, by - 5 * s); ctx.lineTo(bx + Math.cos(a) * o.arma * s, by + Math.sin(a) * o.arma * s - 5 * s);
+    ctx.lineTo(bx + Math.cos(a) * o.arma * s, by + Math.sin(a) * o.arma * s + 5 * s); ctx.lineTo(bx, by + 5 * s); ctx.closePath();
+  });
+  ctx.lineJoin = 'round';
+  for (const [, fn] of partes) { fn(); ctx.strokeStyle = o.contorno; ctx.lineWidth = 4; ctx.stroke(); }
+  for (const [cor, fn] of partes) { fn(); ctx.fillStyle = cor; ctx.fill(); }
+  // detalhes por cima
+  ctx.fillStyle = rgba(o.contorno, 0.85);
+  if (o.visor) ctx.fillRect(x - 10 * s + f * 3 * s, y - 116 * s, 20 * s, 3 * s);
+  if (o.capuz) { ctx.fillRect(x - 17 * s, y - 104 * s, 34 * s, 2.5 * s); }
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  for (let i = 0; i < 3; i++) ctx.fillRect(x - 18 * s + i * 13 * s, y - 92 * s, 2, 50 * s);   // chuva escorrendo no casaco
+  if (o.flash) { ctx.globalAlpha = o.flash; for (const [, fn] of partes) { fn(); ctx.fillStyle = '#ffffff'; ctx.fill(); } ctx.globalAlpha = 1; }
+  halo(x, y - 60 * s, 70 * s, o.contorno, 0.12);
+}
+
+function barraVida(x, y, w, frac, cor, nivel) {
+  ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(x - w / 2 - 2, y - 2, w + 4, 11);
+  ctx.fillStyle = cor; ctx.fillRect(x - w / 2, y, w * frac, 7);
+  if (nivel) { ctx.font = '700 15px "Space Mono"'; ctx.fillStyle = '#c9cede'; ctx.textAlign = 'right'; ctx.fillText(nivel, x - w / 2 - 8, y + 8); }
+}
+
+function numero(txt, x, y, cor, tam) {
+  ctx.font = `900 ${tam}px Orbitron`; ctx.textAlign = 'center';
+  ctx.lineWidth = 6; ctx.strokeStyle = '#05060c'; ctx.strokeText(txt, x, y);
+  ctx.fillStyle = cor; ctx.fillText(txt, x, y);
+}
+
+// aviso de golpe: forma no chão, contorno vermelho, miolo crescendo
+function avisoCone(x, y, ang, abre, raio, prog) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.5);
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, raio, ang - abre / 2, ang + abre / 2); ctx.closePath();
+  ctx.fillStyle = rgba(P.alerta, 0.12); ctx.fill();
+  ctx.strokeStyle = P.alerta; ctx.lineWidth = 4; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, raio * prog, ang - abre / 2, ang + abre / 2); ctx.closePath();
+  ctx.fillStyle = rgba(P.alerta, 0.38); ctx.fill();
+  ctx.restore();
+}
+
+function portao(x, y) {
+  const s = 1.6;
+  ctx.strokeStyle = P.ouro; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.ellipse(x, y, 58, 20, 0, 0, Math.PI * 2); ctx.stroke();
+  halo(x, y, 90, P.ouro, 0.3, 0.35);
+  pessoa(x, y, { s, casaco: '#2b2733', contorno: P.rosa, cabeca: '#22222c', visor: true, olha: -1 });
+  // escudo: porta de aço arrancada
+  const sx = x - 92, sy = y - 182;
+  ctx.fillStyle = '#05060c'; rrect(sx - 3, sy - 3, 80, 176, 4); ctx.fill();
+  const g = ctx.createLinearGradient(sx, 0, sx + 74, 0); g.addColorStop(0, '#5a6070'); g.addColorStop(1, '#383c48');
+  ctx.fillStyle = g; rrect(sx, sy, 74, 170, 3); ctx.fill();
+  ctx.fillStyle = 'rgba(120,60,30,0.6)'; ctx.fillRect(sx + 6, sy + 96, 30, 22); ctx.fillRect(sx + 40, sy + 20, 16, 30);
+  ctx.fillStyle = '#9aa0b0'; for (let i = 0; i < 4; i++) { ctx.fillRect(sx + 6, sy + 10 + i * 38, 4, 4); ctx.fillRect(sx + 54, sy + 10 + i * 38, 4, 4); }
+  ctx.fillStyle = '#20232c'; ctx.fillRect(sx + 46, sy + 70, 12, 6);
+  ctx.strokeStyle = rgba(P.rosa, 0.9); ctx.lineWidth = 3;   // pichação dos Goteiras
+  ctx.beginPath(); ctx.moveTo(sx + 14, sy + 50); ctx.quadraticCurveTo(sx + 30, sy + 30, sx + 46, sy + 52); ctx.lineTo(sx + 30, sy + 74); ctx.stroke();
+  ctx.strokeStyle = P.rosa; ctx.lineWidth = 3; ctx.strokeRect(sx, sy, 74, 170);
+}
+
+// ── HUD (layout do dossiê: 1 a 9) ──────────────────
+function hud() {
+  ctx.save();
+  // 1 retrato + Vida, Carga, Ruído
+  const px = 118, py = 112;
+  ctx.fillStyle = '#0a0c18'; ctx.beginPath(); ctx.arc(px, py, 60, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = P.ambar; ctx.lineWidth = 5; ctx.shadowColor = P.ambar; ctx.shadowBlur = 16; ctx.stroke(); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#22263c'; ctx.beginPath(); ctx.arc(px, py - 8, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(px - 38, py + 46); ctx.quadraticCurveTo(px, py + 4, px + 38, py + 46); ctx.fill();
+  ctx.fillStyle = P.ambar; rrect(px - 24, py + 38, 48, 30, 6); ctx.fill();
+  ctx.font = '900 22px Orbitron'; ctx.fillStyle = '#0a0c18'; ctx.textAlign = 'center'; ctx.fillText('4', px, py + 61);
+  const bx = 196;
+  const barra = (y, h, frac, c1, c2) => {
+    ctx.fillStyle = 'rgba(5,6,12,0.8)'; rrect(bx, y, 440, h, 3); ctx.fill();
+    const g = ctx.createLinearGradient(bx, 0, bx + 440, 0); g.addColorStop(0, c1); g.addColorStop(1, c2);
+    ctx.fillStyle = g; rrect(bx + 2, y + 2, 436 * frac, h - 4, 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1.5; rrect(bx, y, 440, h, 3); ctx.stroke();
+  };
+  barra(62, 32, 0.68, '#8a0f24', '#FF3D5A');
+  ctx.font = '700 18px "Space Mono"'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText('104 / 152', bx + 220, 84);
+  barra(102, 18, 0.62, '#0d6f6a', P.ciano);
+  // Ruído: medidor em 4 estágios
+  const est = [0.3, 0.3, 0.25, 0.15]; let rx = bx;
+  est.forEach((e, i) => {
+    const w = 440 * e - 4;
+    ctx.fillStyle = rgba(P.rosa, 0.18); ctx.fillRect(rx, 128, w, 10);
+    if (i === 0) { ctx.fillStyle = P.rosa; ctx.fillRect(rx, 128, w * 0.6, 10); }
+    rx += w + 4;
+  });
+  ctx.font = '700 14px "Space Mono"'; ctx.textAlign = 'left'; ctx.fillStyle = rgba(P.rosa, 0.9);
+  ctx.fillText('RUÍDO 18 · SILÊNCIO', bx, 160);
+  ctx.fillStyle = P.ambar; ctx.font = '700 20px "Space Mono"'; ctx.fillText('◆ 1.284 lascas', bx, 190);
+
+  // alvo travado
+  ctx.textAlign = 'center'; ctx.font = '700 20px "Space Mono"'; ctx.fillStyle = P.ouro;
+  ctx.fillText('PORTÃO  ·  ELITE  ·  NV 3', W / 2, 52);
+  ctx.fillStyle = 'rgba(5,6,12,0.8)'; ctx.fillRect(W / 2 - 230, 64, 460, 14);
+  ctx.fillStyle = P.ouro; ctx.fillRect(W / 2 - 228, 66, 456 * 0.71, 10);
+  ctx.font = '400 14px "Space Mono"'; ctx.fillStyle = '#9BA4C9'; ctx.fillText('escudo frontal: −60% de dano pela frente', W / 2, 102);
+
+  // 2 minimapa
+  const mx = 2236, my = 150, mr = 112;
+  ctx.save(); ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = 'rgba(8,10,22,0.92)'; ctx.fillRect(mx - mr, my - mr, mr * 2, mr * 2);
+  ctx.fillStyle = 'rgba(255,61,129,0.10)';
+  for (let i = 0; i < 9; i++) ctx.fillRect(mx - mr + (i % 3) * 78 + 6, my - mr + Math.floor(i / 3) * 78 + 6, 62, 62);
+  ctx.fillStyle = '#05060c';
+  for (let i = 0; i < 9; i++) ctx.fillRect(mx - mr + (i % 3) * 78 + 14, my - mr + Math.floor(i / 3) * 78 + 14, R(20, 46), R(20, 46));
+  for (const [dx, dy] of [[22, -8], [28, 6], [16, 10], [40, 16], [36, -30]]) { ctx.fillStyle = P.alerta; ctx.fillRect(mx + dx - 3, my + dy - 3, 6, 6); }
+  ctx.fillStyle = P.ouro; ctx.fillRect(mx + 40, my + 12, 8, 8);
+  ctx.fillStyle = P.raro; ctx.fillRect(mx - 18, my - 6, 6, 6);
+  ctx.restore();
+  ctx.strokeStyle = rgba(P.ciano, 0.6); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(mx + 12, my); ctx.lineTo(mx - 8, my + 9); ctx.lineTo(mx - 4, my); ctx.lineTo(mx - 8, my - 9); ctx.fill();
+  ctx.fillStyle = P.ambar; ctx.beginPath(); ctx.arc(mx - mr * 0.78, my - mr * 0.55, 7, 0, Math.PI * 2); ctx.fill();   // objetivo na borda
+  ctx.strokeStyle = rgba(P.ciano, 0.5); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(2060, 74, 30, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#c9cede'; for (let i = 0; i < 3; i++) ctx.fillRect(2046, 63 + i * 10, 28, 3);
+
+  // 3 objetivo do biscate
+  ctx.textAlign = 'right';
+  ctx.font = '700 15px "Space Mono"'; ctx.fillStyle = P.ambar; ctx.fillText('BISCATE · QUEM VOLTOU DIFERENTE', 2346, 304);
+  ctx.font = '400 19px "Space Mono"'; ctx.fillStyle = '#E7EAF6';
+  ctx.fillText('Ache a barraca de Dona Zilá', 2346, 334);
+  ctx.fillStyle = '#9BA4C9'; ctx.fillText('◂ 128 m · Goteiras na rua: 5', 2346, 360);
+
+  // 4 joystick
+  ctx.strokeStyle = rgba(P.ciano, 0.35); ctx.lineWidth = 3; ctx.fillStyle = rgba(P.ciano, 0.06);
+  ctx.beginPath(); ctx.arc(300, 860, 116, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  const kg = ctx.createRadialGradient(352, 830, 0, 352, 830, 54);
+  kg.addColorStop(0, rgba(P.ciano, 0.7)); kg.addColorStop(1, rgba(P.ciano, 0.15));
+  ctx.fillStyle = kg; ctx.beginPath(); ctx.arc(352, 830, 54, 0, Math.PI * 2); ctx.fill();
+  halo(352, 830, 90, P.ciano, 0.3);
+
+  // 5 ataque, 6 habilidades em leque, 7 esquiva, 8 injetor
+  const ax = 2190, ay = 890;
+  const botao = (x, y, r, borda, apertado) => {
+    const g = ctx.createRadialGradient(x, y - r * 0.4, 0, x, y, r);
+    g.addColorStop(0, 'rgba(40,30,70,0.95)'); g.addColorStop(1, 'rgba(8,8,20,0.92)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = borda; ctx.lineWidth = apertado ? 5 : 3; ctx.stroke();
+    if (apertado) halo(x, y, r * 1.6, borda, 0.45);
+  };
+  botao(ax, ay, 104, P.rosa);
+  ctx.save(); ctx.translate(ax, ay); ctx.rotate(-0.45); ctx.fillStyle = '#E7EAF6';   // ícone: escopeta de cano serrado
+  rrect(-46, -9, 64, 12, 3); ctx.fill(); rrect(-46, 4, 56, 7, 3); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(10, -6); ctx.lineTo(44, -12); ctx.lineTo(48, 14); ctx.lineTo(20, 10); ctx.closePath(); ctx.fill();
+  ctx.fillRect(-8, 10, 8, 16); ctx.restore();
+  const habs = [
+    { a: 178, nome: 'Varredura', n: '1', apertado: true, icone: (x, y) => { ctx.beginPath(); ctx.moveTo(x - 20, y); ctx.lineTo(x + 22, y - 20); ctx.lineTo(x + 22, y + 20); ctx.closePath(); ctx.fill(); } },
+    { a: 212, nome: 'Investida', n: '2', icone: (x, y) => { ctx.beginPath(); ctx.moveTo(x - 22, y - 16); ctx.lineTo(x + 2, y); ctx.lineTo(x - 22, y + 16); ctx.moveTo(x - 4, y - 16); ctx.lineTo(x + 20, y); ctx.lineTo(x - 4, y + 16); ctx.stroke(); } },
+    { a: 246, nome: 'Granada', n: '3', cd: 0.58, seg: '6', icone: (x, y) => { ctx.beginPath(); ctx.arc(x, y + 4, 16, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(x - 5, y - 20, 10, 8); } },
+    { a: 280, nome: 'Peito Aberto', n: '4', trava: 'NV 7', icone: (x, y) => { rrect(x - 13, y - 4, 26, 22, 3); ctx.fill(); ctx.beginPath(); ctx.arc(x, y - 6, 10, Math.PI, 0); ctx.stroke(); } },
+  ];
+  for (const h of habs) {
+    const x = ax + Math.cos(h.a * Math.PI / 180) * 212, y = ay + Math.sin(h.a * Math.PI / 180) * 212;
+    botao(x, y, 58, h.trava ? 'rgba(155,164,201,0.35)' : rgba(P.ambar, 0.8), h.apertado);
+    ctx.fillStyle = h.trava ? '#556' : P.ambar; ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 6;
+    h.icone(x, y);
+    if (h.cd) {
+      ctx.fillStyle = 'rgba(0,0,0,0.65)'; ctx.beginPath(); ctx.moveTo(x, y);
+      ctx.arc(x, y, 56, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * h.cd); ctx.closePath(); ctx.fill();
+      ctx.font = '900 30px Orbitron'; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(h.seg, x, y + 11);
+    }
+    if (h.trava) { ctx.font = '700 13px "Space Mono"'; ctx.fillStyle = '#9BA4C9'; ctx.textAlign = 'center'; ctx.fillText(h.trava, x, y + 44); }
+    ctx.fillStyle = '#0a0c18'; ctx.beginPath(); ctx.arc(x + 40, y - 40, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.font = '700 15px "Space Mono"'; ctx.fillStyle = '#c9cede'; ctx.textAlign = 'center'; ctx.fillText(h.n, x + 40, y - 35);
+  }
+  botao(1880, 985, 50, rgba(P.ciano, 0.7));   // esquiva
+  ctx.strokeStyle = P.ciano; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.arc(1880, 985, 20, Math.PI * 0.9, Math.PI * 2.3); ctx.stroke();
+  ctx.font = '700 13px "Space Mono"'; ctx.fillStyle = '#9BA4C9'; ctx.textAlign = 'center'; ctx.fillText('ROLAR', 1880, 1056);
+  botao(2330, 600, 46, rgba('#4BE38A', 0.7));   // injetor
+  ctx.fillStyle = '#4BE38A'; ctx.fillRect(2322, 576, 16, 36); ctx.fillRect(2314, 572, 32, 6);
+  ctx.fillStyle = '#0a0c18'; ctx.beginPath(); ctx.arc(2364, 566, 15, 0, Math.PI * 2); ctx.fill();
+  ctx.font = '700 15px "Space Mono"'; ctx.fillStyle = '#4BE38A'; ctx.fillText('3', 2364, 571);
+
+  // 9 experiência
+  ctx.fillStyle = 'rgba(5,6,12,0.85)'; ctx.fillRect(0, H - 10, W, 10);
+  ctx.fillStyle = P.ambar; ctx.fillRect(0, H - 8, W * 0.46, 8);
+  halo(W * 0.46, H - 4, 40, P.ambar, 0.6);
+  ctx.restore();
+}
+
+// ── cena ───────────────────────────────────────────
+function cena() {
+  chao();
+  // prédios do lado de cima da rua
+  fachada(-20, 560, 120, 438, { luz: [P.ambar, P.ciano], lojas: 2 });
+  fachada(540, 520, 190, 438, { luz: [P.rosa, P.ambar], lojas: 2, cor: '#171a3c' });
+  fachada(1060, 440, 90, 438, { luz: [P.ciano], lojas: 1 });
+  fachada(1885, 540, 150, 438, { luz: [P.ambar, P.rosa], lojas: 2, cor: '#14193a' });
+  placa('PASTEL', 270, 300, P.rosa, 30);
+  placa('CONSERTO', 800, 360, P.ciano, 24);
+  placa('LASCA', 1420, 240, P.ciano, 34, true);
+  placa('FEIRA', 1270, 300, P.ambar, 26);
+  placa('CHIP · CHAPA · CHAVE', 2120, 392, P.rosa, 20);
+  placa('24H', 1930, 250, P.ambar, 28, true);
+  calha(1470, 90, 470);
+  pocas();
+  // vapor do bueiro
+  for (let i = 0; i < 9; i++) halo(595 + R(-30, 30), 700 - i * 22, 50 + i * 6, '#7d88b8', 0.07);
+
+  // ── combate ──
+  const fx = 930, fy = 712, mira = -0.17;
+  // aviso do Portão: golpe em arco de 120° vindo pela direita
+  avisoCone(1470, 772, Math.PI - 0.08, Math.PI * 2 / 3, 210, 0.55);
+  // aviso do Atirador: linha de mira 0,5 s antes do tiro
+  ctx.save(); ctx.strokeStyle = rgba(P.alerta, 0.85); ctx.lineWidth = 3; ctx.setLineDash([18, 10]);
+  ctx.beginPath(); ctx.moveTo(1716, 400); ctx.lineTo(fx + 8, fy - 70); ctx.stroke(); ctx.restore();
+  ctx.strokeStyle = P.alerta; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.ellipse(fx, fy, 46, 16, 0, 0, Math.PI * 2); ctx.stroke();
+
+  // Varredura: cone de 60° no chão + chumbo no ar
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  ctx.translate(fx + 40, fy); ctx.scale(1, 0.5);
+  const cg = ctx.createRadialGradient(0, 0, 0, 0, 0, 330);
+  cg.addColorStop(0, rgba(P.ambar, 0.55)); cg.addColorStop(1, rgba(P.ambar, 0));
+  ctx.fillStyle = cg; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, 330, mira * 2 - 0.52, mira * 2 + 0.52); ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // loot raro largado antes, com facho visível de longe
+  const lx = 700, ly = 620;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const fg = ctx.createLinearGradient(0, ly - 420, 0, ly);
+  fg.addColorStop(0, rgba(P.raro, 0)); fg.addColorStop(1, rgba(P.raro, 0.55));
+  ctx.fillStyle = fg; ctx.fillRect(lx - 9, ly - 420, 18, 420); ctx.fillRect(lx - 3, ly - 420, 6, 420);
+  ctx.restore();
+  halo(lx, ly, 90, P.raro, 0.6, 0.45);
+  ctx.fillStyle = '#05060c'; rrect(lx - 26, ly - 16, 52, 18, 3); ctx.fill();
+  ctx.fillStyle = P.raro; rrect(lx - 24, ly - 14, 48, 14, 3); ctx.fill();
+  ctx.font = '700 19px "Space Mono"'; const nome = 'Escopeta Serrada Cromada'; const tw = ctx.measureText(nome).width;
+  ctx.fillStyle = 'rgba(5,6,12,0.85)'; rrect(lx - tw / 2 - 12, ly - 70, tw + 24, 32, 3); ctx.fill();
+  ctx.strokeStyle = rgba(P.raro, 0.8); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = P.raro; ctx.textAlign = 'center'; ctx.fillText(nome, lx, ly - 48);
+
+  // lascas no chão
+  for (const [x, y] of [[1080, 606], [1104, 620], [1066, 628], [1140, 744], [820, 770]]) {
+    ctx.fillStyle = P.ambar; ctx.beginPath(); ctx.moveTo(x, y - 9); ctx.lineTo(x + 6, y); ctx.lineTo(x, y + 4); ctx.lineTo(x - 6, y); ctx.fill();
+    halo(x, y - 2, 26, P.ambar, 0.6);
+  }
+
+  // Goteira que acabou de cair: corpo + dissolução
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.ellipse(1112, 596, 50, 14, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2b1a33'; rrect(1072, 580, 84, 22, 8); ctx.fill();
+  ctx.strokeStyle = rgba(P.rosa, 0.5); ctx.lineWidth = 2; ctx.stroke();
+  for (let i = 0; i < 60; i++) { ctx.fillStyle = rgba(P.rosa, R(0.3, 0.9)); ctx.fillRect(1112 + R(-60, 60), 590 - R(0, 110), R(2, 5), R(2, 5)); }
+  halo(1112, 560, 90, P.rosa, 0.35);
+
+  // personagens em ordem de profundidade
+  const atores = [
+    { y: 404, d: () => {   // Goteira Atirador no meio-fio de lá, mirando
+      pessoa(1730, 404, { s: 1.15, casaco: '#26182c', contorno: P.rosa, bone: true, arma: 70, mira: Math.PI + 0.2, olha: -1, visor: true });
+      barraVida(1730, 240, 70, 1, P.alerta);
+    } },
+    { y: 610, d: () => {
+      pessoa(1236, 610, { s: 1.2, casaco: '#2b1a33', contorno: P.rosa, capuz: true, capa: true, olha: -1, flash: 0.4 });
+      barraVida(1236, 452, 70, 0.22, P.alerta);
+    } },
+    { y: 712, d: () => {   // Faro, Mercenário: contorno âmbar, ainda sem implante
+      pessoa(fx, fy, { s: 1.28, casaco: '#22263c', contorno: P.ambar, ombreira: true, arma: 58, mira, olha: 1, cabeca: '#1d1a20' });
+      ctx.fillStyle = rgba(P.ambar, 0.9); ctx.fillRect(fx - 28, fy - 92, 56, 4);
+    } },
+    { y: 735, d: () => {
+      pessoa(1262, 735, { s: 1.2, casaco: '#2b1a33', contorno: P.rosa, capuz: true, capa: true, olha: -1, flash: 0.3 });
+      barraVida(1262, 578, 70, 0.4, P.alerta);
+    } },
+    { y: 772, d: () => { portao(1470, 772); barraVida(1470, 530, 120, 0.71, P.ouro, 'NV 3'); } },
+    { y: 640, d: () => {   // reforço chegando correndo
+      pessoa(2010, 640, { s: 1.2, casaco: '#2b1a33', contorno: P.rosa, capuz: true, capa: true, olha: -1 });
+    } },
+  ].sort((a, b) => a.y - b.y);
+  for (const a of atores) a.d();
+
+  // chumbo da Varredura e clarão do cano
+  const bx = fx + 13 + Math.cos(mira) * 74, by = fy - 97 + Math.sin(mira) * 74;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 9; i++) {
+    const a = mira + R(-0.42, 0.42), d0 = R(30, 120), d1 = d0 + R(80, 160);
+    ctx.strokeStyle = rgba('#FFE0A0', R(0.5, 0.95)); ctx.lineWidth = R(2, 4);
+    ctx.beginPath(); ctx.moveTo(bx + Math.cos(a) * d0, by + Math.sin(a) * d0 * 0.6); ctx.lineTo(bx + Math.cos(a) * d1, by + Math.sin(a) * d1 * 0.6); ctx.stroke();
+  }
+  ctx.fillStyle = '#FFF3D6'; ctx.beginPath();
+  for (let i = 0; i < 10; i++) { const a = mira + i * Math.PI / 5, r = i % 2 ? 12 : 34; ctx.lineTo(bx + Math.cos(a) * r, by + Math.sin(a) * r); }
+  ctx.fill(); ctx.restore();
+  halo(bx, by, 120, P.ambar, 0.9);
+  // faíscas onde o chumbo pega
+  for (const [x, y] of [[1236, 540], [1262, 660]]) {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 16; i++) { const a = R(-1.2, 1.2), d = R(10, 46); ctx.fillStyle = rgba('#FFE0A0', R(0.5, 1)); ctx.fillRect(x + Math.cos(a) * d, y + Math.sin(a) * d, 3, 3); }
+    ctx.restore(); halo(x, y, 60, P.ambar, 0.5);
+  }
+  numero('47', 1218, 456, '#ffffff', 40);
+  numero('61!', 1300, 568, P.ambar, 54);
+  numero('29', 1182, 520, 'rgba(255,255,255,0.55)', 30);
+
+  // barracas da feira na beira de baixo (mais perto da câmera)
+  const toldo = (x, w, cor) => {
+    const y = 868;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x + 8, y + 10, w, 200);
+    ctx.fillStyle = '#1b1830'; ctx.fillRect(x, y, w, 220);
+    for (let i = 0; i < w; i += 44) { ctx.fillStyle = rgba(cor, 0.28); ctx.fillRect(x + i, y, 22, 220); }
+    const g = ctx.createLinearGradient(0, y, 0, y + 220); g.addColorStop(0, 'rgba(255,255,255,0.10)'); g.addColorStop(1, 'rgba(0,0,0,0.5)');
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, 220);
+    ctx.fillStyle = cor; ctx.fillRect(x - 4, y - 8, w + 8, 10);   // franja do toldo
+    for (let i = 0; i < w; i += 24) { ctx.beginPath(); ctx.moveTo(x + i, y + 2); ctx.lineTo(x + i + 12, y + 18); ctx.lineTo(x + i + 24, y + 2); ctx.fill(); }
+    for (let i = 0; i < 4; i++) {   // caixotes de mercadoria na frente do toldo
+      const cx = x + 20 + i * (w - 60) / 3, cyy = y - 46;
+      ctx.fillStyle = '#05060c'; ctx.fillRect(cx - 2, cyy - 2, 48, 40);
+      ctx.fillStyle = '#2a2236'; ctx.fillRect(cx, cyy, 44, 36);
+      ctx.fillStyle = rgba(i % 2 ? P.ambar : cor, 0.7);
+      for (let k = 0; k < 6; k++) { ctx.beginPath(); ctx.arc(cx + 8 + (k % 3) * 14, cyy + 10 + Math.floor(k / 3) * 14, 5, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.fillStyle = '#fff3d6'; ctx.beginPath(); ctx.arc(x + w - 30, y + 30, 7, 0, Math.PI * 2); ctx.fill();
+    halo(x + w - 30, y + 30, 70, P.ambar, 0.55);
+    halo(x + w / 2, y - 20, w * 0.6, cor, 0.25, 0.3);
+    placas.push({ x: x + w / 2, y, w: w * 0.6, cor });
+  };
+  toldo(20, 300, P.rosa); toldo(360, 260, P.ciano); toldo(660, 300, P.ambar);
+  // laje de um prédio alto embaixo à direita
+  ctx.fillStyle = '#0a0d1e'; ctx.fillRect(1240, 890, 1200, 200);
+  ctx.fillStyle = '#262c58'; ctx.fillRect(1240, 890, 1200, 6);
+  for (let i = 0; i < 5; i++) { ctx.fillStyle = '#161a36'; ctx.fillRect(1300 + i * 210 + R(0, 40), 930 + R(0, 50), 90, 60); }
+  ctx.strokeStyle = '#2a3160'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(1600, 1080); ctx.lineTo(1600, 930); ctx.lineTo(1640, 900); ctx.stroke();
+  halo(1640, 900, 22, P.alerta, 0.9);   // lâmpada de antena
+
+  // varais de lâmpada atravessando a rua, por cima de tudo
+  varal(-20, 360, 1500, 370, 120, [P.ambar, '#ffd9a0']);
+  varal(1830, 380, 2420, 420, 70, [P.rosa, P.ciano]);
+
+  // chuva em duas camadas, nunca por cima da HUD
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = rgba(P.clima, 0.16); ctx.lineWidth = 1.5; ctx.beginPath();
+  for (let i = 0; i < 1100; i++) { const x = R(-100, W), y = R(-60, H), l = R(20, 38); ctx.moveTo(x, y); ctx.lineTo(x - l * 0.22, y + l); }
+  ctx.stroke();
+  ctx.strokeStyle = rgba('#c8dcff', 0.32); ctx.lineWidth = 2.5; ctx.beginPath();
+  for (let i = 0; i < 260; i++) { const x = R(-100, W), y = R(-60, H), l = R(46, 80); ctx.moveTo(x, y); ctx.lineTo(x - l * 0.22, y + l); }
+  ctx.stroke();
+  ctx.strokeStyle = rgba(P.clima, 0.25); ctx.lineWidth = 1.5;
+  for (let i = 0; i < 140; i++) { const x = R(0, W), y = R(500, 850), r = R(4, 12); ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.35, 0, 0, Math.PI * 2); ctx.stroke(); }
+
+  // gradação: topo mais escuro, vinheta
+  const tg = ctx.createLinearGradient(0, 0, 0, 400); tg.addColorStop(0, 'rgba(3,4,10,0.55)'); tg.addColorStop(1, 'rgba(3,4,10,0)');
+  ctx.fillStyle = tg; ctx.fillRect(0, 0, W, 400);
+  const vg = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.62);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+  hud();
+}
+
+document.fonts.load('900 20px Orbitron').then(() => document.fonts.load('700 20px "Space Mono"')).then(() => document.fonts.load('400 20px "Space Mono"')).finally(() => {
+  // os letreiros das fachadas nascem antes das poças, que refletem o que já existe
+  cena();
+  document.body.dataset.pronto = '1';
+});
+</script>
+</body>
+</html>

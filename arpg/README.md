@@ -1,4 +1,4 @@
-# Neon ARPG (protótipo)
+# Dark Noise (protótipo)
 
 ARPG cyberpunk de ação em tempo real, para celular e PC, sempre em tela cheia.
 Mora em `arpg/` enquanto é protótipo; a ideia é virar repositório próprio.
