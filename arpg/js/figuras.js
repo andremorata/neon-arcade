@@ -911,6 +911,41 @@
       pistola(g, maoF, angA);
       mao(g, maoF, pele, 5.2);
     } },
+    // ── vendedores: gente parada atrás do balcão, um detalhe de cor cada ──
+    nicanor: vendedor({ pele: '#9a7258', roupa: '#3b4040', calca: '#26282e', comp: 0.12, cabelo: '#2a2a2a', extra(g, s) {
+      g.fillStyle = '#4d6650'; g.fill(forma([soma(s.ombroF, -14, 4), soma(s.ombroF, 12, 4), soma(s.qF, 12, 36), soma(s.qB, -10, 36)], false));   // avental da feira
+      g.fillStyle = 'rgba(0,0,0,0.25)'; for (let i = 0; i < 4; i++) g.fillRect(s.ombroF[0] - 10 + i * 6, s.ombroF[1] + 8, 2, 70);
+      g.fillStyle = '#2b2f36'; g.fill(forma([soma(s.cab, -13, -12), soma(s.cab, 10, -15), soma(s.cab, 24, -9), soma(s.cab, -13, -4)]));   // boné
+      g.fillStyle = '#d8d4cc'; g.fillRect(s.cab[0] + 3, s.cab[1] + 4, 10, 3);   // bigode grisalho
+    } }),
+    zila: vendedor({ pele: '#a07a62', roupa: '#3a3342', calca: '#2a2530', comp: 0.95, largura: 1.15, extra(g, s) {
+      g.fillStyle = '#5a4f7a'; g.fill(forma([soma(s.ombroB, -14, -4), soma(s.ombroF, 16, -6), soma(s.ombroF, 12, 30), soma(s.ombroB, -12, 36)]));   // xale
+      g.fillStyle = '#c9c4ba'; g.fill(forma([soma(s.cab, -13, -2), soma(s.cab, -12, -15), soma(s.cab, 0, -20), soma(s.cab, 12, -15), soma(s.cab, 12, -8), soma(s.cab, -2, -10)]));
+      g.beginPath(); g.arc(s.cab[0] - 12, s.cab[1] - 12, 6, 0, Math.PI * 2); g.fill();   // coque
+      g.strokeStyle = '#d8d0b8'; g.lineWidth = 1.5; g.strokeRect(s.cab[0] + 3, s.cab[1] - 5, 8, 5);   // óculos
+      g.strokeStyle = '#E9B77C'; g.lineWidth = 2; g.beginPath(); g.moveTo(s.ombroF[0] - 6, s.ombroF[1] - 4); g.lineTo(s.ombroF[0] - 2, s.ombroF[1] + 40); g.stroke();   // fita métrica
+    } }),
+    iara: vendedor({ pele: '#7e5c48', roupa: '#24343c', calca: '#1f262c', comp: 0.6, cabelo: '#141519', extra(g, s) {
+      g.fillStyle = '#5f9a96'; g.fill(forma([soma(s.cab, -12, 12), soma(s.cab, 6, 10), soma(s.cab, 8, 20), soma(s.cab, -12, 22)]));   // lenço
+      g.fillStyle = '#1b252b'; g.fill(forma([soma(s.cab, -14, -10), soma(s.cab, 12, -14), soma(s.cab, 22, -8), soma(s.cab, -14, -4)]));   // quepe
+      g.fillStyle = '#c9a86a'; g.fillRect(s.cab[0] - 2, s.cab[1] - 12, 6, 3);
+      g.fillStyle = '#c9a86a'; for (let i = 0; i < 3; i++) g.fillRect(s.ombroF[0] + 6, s.ombroF[1] + 6 + i * 12, 3, 3);   // botões
+    } }),
+    bigorna: vendedor({ pele: '#6f5243', roupa: '#33302c', calca: '#25241f', comp: 0.1, largura: 1.3, braco: 9, cabelo: '#1a1a1a', extra(g, s) {
+      g.fillStyle = '#5a4130'; g.fill(forma([soma(s.ombroF, -16, 2), soma(s.ombroF, 14, 2), soma(s.qF, 14, 40), soma(s.qB, -14, 40)], false));   // avental de couro
+      g.fillStyle = '#2b2f36'; g.fill(forma([soma(s.cab, -14, -14), soma(s.cab, 14, -18), soma(s.cab, 16, -8), soma(s.cab, -12, -6)]));   // máscara de solda erguida
+      g.fillStyle = '#A8DBA0'; g.fillRect(s.cab[0] - 2, s.cab[1] - 14, 10, 3);
+    } }),
+    tacita: vendedor({ pele: '#8a6a58', roupa: '#2c2640', calca: '#221d31', comp: 1, largura: 1.2, extra(g, s) {
+      const c = s.cab;
+      g.fillStyle = '#2c2640'; g.fill(forma([soma(c, -18, 22), soma(c, -20, -6), soma(c, -6, -22), soma(c, 12, -20), soma(c, 19, -6), soma(c, 10, -10), soma(c, -2, -4), soma(c, -4, 20)]));
+      g.fillStyle = 'rgba(4,6,12,0.75)'; g.fill(forma([soma(c, -2, -8), soma(c, 12, -10), soma(c, 14, 6), soma(c, 2, 8)]));   // rosto na sombra do capuz
+      g.fillStyle = '#AFA3F5'; g.fillRect(c[0] + 6, c[1] - 2, 4, 1.6);
+    } }),
+    concierge: vendedor({ pele: '#b08a72', roupa: '#dfe5ec', calca: '#c5cdd8', comp: 0.32, cabelo: '#2a2420', extra(g, s) {
+      g.fillStyle = '#9aa6b6'; g.fill(forma([soma(s.ombroF, -2, -10), soma(s.ombroF, 3, -9), soma(s.ombroF, 8, 26), soma(s.ombroF, 3, 28)], false));   // lapela
+      g.fillStyle = '#6F97D8'; g.fillRect(s.ombroF[0] - 6, s.ombroF[1] + 12, 8, 10);   // crachá da Vítrea
+    } }),
     // Eco: cópia hostil do Faro, a sombra do jogador (lavanda escura, semitransparente)
     eco: { altura: 76, tinta: ['#3a3360', 0.78], alfa: 0.74, recorte: '#AFA3F5',
       desenhar(g, s, pose) { TIPOS.faro.desenhar(g, s, pose); },
@@ -936,6 +971,21 @@
       og.drawImage(fant, dx + Math.sign(dx) * Math.max(2, 3 * S), y);
       og.drawImage(faixa, dx, y);
     }
+  }
+
+  // gente comum parada, de mãos à frente: base dos vendedores
+  function vendedor(o) {
+    return { altura: 72, desenhar(g, s) {
+      const maoF = soma(s.ombroF, 18, 30), maoB = soma(s.ombroB, 22, 32), br = o.braco || 7;
+      membro(g, s.qB, s.jB, s.tB, 9.5, 7.5, 6, o.calca); bota(g, s.tB, '#15130f', '#080706');
+      membro(g, s.ombroB, ik(s.ombroB, maoB, 27, 25, 1), maoB, br, br - 1, br - 2, G.mistura(o.roupa, '#000000', 0.25)); mao(g, maoB, o.pele, 5.5);
+      membro(g, s.qF, s.jF, s.tF, 9.5, 7.5, 6, o.calca); bota(g, s.tF, '#15130f', '#080706');
+      casaco(g, s, o.roupa, o.comp, o.largura || 1);
+      dobras(g, s, 2, 0.2);
+      cabeca(g, s.cab, { pele: o.pele, cabelo: o.cabelo });
+      o.extra(g, s);
+      membro(g, s.ombroF, ik(s.ombroF, maoF, 27, 25, 1), maoF, br + 0.5, br - 0.5, br - 1.5, o.roupa); mao(g, maoF, o.pele, 5.5);
+    } };
   }
 
   function rolando(g, s, cas, pele, cachecol) {

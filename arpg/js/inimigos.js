@@ -44,7 +44,7 @@
   const rep = (id, n) => Array.from({ length: Math.max(0, Math.round(n)) }, () => id);
   const BANDOS = {
     mercado: (r, perto, nivel) => [
-      ...rep('goteira_faca', perto ? 2 + r() * 1.5 : 4 + r() * 2.5),
+      ...rep('goteira_faca', perto ? 2 + r() * 1.5 : 3 + r() * 2.5),
       ...rep('goteira_atirador', perto ? (r() < 0.4 ? 1 : 0) : r() * 2.5),
       ...(!perto && nivel >= 2 && r() < 0.3 ? ['portao'] : []),
     ],
@@ -67,7 +67,7 @@
     const B = G.BAIRROS[ch.bairro];
     const r = G.rng((G.hash(ch.cx, ch.cy, 7) + Math.floor(J.t)) >>> 0);
     const dist = Math.hypot(ch.cx, ch.cy), perto = dist < 2;
-    if (!perto && r() > 0.65) { est.volta = J.t + 45; return; }
+    if (!perto && r() > 0.5) { est.volta = J.t + 45; return; }
     const pt = G.mundo.pontoLivre(ch, 28, r);
     if (!pt || G.d2(pt.x, pt.y, p.x, p.y) < 420 * 420) { est.volta = J.t + 10; return; }
     const nivel = ch.bairro === 'mercado'
@@ -463,7 +463,7 @@
   function podar() {
     const p = J.p;
     for (const e of J.inimigos) {
-      if (e.morto || e.chefe || G.d2(e.x, e.y, p.x, p.y) < 2400 * 2400) continue;
+      if (e.morto || e.chefe || e.estado === 'caca' || G.d2(e.x, e.y, p.x, p.y) < 1700 * 1700) continue;
       e.morto = true;
       const est = J.estadoQuadra.get(e.quadra);
       if (est) { est.vivos = Math.max(0, est.vivos - 1); if (!est.vivos) est.volta = 0; }
