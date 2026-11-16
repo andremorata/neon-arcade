@@ -3704,31 +3704,52 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
   }
 }
 
-// ── ARPG (protótipo em arpg/) ─────────────────────
-// Fora de games/: são vários scripts clássicos. Base e mundo não tocam no DOM,
-// então rodam aqui pra garantir cidade determinística e colisão.
+// ── DARK NOISE (ARPG em arpg/) ────────────────────
+// Fora de games/: são vários scripts clássicos. Base, dados, regras e mundo não tocam
+// no DOM, então rodam aqui pra conferir números do dossiê, cidade e colisão.
 {
   const vm = require('vm');
   const dir = 'arpg/js';
-  const arquivos = fs.readdirSync(path.join(__dirname, dir)).filter(f => f.endsWith('.js'));
-  for (const f of arquivos) {
+  const pagina = read('arpg/index.html');
+  for (const f of fs.readdirSync(path.join(__dirname, dir)).filter(f => f.endsWith('.js'))) {
     try { new Function(read(`${dir}/${f}`)); }
     catch (e) { assert.fail(`arpg/${f}: erro de sintaxe — ${e.message}`); }
-    assert.ok(read('arpg/index.html').includes(`js/${f}`), `arpg: index.html não carrega js/${f}`);
+    assert.ok(pagina.includes(`js/${f}`), `arpg: index.html não carrega js/${f}`);
   }
-  const ctx = vm.createContext({ Math, Object, Map, Set, console });
+  const ctx = vm.createContext({ Math, Object, Map, Set, JSON, console });
   ctx.window = ctx;
-  for (const f of ['base.js', 'mundo.js']) vm.runInContext(read(`${dir}/${f}`), ctx, { filename: f });
+  for (const f of ['base.js', 'dados.js', 'regras.js', 'mundo.js']) vm.runInContext(read(`${dir}/${f}`), ctx, { filename: f });
   const G = ctx.G, M = G.mundo;
+
+  // regras tiradas do dossiê
+  assert.strictEqual(G.DADOS.jogo, 'Dark Noise', 'arpg: o jogo se chama Dark Noise');
+  assert.deepStrictEqual([1, 2, 4, 5].map(G.xpPara), [100, 283, 800, 1118], 'arpg: XP = 100 × nível^1,5');
+  assert.strictEqual(G.vidaMax(1), 110, 'arpg: Mercenário começa com 110 de Vida');
+  assert.strictEqual(G.vidaMax(4), 152, 'arpg: +14 de Vida por nível');
+  assert.strictEqual(G.danoBase(G.KIT.slots[0], 1), 42, 'arpg: Varredura no nível 1 causa 42');
+  assert.deepStrictEqual(Array.from(G.KIT.slots, h => h.nivelDesbloqueio), [1, 2, 4, 7], 'arpg: habilidades abrem nos níveis 1, 2, 4 e 7');
+  const faca3 = G.inimigoNoNivel('goteira_faca', 3);
+  assert.strictEqual(faca3.vida, Math.round(40 * 1.16 ** 2), 'arpg: Vida de inimigo cresce ×1,16 por nível');
+  assert.strictEqual(G.portaDeNivel(8, 5).danoCausado, 0.85, 'arpg: inimigo 3 níveis acima apanha 15% menos');
+  assert.strictEqual(G.portaDeNivel(1, 6).xp, 0.25, 'arpg: inimigo 5 níveis abaixo dá 25% do XP');
+  let semente = 1; const sortear = () => (semente = (semente * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 200; i++) {
+    const it = G.gerarItem(3, 1, sortear);
+    assert.ok(it.rar !== 'comum' && G.RARIDADES.some(r => r.id === it.rar), 'arpg: item mínimo incomum respeita a raridade');
+    assert.ok(Object.keys(it.afixos).every(a => G.AFIXOS.some(x => x.id === a && x.onde.includes(it.slot))), 'arpg: afixo só no espaço permitido');
+  }
+  for (const b of Object.values(G.BAIRROS)) assert.ok(b.pal && b.pal.luz && b.nome, `arpg: bairro ${b.chave} sem paleta`);
+
+  // cidade
   for (const [k, b] of Object.entries(G.BAIRROS)) {
     assert.strictEqual(M.bairroEm(b.centro[0], b.centro[1]), k, `arpg: o centro de ${k} tem que ser dele`);
   }
-  const a = JSON.stringify(M.gerar(3, -4)), b = JSON.stringify(M.gerar(3, -4));
-  assert.strictEqual(a, b, 'arpg: a mesma quadra tem que nascer igual');
+  assert.strictEqual(JSON.stringify(M.gerar(3, -4)), JSON.stringify(M.gerar(3, -4)), 'arpg: a mesma quadra tem que nascer igual');
   const abrigo = M.chunk(0, 0);
   assert.ok(abrigo.seguro && abrigo.abrigo, 'arpg: a quadra 0,0 é o abrigo');
-  assert.ok(M.livre(G.CHUNK / 2, G.CHUNK / 2 + 60, 15), 'arpg: o jogador nasce em lugar livre');
-  // quem entra num prédio é empurrado pra fora
+  assert.ok(M.livre(G.CHUNK / 2, G.CHUNK / 2 + 80, 15), 'arpg: o jogador nasce em lugar livre');
+  const z = M.lugar('zila');
+  assert.ok(M.chunk(...G.ZILA_QUADRA).zila && M.livre(z.x, z.y, 15), 'arpg: dá pra chegar no ateliê da Dona Zilá');
   let testados = 0;
   for (let cy = -3; cy <= 3; cy++) for (let cx = -3; cx <= 3; cx++) {
     for (const c of M.chunk(cx, cy).caixas) {

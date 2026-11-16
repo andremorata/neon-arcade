@@ -13,10 +13,11 @@
 
   const fora = (cx, cy) => Math.abs(cx) > LIM || Math.abs(cy) > LIM;
   const ehAbrigo = (cx, cy) => cx === 0 && cy === 0;
+  const ehZila = (cx, cy) => cx === G.ZILA_QUADRA[0] && cy === G.ZILA_QUADRA[1];
 
   // Voronoi com ruído: o bairro mais perto vence, mas a borda não é reta
   function bairroEm(cx, cy) {
-    if (Math.abs(cx) <= 1 && Math.abs(cy) <= 1) return 'mercado';
+    if (Math.abs(cx) <= 2 && Math.abs(cy) <= 2) return 'mercado';
     let melhor = CHAVES[0], md = Infinity;
     for (let i = 0; i < CHAVES.length; i++) {
       const b = G.BAIRROS[CHAVES[i]];
@@ -27,63 +28,62 @@
     return melhor;
   }
 
-  function caixa(tipo, x, y, w, d, h, extra) {
-    return Object.assign({ tipo, x, y, w, d, h }, extra);
-  }
+  const caixa = (tipo, x, y, w, d, h, extra) => Object.assign({ tipo, x, y, w, d, h }, extra);
 
   function predio(r, B, x, y, w, d) {
     const h = Math.round(G.lerp(B.alt[0], B.alt[1], r() * r()));
     const fh = h * G.K;
-    const janelas = [];
-    const cols = Math.floor((w - 8) / 20), rows = Math.floor((fh - 10) / 22);
-    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-      if (r() < 0.32 && janelas.length < 70) janelas.push([6 + i * 20, 8 + j * 22, G.pick(r, B.janela)]);
-    }
+    const pal = B.pal;
     const b = caixa('predio', x, y, w, d, h, {
-      frente: G.pick(r, B.frente), teto: G.pick(r, B.teto), janelas, topo: [],
+      frente: G.mistura(pal.fachada, r() < 0.5 ? '#000000' : '#ffffff', r() * 0.06),
+      teto: pal.teto, janelas: [], topo: [], manchas: [],
+      lojas: w > 150 ? 2 : 1, luzLoja: [], toldo: r() < 0.5 ? G.mistura(pal.fachada, pal.acento, 0.35) : null,
     });
-    const nTopo = 1 + ((r() * 3) | 0);
-    for (let i = 0; i < nTopo; i++) {
-      const tw = 14 + r() * 22, td = 10 + r() * 16;
+    // andares acima do térreo; o térreo (56 de altura de tela) é loja
+    const cols = Math.floor((w - 20) / 31), rows = Math.floor((fh - 66) / 36);
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      b.janelas.push([12 + i * 31, 10 + j * 36, r() < 0.28 ? (r() < 0.8 ? pal.luz : pal.apoio) : null, r() < 0.25]);
+    }
+    for (let i = 0; i < b.lojas; i++) b.luzLoja.push(r() < 0.75 ? (r() < 0.7 ? pal.luz : pal.apoio) : null);
+    for (let i = 0; i < 8; i++) b.manchas.push([r() * w, r() * Math.max(1, fh - 60), 2 + r() * 3, 15 + r() * 50]);
+    for (let i = 0, n = 1 + ((r() * 3) | 0); i < n; i++) {
+      const tw = 18 + r() * 22, td = 14 + r() * 16;
       b.topo.push([r() * (w - tw), r() * (d - td), tw, td]);
     }
-    if (r() < 0.65 && fh > 30) {
-      const vertical = r() < 0.5;
-      const pw = vertical ? 12 : Math.min(w - 16, 40 + r() * 50), ph = vertical ? Math.min(fh - 12, 34 + r() * 40) : 14;
-      b.placa = { x: 8 + r() * (w - pw - 16), y: 6 + r() * Math.max(1, fh - ph - 12), w: pw, h: ph,
-        cor: G.pick(r, B.neon), pisca: r() < 0.18, fase: r() * 10 };
+    if (r() < 0.45 && fh > 40) {
+      const vertical = r() < 0.3;
+      b.placa = { txt: G.pick(r, B.placas), vertical, x: 0.15 + r() * 0.7, aceso: r() < 0.3,
+        cor: G.pick(r, [pal.acento, pal.apoio, '#EDF4F0']) };
     }
     return b;
   }
 
   // objetos sólidos baixos que dão a cara de cada bairro
   function prop(r, B, tipo, x, y, cx0, cy0, cw, cd) {
+    const pal = B.pal;
+    const enquadra = (w, d) => [G.clamp(x, cx0, cx0 + cw - w), G.clamp(y, cy0, cy0 + cd - d)];
     switch (tipo) {
       case 'barraca': {
-        const w = 44 + r() * 30, d = 30 + r() * 14;
-        return caixa('barraca', G.clamp(x, cx0, cx0 + cw - w), G.clamp(y, cy0, cy0 + cd - d), w, d, 34,
-          { cor: G.pick(r, B.neon), frente: '#241c30', teto: '#2c2238' });
+        const w = 60 + r() * 40, d = 34 + r() * 14, [px, py] = enquadra(w, d);
+        return caixa('barraca', px, py, w, d, 40, { lona: G.pick(r, ['#4a3e48', '#3d4a50', '#52473a', '#3e4a3c']),
+          fruta: G.pick(r, ['#c4824e', '#9db36a', '#d9b25a', '#b25a4e']), lampiao: r() < 0.6 });
       }
       case 'container': {
-        const deitado = r() < 0.6, w = deitado ? 110 : 44, d = deitado ? 44 : 110;
-        const cores = ['#7a3a1e', '#1e4a7a', '#7a6a1e', '#2a5a3a', '#5a2a4a'];
-        return caixa('container', G.clamp(x, cx0, cx0 + cw - w), G.clamp(y, cy0, cy0 + cd - d), w, d, 46 + ((r() * 2) | 0) * 46,
-          { cor: G.pick(r, cores) });
+        const deitado = r() < 0.6, w = deitado ? 120 : 48, d = deitado ? 48 : 120, [px, py] = enquadra(w, d);
+        return caixa('container', px, py, w, d, 50 + ((r() * 2) | 0) * 50,
+          { cor: G.pick(r, ['#6a3a28', '#2e4a62', '#6a5f30', '#34503c', '#4e3446']) });
       }
       case 'sucata': {
-        const w = 40 + r() * 50, d = 30 + r() * 40;
-        return caixa('sucata', G.clamp(x, cx0, cx0 + cw - w), G.clamp(y, cy0, cy0 + cd - d), w, d, 20 + r() * 30,
-          { cor: G.pick(r, ['#3a3a30', '#4a3a28', '#2f3a2c']), semente: (r() * 1e9) | 0 });
+        const w = 44 + r() * 50, d = 34 + r() * 40, [px, py] = enquadra(w, d);
+        return caixa('sucata', px, py, w, d, 22 + r() * 30, { cor: G.pick(r, ['#3a3a30', '#4a3a28', '#2f3a2c']), semente: (r() * 1e9) | 0 });
       }
       case 'cano': {
-        const w = 30, d = 30;
-        return caixa('cano', G.clamp(x, cx0, cx0 + cw - w), G.clamp(y, cy0, cy0 + cd - d), w, d, 60,
-          { cor: G.pick(r, B.neon) });
+        const [px, py] = enquadra(34, 34);
+        return caixa('cano', px, py, 34, 34, 64, { cor: pal.apoio });
       }
-      default: { // pilar
-        const w = 26, d = 26;
-        return caixa('pilar', G.clamp(x, cx0, cx0 + cw - w), G.clamp(y, cy0, cy0 + cd - d), w, d, 90,
-          { cor: G.pick(r, B.neon) });
+      default: {
+        const [px, py] = enquadra(30, 30);
+        return caixa('pilar', px, py, 30, 30, 96, { cor: pal.acento });
       }
     }
   }
@@ -99,41 +99,45 @@
 
   function gerar(cx, cy) {
     const x = cx * C, y = cy * C;
-    const ch = { cx, cy, x, y, chave: chave(cx, cy), caixas: [], luzes: [], pocas: [], marcas: [] };
+    const ch = { cx, cy, x, y, chave: chave(cx, cy), caixas: [], postes: [], pocas: [], marcas: [] };
     if (fora(cx, cy)) { ch.fora = true; return ch; }
     const r = G.rng(G.hash(cx, cy, G.SEMENTE));
     const bk = ch.bairro = bairroEm(cx, cy), B = G.BAIRROS[bk];
 
-    // postes na esquina e às vezes no meio das calçadas
-    const poste = (px, py) => ch.luzes.push({ x: px, y: py, raio: 150, cor: B.neon[1] || B.neon[0], poste: true });
-    poste(x + MEIA + 8, y + MEIA + 8);
-    if (r() < 0.6) poste(x + C / 2, y + MEIA + 8);
-    if (r() < 0.6) poste(x + MEIA + 8, y + C / 2);
+    // postes na calçada: a luz principal de cada rua
+    ch.postes.push({ x: x + MEIA + 10, y: y + MEIA + 14 });
+    if (r() < 0.7) ch.postes.push({ x: x + C / 2 + 20, y: y + MEIA + 14 });
+    if (r() < 0.5) ch.postes.push({ x: x + MEIA + 10, y: y + C / 2 });
 
     for (let i = 0, n = 2 + ((r() * 4) | 0); i < n; i++) {
-      // poças na rua: ou na faixa de cima ou na da esquerda
       const emCima = r() < 0.5;
       ch.pocas.push({
-        x: emCima ? x + r() * C : x - MEIA + 10 + r() * (RUA - 20),
-        y: emCima ? y - MEIA + 10 + r() * (RUA - 20) : y + r() * C,
-        rx: 18 + r() * 34, ry: 6 + r() * 10, cor: G.pick(r, B.neon),
+        x: emCima ? x + r() * C : x - MEIA + 12 + r() * (RUA - 24),
+        y: emCima ? y - MEIA + 12 + r() * (RUA - 24) : y + r() * C,
+        rx: 22 + r() * 40, ry: 6 + r() * 10,
       });
     }
-    for (let i = 0; i < 6; i++) ch.marcas.push([x + MIOLO0 + r() * MIOLO, y + MIOLO0 + r() * MIOLO, 10 + r() * 40, r()]);
+    for (let i = 0; i < 10; i++) ch.marcas.push([x + r() * C, y + r() * C, 2 + r() * 40, r()]);
 
     const mx = x + MIOLO0, my = y + MIOLO0;
     if (ehAbrigo(cx, cy)) {
       ch.seguro = true;
       ch.abrigo = { x: x + C / 2, y: y + C / 2 };
-      // praça: quatro pilares baixos em volta do letreiro do abrigo
-      for (const [ox, oy] of [[-150, -150], [124, -150], [-150, 124], [124, 124]]) {
-        ch.caixas.push(caixa('pilar', x + C / 2 + ox, y + C / 2 + oy, 26, 26, 50, { cor: '#00f0ff' }));
+      for (const [ox, oy] of [[-160, -160], [130, -160], [-160, 130], [130, 130]]) {
+        ch.caixas.push(caixa('barraca', x + C / 2 + ox, y + C / 2 + oy, 64, 40, 40,
+          { lona: G.pick(r, ['#4a3e48', '#3d4a50', '#52473a']), fruta: G.pick(r, ['#c4824e', '#9db36a', '#d9b25a']), lampiao: true }));
       }
-      ch.luzes.push({ x: x + C / 2, y: y + C / 2, raio: 260, cor: '#00f0ff' });
+      return ch;
+    }
+    if (ehZila(cx, cy)) {
+      // fundos da feira: pátio aberto com o ateliê de costura no meio
+      ch.zila = { x: x + C / 2, y: y + C / 2 + 40 };
+      ch.caixas.push(caixa('barraca', x + C / 2 - 50, y + C / 2 - 30, 100, 44, 46,
+        { lona: '#5a4652', fruta: '#d9b25a', lampiao: true, zila: true }));
+      for (const ox of [-220, 160]) ch.caixas.push(predio(r, B, x + C / 2 + ox, my, 90, 160));
       return ch;
     }
 
-    // miolo dividido em lotes separados por becos
     const nx = 1 + ((r() * 3) | 0), ny = 1 + ((r() * 3) | 0);
     const lw = (MIOLO - BECO * (nx - 1)) / nx, ld = (MIOLO - BECO * (ny - 1)) / ny;
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
@@ -143,16 +147,11 @@
         ch.caixas.push(predio(r, B, lx + m, ly + m, lw - 2 * m, ld - 2 * m));
       } else {
         // lote aberto: arena natural pra luta, com objetos do bairro espalhados
-        const n = 1 + ((r() * 4) | 0);
-        for (let k = 0; k < n; k++) {
-          encaixar(ch, prop(r, B, B.prop, lx + r() * lw, ly + r() * ld, lx, ly, lw, ld));
-        }
-        if (r() < 0.5) ch.luzes.push({ x: lx + lw / 2, y: ly + ld / 2, raio: 120, cor: G.pick(r, B.neon) });
+        for (let k = 0, n = 1 + ((r() * 4) | 0); k < n; k++) encaixar(ch, prop(r, B, B.prop, lx + r() * lw, ly + r() * ld, lx, ly, lw, ld));
       }
     }
-    // barracas na calçada do Mercado
     if (B.prop === 'barraca' && r() < 0.7) {
-      encaixar(ch, prop(r, B, 'barraca', x + MEIA + 6 + r() * (C - RUA - 80), y + MEIA + 2, x + MEIA, y + MEIA, C - RUA, 40));
+      encaixar(ch, prop(r, B, 'barraca', x + MEIA + 6 + r() * (C - RUA - 100), y + MEIA + 2, x + MEIA, y + MEIA, C - RUA, 44));
     }
     return ch;
   }
@@ -194,7 +193,6 @@
           const d = Math.sqrt(dd), k = (e.r - d) / d;
           e.x += dx * k; e.y += dy * k;
         } else {
-          // centro dentro da caixa: sai pelo lado mais perto
           const l = e.x - b.x, rr = b.x + b.w - e.x, t = e.y - b.y, bb = b.y + b.d - e.y;
           const m = Math.min(l, rr, t, bb);
           if (m === l) e.x = b.x - e.r; else if (m === rr) e.x = b.x + b.w + e.r;
@@ -202,9 +200,10 @@
         }
       }
     }
+    const ox = e.x, oy = e.y;
     e.x = G.clamp(e.x, MIN + e.r, MAX - e.r);
     e.y = G.clamp(e.y, MIN + e.r, MAX - e.r);
-    return bateu;
+    return bateu || ox !== e.x || oy !== e.y;
   }
 
   function bloqueado(x, y) {
@@ -240,9 +239,14 @@
     return null;
   }
 
+  // lugares que os biscates apontam
+  const lugar = nome => nome === 'zila'
+    ? { x: (G.ZILA_QUADRA[0] + 0.5) * C, y: (G.ZILA_QUADRA[1] + 0.5) * C + 40 }
+    : { x: C / 2, y: C / 2 };
+
   G.mundo = {
     RUA, MEIA, CALC, MIOLO0, MIOLO, MIN, MAX,
-    gerar, chunk, podar, bairroEm, bairroNoPonto, quadraDe, colidir, bloqueado, livre, visao, pontoLivre, fora,
+    gerar, chunk, podar, bairroEm, bairroNoPonto, quadraDe, colidir, bloqueado, livre, visao, pontoLivre, fora, lugar,
     limpar: () => cache.clear(),
   };
 })();

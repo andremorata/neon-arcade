@@ -3,11 +3,11 @@
 (() => {
   const G = window.G, J = G.jogo;
   const $ = id => document.getElementById(id);
-  const SAVE = 'arpg-save';
+  const SAVE = 'darknoise-save';   // v2; o save do protótipo neon (arpg-save) não serve mais
   let estado = 'menu';          // menu | jogando | pausa | morto
   let relogioSave = 0;
 
-  const ler = () => { try { return JSON.parse(localStorage.getItem(SAVE)); } catch { return null; } };
+  const ler = () => { try { const s = JSON.parse(localStorage.getItem(SAVE)); return s && s.v === 2 ? s : null; } catch { return null; } };
   const salvar = () => {
     if (!J.p || J.p.morto) return;
     try { localStorage.setItem(SAVE, JSON.stringify(G.salvavel())); } catch {}
@@ -50,6 +50,7 @@
       G.iniciarJogo(s || {});
       G.render.centrar();
       G.hud.reiniciar();
+      G.hud.retrato();
     }
     G.input.soltarTudo();
     estado = 'jogando';
@@ -62,6 +63,7 @@
     estado = 'pausa';
     G.input.soltarTudo();
     $('pausaMotivo').textContent = motivo || '';
+    G.hud.equipado();
     mostrar('telaPausa');
     salvar();
   }
@@ -77,7 +79,7 @@
     $('btnContinuar').hidden = !s;
     $('btnNovo').textContent = s ? 'Novo jogo' : 'Jogar';
     $('btnNovo').classList.toggle('principal', !s);
-    if (s) $('saveInfo').textContent = `Nível ${s.nivel} · ¢ ${(s.creditos || 0).toLocaleString('pt-BR')}`;
+    if (s) $('saveInfo').textContent = `Nível ${s.nivel} · ł ${(s.lascas || 0).toLocaleString('pt-BR')}`;
     $('dicaIos').hidden = podeTelaCheia || instalado();
   }
   $('btnContinuar').addEventListener('click', () => jogar(false));
@@ -92,7 +94,7 @@
   $('btnSom').classList.toggle('off', !G.som.ligado);
   $('btnReerguer').addEventListener('click', () => {
     const perda = G.reerguer();
-    if (perda) G.hud.aviso(`Perdeu ¢${perda} no caminho de volta`, '#ff7ab8');
+    if (perda) G.hud.aviso(`Perdeu ${perda} lascas no caminho de volta`, G.COR.coral);
     jogar(false);
   });
 
@@ -131,7 +133,6 @@
   mostrar('telaInicio');
   requestAnimationFrame(quadro);
 
-  // atalho pra testar no navegador: ?nivel=12&x=..&y=..
-  const q = new URLSearchParams(location.search);
-  if (q.has('debug')) window.J = J;
+  // ?debug expõe o estado no console (J) pra testar no navegador
+  if (new URLSearchParams(location.search).has('debug')) window.J = J;
 })();

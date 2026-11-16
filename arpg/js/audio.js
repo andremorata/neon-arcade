@@ -71,5 +71,10 @@
     },
     nivel()     { [523, 659, 784, 1047].forEach((f, i) => tom(f, f, 0.22, 'triangle', 0.12, i * 0.09)); },
     morte()     { tom(300, 40, 1.2, 'sawtooth', 0.18); chiado(1, 0.2, 500); },
+    injetor()   { chiado(0.25, 0.12, 3000, 0, 'highpass'); tom(400, 900, 0.4, 'sine', 0.08, 0.05); },
+    falha()     { tom(160, 120, 0.08, 'square', 0.05); },
+    escudo()    { tom(200, 400, 0.3, 'triangle', 0.12); chiado(0.2, 0.1, 800); },
+    metal()     { tom(900, 600, 0.12, 'triangle', 0.08); chiado(0.08, 0.12, 5000, 0, 'highpass'); },
+    faca()      { chiado(0.09, 0.16, 6000, 0, 'highpass'); },
   };
 })();

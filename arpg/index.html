@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#05040a">
+<meta name="theme-color" content="#080D1C">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,43 +19,54 @@
 <div id="hud" hidden>
   <div id="joy"><div id="joyBase"><div id="joyPino"></div></div></div>
 
-  <div id="status">
-    <div id="retrato"><span id="nivel">1</span></div>
+  <!-- 1 retrato, Vida, Carga e Ruído -->
+  <div id="status" class="vidro">
+    <div id="retrato"><canvas id="rosto" width="96" height="96"></canvas><span id="nivel">1</span></div>
     <div class="barras">
-      <div class="barra vida"><i id="vidaFill"></i><b id="vidaTxt"></b></div>
-      <div class="barra energia"><i id="energiaFill"></i></div>
-      <div id="creditos">¢ 0</div>
+      <div class="rot"><span>VIDA</span><b id="vidaTxt"></b></div>
+      <div class="barra vida"><i id="vidaFill"></i><i id="escudoFill" class="escudo"></i></div>
+      <div class="rot"><span>CARGA</span><b id="cargaTxt"></b></div>
+      <div class="barra carga"><i id="cargaFill"></i></div>
+      <div class="rot"><span>RUÍDO · <em id="ruidoNome">LIMPO</em></span><b id="lascas">ł 0</b></div>
+      <div class="ruido"><i></i><i></i><i></i><i></i></div>
     </div>
   </div>
 
+  <div id="alvo" class="vidro" hidden><span id="alvoNome"></span><div class="barra"><i id="alvoFill"></i></div><small id="alvoDica"></small></div>
   <div id="bairro"><b id="bairroNome"></b><span id="bairroNivel"></span></div>
-  <div id="alvo" hidden><span id="alvoNome"></span><div class="barra"><i id="alvoFill"></i></div></div>
 
+  <!-- 2 minimapa · 3 biscate -->
   <div id="canto">
-    <canvas id="mini" width="200" height="200"></canvas>
-    <div class="botoes">
+    <div class="topo">
       <button id="btnSom" class="redondo" aria-label="Som">♪</button>
-      <button id="btnPausa" class="redondo" aria-label="Pausar">❚❚</button>
+      <button id="btnPausa" class="redondo" aria-label="Pausar">☰</button>
+      <canvas id="mini" width="220" height="220"></canvas>
     </div>
+    <div id="biscate" class="vidro"><small id="biscateTitulo"></small><p id="biscateTexto"></p><span id="biscateExtra"></span></div>
   </div>
 
   <div id="toasts"></div>
 
-  <div id="habs">
-    <button class="hab ataque" data-hab="0"><span class="icone"></span><span class="tecla"></span></button>
-    <button class="hab" data-hab="1"><span class="icone"></span><span class="tecla"></span></button>
-    <button class="hab" data-hab="2"><span class="icone"></span><span class="tecla"></span></button>
-    <button class="hab" data-hab="3"><span class="icone"></span><span class="tecla"></span></button>
+  <!-- 5 ataque · 6 habilidades · 7 esquiva · 8 injetor -->
+  <div id="acoes">
+    <button class="btn ataque" data-acao="ataque" aria-label="Ataque"></button>
+    <button class="btn hab" data-acao="0"></button>
+    <button class="btn hab" data-acao="1"></button>
+    <button class="btn hab" data-acao="2"></button>
+    <button class="btn hab" data-acao="3"></button>
+    <button class="btn esquiva" data-acao="esquiva" aria-label="Esquiva"></button>
+    <button class="btn injetor" data-acao="injetor" aria-label="Injetor"></button>
   </div>
 
+  <!-- 9 experiência -->
   <div id="xp"><i id="xpFill"></i></div>
 </div>
 
 <section id="telaInicio" class="painel">
   <div class="caixa">
-    <p class="sobre">protótipo · fatia vertical</p>
+    <p class="sobre">protótipo · Mercado Baixo</p>
     <h1>DARK <span>NOISE</span></h1>
-    <p class="lema">A chuva não para no Mercado Baixo.</p>
+    <p class="lema">Em Porto Vésper chove há onze anos.</p>
     <div class="acoes">
       <button id="btnContinuar" class="principal" hidden>Continuar</button>
       <button id="btnNovo" class="principal">Jogar</button>
@@ -63,8 +74,8 @@
     <p id="saveInfo" class="info"></p>
     <p id="dicaIos" class="dica" hidden>No iPhone, toque em <b>Compartilhar → Adicionar à Tela de Início</b> e abra por lá para jogar em tela cheia.</p>
     <div class="controles">
-      <p class="so-teclado"><b>WASD</b> anda · <b>Espaço</b> ou clique atira · <b>Q E R</b> ou <b>1 2 3</b> habilidades · <b>Esc</b> pausa</p>
-      <p class="so-toque">Joystick à esquerda · botões à direita · mira automática</p>
+      <p class="so-teclado"><b>WASD</b> anda · <b>Espaço</b> ou clique atira · <b>1 2 3 4</b> habilidades · <b>Q</b> rola · <b>E</b> injetor · <b>Esc</b> pausa</p>
+      <p class="so-toque">Polegar esquerdo anda · direito ataca · a mira é automática</p>
     </div>
   </div>
 </section>
@@ -73,6 +84,7 @@
   <div class="caixa">
     <h2>PAUSADO</h2>
     <p id="pausaMotivo" class="info"></p>
+    <div id="equipado" class="vidro"></div>
     <div class="acoes">
       <button id="btnVoltar" class="principal">Voltar ao jogo</button>
       <button id="btnMenu">Menu</button>
@@ -82,7 +94,7 @@
 
 <section id="telaMorte" class="painel" hidden>
   <div class="caixa">
-    <h2 class="vermelho">VOCÊ CAIU</h2>
+    <h2 class="coral">VOCÊ CAIU</h2>
     <p class="info">Alguém te arrastou de volta ao Abrigo.</p>
     <div class="acoes"><button id="btnReerguer" class="principal">Levantar</button></div>
   </div>
@@ -91,9 +103,12 @@
 <div id="girar"><div><span>⟳</span><p>Gire o aparelho para jogar</p></div></div>
 
 <script src="js/base.js"></script>
+<script src="js/dados.js"></script>
+<script src="js/regras.js"></script>
 <script src="js/mundo.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/input.js"></script>
+<script src="js/figuras.js"></script>
 <script src="js/entidades.js"></script>
 <script src="js/render.js"></script>
 <script src="js/hud.js"></script>
