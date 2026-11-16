@@ -19,6 +19,9 @@ There is no linter, formatter, or type checker. Do not add one unless asked.
   `games/`. Never hardcode how many games exist — derive it from `GAMES`.
 - `games/neon-*.html` — one self-contained game per file: markup, page-specific `<style>`,
   and the game loop in a trailing `<script>`. Games do not import each other.
+- `arpg/` — Dark Noise, o ARPG: vários scripts clássicos em vez de um arquivo só (ver
+  `arpg/README.md`). Entra no menu por uma entrada no `GAMES` com `href: 'arpg/index.html'`;
+  `test-games.js` testa os módulos sem DOM dele num bloco próprio.
 - `assets/js/neon-core.js` — `window.Neon`, shared by every page. Changing it touches every
   game at once.
 - `assets/css/neon-theme.css` — shared theme, `.stage`, overlay, HUD, toast, animations.

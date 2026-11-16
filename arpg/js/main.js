@@ -10,8 +10,15 @@
   const ler = () => { try { const s = JSON.parse(localStorage.getItem(SAVE)); return s && s.v === 2 ? s : null; } catch { return null; } };
   const salvar = () => {
     if (!J.p || J.p.morto) return;
-    try { localStorage.setItem(SAVE, JSON.stringify(G.salvavel())); } catch {}
+    try {
+      localStorage.setItem(SAVE, JSON.stringify(G.salvavel()));
+      // o menu do arcade mostra o maior nível como recorde
+      if (J.p.nivel > (+localStorage.getItem('neon-best-darknoise') || 0)) localStorage.setItem('neon-best-darknoise', J.p.nivel);
+    } catch {}
   };
+  // e ordena os jogos pelo último aberto
+  const lembrarVisita = () => { try { localStorage.setItem('neon-last-played-darknoise', Date.now()); } catch {} };
+  addEventListener('pageshow', lembrarVisita);
 
   // ── tela cheia ──────────────────────────────────────
   const raiz = document.documentElement;

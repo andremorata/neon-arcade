@@ -36,6 +36,7 @@
   const Neon = window.Neon;
 
   const GAMES = [
+    { key: 'darknoise', emoji: '🌧️', name: 'DARK NOISE', desc: 'ARPG de ação na chuva de Porto Vésper: cidade aberta, Mercenário, loot e biscates no Mercado Baixo. Protótipo.', href: 'arpg/index.html', color: '#e9b77c' },
     { key: 'piao', emoji: '🌀', name: 'NEON SPINNERS', desc: 'Batalha de piões em 4 estádios: tire o rival do prato, estoure a trava dele ou gire mais. 12 adversários, piões novos e melhorias.', href: 'games/neon-piao.html', color: '#7fd8ff' },
     { key: 'monster', emoji: '🛻', name: 'NEON MONSTER', desc: 'Monster trucks em 12 pistas: esmague carros e ônibus, voe sobre a lava e cuide da lataria. Quatro caminhões e melhorias na garagem.', href: 'games/neon-monster.html', color: '#f2b33d' },
     { key: 'garrafas', emoji: '🧪', name: 'NEON GARRAFAS', desc: 'Separe as cores despejando de garrafa em garrafa. Níveis sem fim, dicas, desfazer e garrafas-mistério.', href: 'games/neon-garrafas.html', color: '#ff4d8d' },
@@ -78,7 +79,7 @@
     if (key === 'salto' || key === 'planador') return val ? `🏆 ${val} m` : '';
     if (key === 'nucleo') return val ? `🏆 ${val} pessoas` : '';
     if (key === 'torres') return val ? `🏆 onda ${val}` : '';
-    if (key === 'garrafas') return val ? `🏆 nível ${val}` : '';
+    if (key === 'garrafas' || key === 'darknoise') return val ? `🏆 nível ${val}` : '';
     return val ? `🏆 ${val}` : '';
   };
 
