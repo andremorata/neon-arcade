@@ -28,16 +28,20 @@
       <div class="rot"><span>CARGA</span><b id="cargaTxt"></b></div>
       <div class="barra carga"><i id="cargaFill"></i></div>
       <div class="rot"><span>RUÍDO · <em id="ruidoNome">LIMPO</em></span><b id="lascas">ł 0</b></div>
-      <div class="ruido"><i></i><i></i><i></i><i></i></div>
+      <div class="ruido"><i><b></b></i><i><b></b></i><i><b></b></i><i><b></b></i></div>
+      <div id="extras"></div>
     </div>
   </div>
 
+  <div id="chefe" class="vidro" hidden><b id="chefeNome"></b><div class="barra"><i id="chefeFill"></i></div><small id="chefeFase"></small></div>
+  <div id="interagir" class="vidro" hidden></div>
   <div id="alvo" class="vidro" hidden><span id="alvoNome"></span><div class="barra"><i id="alvoFill"></i></div><small id="alvoDica"></small></div>
   <div id="bairro"><b id="bairroNome"></b><span id="bairroNivel"></span></div>
 
   <!-- 2 minimapa · 3 biscate -->
   <div id="canto">
     <div class="topo">
+      <button id="btnPersonagem" class="redondo" aria-label="Personagem (I)">⚙<i id="pontosBadge" hidden></i></button>
       <button id="btnSom" class="redondo" aria-label="Som">♪</button>
       <button id="btnPausa" class="redondo" aria-label="Pausar">☰</button>
       <canvas id="mini" width="220" height="220"></canvas>
@@ -74,7 +78,7 @@
     <p id="saveInfo" class="info"></p>
     <p id="dicaIos" class="dica" hidden>No iPhone, toque em <b>Compartilhar → Adicionar à Tela de Início</b> e abra por lá para jogar em tela cheia.</p>
     <div class="controles">
-      <p class="so-teclado"><b>WASD</b> anda · <b>Espaço</b> ou clique atira · <b>1 2 3 4</b> habilidades · <b>Q</b> rola · <b>E</b> injetor · <b>Esc</b> pausa</p>
+      <p class="so-teclado"><b>WASD</b> anda · <b>Espaço</b> ou clique atira · <b>1 2 3 4</b> habilidades · <b>Q</b> rola · <b>E</b> injetor ou falar · <b>I</b> personagem · <b>Esc</b> pausa</p>
       <p class="so-toque">Polegar esquerdo anda · direito ataca · a mira é automática</p>
     </div>
   </div>
@@ -92,6 +96,13 @@
   </div>
 </section>
 
+<section id="janela" class="painel" hidden>
+  <div class="moldura vidro">
+    <header><nav id="abas"></nav><span id="saldo"></span><button id="fechar" class="redondo" aria-label="Fechar">✕</button></header>
+    <div id="conteudo"></div>
+  </div>
+</section>
+
 <section id="telaMorte" class="painel" hidden>
   <div class="caixa">
     <h2 class="coral">VOCÊ CAIU</h2>
@@ -105,13 +116,16 @@
 <script src="js/base.js"></script>
 <script src="js/dados.js"></script>
 <script src="js/regras.js"></script>
+<script src="js/sistemas.js"></script>
 <script src="js/mundo.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/input.js"></script>
 <script src="js/figuras.js"></script>
 <script src="js/entidades.js"></script>
+<script src="js/inimigos.js"></script>
 <script src="js/render.js"></script>
 <script src="js/hud.js"></script>
+<script src="js/paineis.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

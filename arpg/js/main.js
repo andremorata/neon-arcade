@@ -4,7 +4,7 @@
   const G = window.G, J = G.jogo;
   const $ = id => document.getElementById(id);
   const SAVE = 'darknoise-save';   // v2; o save do protótipo neon (arpg-save) não serve mais
-  let estado = 'menu';          // menu | jogando | pausa | morto
+  let estado = 'menu';          // menu | jogando | pausa | morto | janela
   let relogioSave = 0;
 
   const ler = () => { try { const s = JSON.parse(localStorage.getItem(SAVE)); return s && s.v === 2 ? s : null; } catch { return null; } };
@@ -75,6 +75,17 @@
     salvar();
   }
 
+  // janelas (personagem, lojas) pausam o jogo enquanto estão abertas
+  function abrirJanela(modo, opcao) {
+    if (estado !== 'jogando') return;
+    estado = 'janela';
+    G.input.soltarTudo();
+    G.paineis.abrir(modo, opcao);
+  }
+  G.abrirPainel = aba => abrirJanela('personagem', aba);
+  G.abrirLoja = id => abrirJanela('loja', id);
+  G.paineis.ligar(() => { if (estado === 'janela') { estado = 'jogando'; G.input.soltarTudo(); salvar(); } });
+
   G.aoMorrer = () => {
     estado = 'morto';
     setTimeout(() => { if (estado === 'morto') mostrar('telaMorte'); }, 900);
@@ -106,7 +117,7 @@
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { pausar(); salvar(); G.som.suspender(true); }
+    if (document.hidden) { if (estado === 'janela') G.paineis.fechar(); pausar(); salvar(); G.som.suspender(true); }
   });
   addEventListener('pagehide', salvar);
   // bloqueia zoom por gesto e menu de toque longo no celular

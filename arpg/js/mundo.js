@@ -14,6 +14,9 @@
   const fora = (cx, cy) => Math.abs(cx) > LIM || Math.abs(cy) > LIM;
   const ehAbrigo = (cx, cy) => cx === 0 && cy === 0;
   const ehZila = (cx, cy) => cx === G.ZILA_QUADRA[0] && cy === G.ZILA_QUADRA[1];
+  const ehArena = (cx, cy) => cx === G.ARENA_QUADRA[0] && cy === G.ARENA_QUADRA[1];
+  // vendedores fora do Mercado: cada um num pátio no centro do seu bairro
+  const npcDaQuadra = (cx, cy) => Object.values(G.NPCS).find(n => !['nicanor', 'zila'].includes(n.id) && n.quadra[0] === cx && n.quadra[1] === cy);
 
   // Voronoi com ruído: o bairro mais perto vence, mas a borda não é reta
   function bairroEm(cx, cy) {
@@ -127,14 +130,34 @@
         ch.caixas.push(caixa('barraca', x + C / 2 + ox, y + C / 2 + oy, 64, 40, 40,
           { lona: G.pick(r, ['#4a3e48', '#3d4a50', '#52473a']), fruta: G.pick(r, ['#c4824e', '#9db36a', '#d9b25a']), lampiao: true }));
       }
+      // Seu Nicanor atende na barraca do canto do abrigo
+      ch.npcs = [{ id: 'nicanor', x: x + C / 2 + 162, y: y + C / 2 - 100 }];
       return ch;
     }
     if (ehZila(cx, cy)) {
       // fundos da feira: pátio aberto com o ateliê de costura no meio
       ch.zila = { x: x + C / 2, y: y + C / 2 + 40 };
+      ch.seguro = true;
+      ch.npcs = [{ id: 'zila', x: ch.zila.x, y: ch.zila.y - 10 }];
       ch.caixas.push(caixa('barraca', x + C / 2 - 50, y + C / 2 - 30, 100, 44, 46,
         { lona: '#5a4652', fruta: '#d9b25a', lampiao: true, zila: true }));
       for (const ox of [-220, 160]) ch.caixas.push(predio(r, B, x + C / 2 + ox, my, 90, 160));
+      return ch;
+    }
+
+    const npc = npcDaQuadra(cx, cy);
+    if (npc) {
+      // pátio do vendedor: prédio no fundo, balcão e gente segura em volta
+      ch.seguro = true;
+      ch.npcs = [{ id: npc.id, x: x + C / 2, y: y + C / 2 + 30 }];
+      ch.caixas.push(predio(r, B, x + C / 2 - 130, my, 260, 130));
+      ch.caixas.push(caixa('barraca', x + C / 2 - 50, y + C / 2 - 40, 100, 40, 44, { lona: G.mistura(B.pal.fachada, B.pal.acento, 0.4), fruta: B.pal.acento, lampiao: true }));
+      return ch;
+    }
+    if (ehArena(cx, cy)) {
+      // Pátio das Calhas: miolo aberto, quatro canos nos cantos
+      ch.arena = { x: mx, y: my, w: MIOLO, h: MIOLO };
+      for (const [fx, fy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) ch.caixas.push(caixa('cano', mx + fx * (MIOLO - 34), my + fy * (MIOLO - 34), 34, 34, 120, { cor: '#9BE7CE' }));
       return ch;
     }
 
@@ -240,9 +263,12 @@
   }
 
   // lugares que os biscates apontam
-  const lugar = nome => nome === 'zila'
-    ? { x: (G.ZILA_QUADRA[0] + 0.5) * C, y: (G.ZILA_QUADRA[1] + 0.5) * C + 40 }
-    : { x: C / 2, y: C / 2 };
+  function lugar(nome) {
+    if (nome === 'arena') { const a = chunk(...G.ARENA_QUADRA).arena; return { x: a.x + a.w / 2, y: a.y + a.h / 2 }; }
+    const n = G.NPCS[nome];
+    if (n) { const ch = chunk(...n.quadra), q = (ch.npcs || []).find(k => k.id === nome); if (q) return { x: q.x, y: q.y }; }
+    return { x: C / 2, y: C / 2 };
+  }
 
   G.mundo = {
     RUA, MEIA, CALC, MIOLO0, MIOLO, MIN, MAX,

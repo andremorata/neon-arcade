@@ -3718,7 +3718,7 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
   }
   const ctx = vm.createContext({ Math, Object, Map, Set, JSON, console });
   ctx.window = ctx;
-  for (const f of ['base.js', 'dados.js', 'regras.js', 'mundo.js']) vm.runInContext(read(`${dir}/${f}`), ctx, { filename: f });
+  for (const f of ['base.js', 'dados.js', 'regras.js', 'sistemas.js', 'mundo.js']) vm.runInContext(read(`${dir}/${f}`), ctx, { filename: f });
   const G = ctx.G, M = G.mundo;
 
   // regras tiradas do dossiê
@@ -3739,6 +3739,35 @@ assert.match(games.piao, /pb = Neon\.best\.update\('piao', total\)/, 'O Pião pr
     assert.ok(Object.keys(it.afixos).every(a => G.AFIXOS.some(x => x.id === a && x.onde.includes(it.slot))), 'arpg: afixo só no espaço permitido');
   }
   for (const b of Object.values(G.BAIRROS)) assert.ok(b.pal && b.pal.luz && b.nome, `arpg: bairro ${b.chave} sem paleta`);
+
+  // sistemas do personagem
+  const Si = G.sistemas, nova = (nivel = 1) => { const p = { nivel, lascas: 0, biscate: { i: 0 } }; Si.preparar(p, { nivel }); Si.calcular(p); return p; };
+  const p1 = nova(1);
+  assert.strictEqual(p1.hpMax, 110, 'arpg: personagem novo tem 110 de Vida');
+  assert.deepStrictEqual(Array.from(p1.slots), ['merc_varredura', null, null, null], 'arpg: no nível 1 só a Varredura vai pra tecla');
+  const p4 = nova(4);
+  assert.strictEqual(p4.pontos, 9, 'arpg: 3 pontos de atributo por nível');
+  Si.gastarPonto(p4, 'corpo'); Si.calcular(p4);
+  assert.strictEqual(p4.hpMax, 152 + 8, 'arpg: cada ponto de Corpo dá 8 de Vida');
+  assert.deepStrictEqual(Array.from(p4.slots), ['merc_varredura', 'merc_investida', 'merc_granada', null], 'arpg: habilidades entram nas teclas ao abrir');
+  const arma = G.gerarItem(4, 0, sortear, { slot: 'arma', rar: 'raro' });
+  Si.guardar(p4, arma); Si.equipar(p4, 0); Si.calcular(p4);
+  assert.ok(p4.equip.arma === arma && p4.mochila.length === 0 && p4.potencia > 0, 'arpg: equipar tira da mochila e dá potência');
+  const p10 = nova(10); p10.lascas = 99999;
+  assert.strictEqual(Si.instalar(p10, 'espinhaco'), 'ok', 'arpg: instala Espinhaço no nível 10');
+  Si.calcular(p10);
+  assert.strictEqual(p10.hpMax, G.vidaMax(10) + 60, 'arpg: Espinhaço dá +60 de Vida');
+  assert.strictEqual(p10.ruido, 15, 'arpg: Ruído soma o custo do implante');
+  Si.calmante(p10); Si.calcular(p10);
+  assert.strictEqual(p10.ruido, 0, 'arpg: calmante tira 15 de Ruído');
+  assert.strictEqual(Si.instalar(p10, 'mau_olhado', { financiar: true }), 'financiamento', 'arpg: implante sem lacre não se financia');
+  assert.strictEqual(Si.instalar(nova(2), 'olho_de_gato'), 'espaco', 'arpg: olhos só abrem no nível 3');
+  assert.strictEqual(Si.instalar(p10, 'meio_segundo'), 'espaco', 'arpg: sistema nervoso só abre no nível 15');
+  assert.strictEqual(Si.instalar(p10, 'mau_olhado'), 'ok', 'arpg: instala Mau-Olhado nos olhos');
+  assert.ok(Si.disponiveis(p10).includes('mau_olhado'), 'arpg: implante ativo vira habilidade escolhível');
+  assert.strictEqual(Si.limiteDivida(p10), 1500 + 4000, 'arpg: limite da dívida = 1500 + 400 × nível');
+  for (const id of Object.keys(G.NPCS)) { const l = M.lugar(id); assert.ok(M.livre(l.x, l.y, 15), `arpg: dá pra chegar em ${id}`); }
+  assert.ok(M.chunk(...G.ARENA_QUADRA).arena, 'arpg: o Pátio das Calhas existe');
 
   // cidade
   for (const [k, b] of Object.entries(G.BAIRROS)) {

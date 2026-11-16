@@ -12,7 +12,7 @@
     toque: false,
   };
   const teclas = new Set();
-  const ACAO = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, KeyQ: 'esquiva', ShiftLeft: 'esquiva', KeyE: 'injetor' };
+  const ACAO = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, KeyQ: 'esquiva', ShiftLeft: 'esquiva', KeyE: 'injetor', KeyI: 'painel', KeyC: 'painel', Tab: 'painel' };
 
   function modo(toque) {
     if (I.toque === toque) return;
@@ -95,6 +95,7 @@
     zona.addEventListener('pointerup', solta);
     zona.addEventListener('pointercancel', solta);
 
+    document.getElementById('btnPersonagem').addEventListener('click', () => I.fila.push('painel'));
     document.querySelectorAll('#acoes .btn').forEach(btn => {
       const a = btn.dataset.acao, acao = /^\d$/.test(a) ? +a : a;
       btn.addEventListener('pointerdown', e => {

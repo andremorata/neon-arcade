@@ -172,31 +172,79 @@
 
   // ── avisos de ataque: coral no chão ─────────────────
   function aviso(e) {
-    const p = J.p, k = 1 - e.prep / e.prepMax, st = e.st;
-    ctx.save(); ctx.translate(e.x, e.y); ctx.scale(1, 0.55);
+    const a = e.aviso;
+    if (!a) return;
+    const k = 1 - e.prep / e.prepMax, p = J.p;
     ctx.strokeStyle = G.rgba(COR.coral, 0.9); ctx.lineWidth = 3; ctx.fillStyle = G.rgba(COR.coral, 0.28);
-    if (e.aviso === 'circulo') {
-      const r = st.alcance + e.r + 4;
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(0, 0, r * k, 0, Math.PI * 2); ctx.fill();
-    } else if (e.aviso === 'arco') {
-      const r = st.alcance + e.r + p.r;
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r, e.ang - Math.PI / 3, e.ang + Math.PI / 3); ctx.closePath(); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r * k, e.ang - Math.PI / 3, e.ang + Math.PI / 3); ctx.closePath(); ctx.fill();
-    } else if (e.aviso === 'investida') {
-      ctx.rotate(e.ang); const L = 6 * M, w = e.r + 16;
-      ctx.strokeRect(0, -w, L, w * 2); ctx.fillRect(0, -w, L * k, w * 2);
-    }
-    ctx.restore();
-    if (e.aviso === 'linha') {
-      ctx.save(); ctx.strokeStyle = G.rgba(COR.coral, 0.4 + 0.5 * k); ctx.lineWidth = 2; ctx.setLineDash([12, 8]);
-      ctx.beginPath(); ctx.moveTo(e.x, e.y - 40); ctx.lineTo(e.x + Math.cos(e.ang) * st.alcance, e.y - 40 + Math.sin(e.ang) * st.alcance); ctx.stroke();
+    if (a.forma === 'circulo' || a.forma === 'arco') {
+      ctx.save(); ctx.translate(e.x, e.y); ctx.scale(1, 0.55);
+      ctx.beginPath();
+      if (a.forma === 'circulo') ctx.arc(0, 0, a.raio, 0, Math.PI * 2); else { ctx.moveTo(0, 0); ctx.arc(0, 0, a.raio, a.ang - a.abre / 2, a.ang + a.abre / 2); ctx.closePath(); }
+      ctx.stroke();
+      ctx.beginPath();
+      if (a.forma === 'circulo') ctx.arc(0, 0, a.raio * k, 0, Math.PI * 2); else { ctx.moveTo(0, 0); ctx.arc(0, 0, a.raio * k, a.ang - a.abre / 2, a.ang + a.abre / 2); ctx.closePath(); }
+      ctx.fill(); ctx.restore();
+    } else if (a.forma === 'linha') {
+      ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(a.ang);
+      if (a.trilho) { ctx.strokeStyle = G.rgba(COR.lavanda, 0.5 + 0.5 * k); ctx.fillStyle = G.rgba(COR.lavanda, 0.18); }
+      if (a.ima) { ctx.setLineDash([10, 8]); }
+      ctx.strokeRect(0, -a.larg, a.comp, a.larg * 2); ctx.fillRect(0, -a.larg, a.comp * k, a.larg * 2);
       ctx.restore();
+    } else if (a.forma === 'mira') {
+      ctx.save(); ctx.strokeStyle = G.rgba(COR.coral, 0.35 + 0.5 * k); ctx.lineWidth = 2; ctx.setLineDash([12, 8]);
+      ctx.beginPath(); ctx.moveTo(e.x, e.y - 40); ctx.lineTo(e.x + Math.cos(a.ang) * a.comp, e.y - 40 + Math.sin(a.ang) * a.comp); ctx.stroke();
+      ctx.restore();
+    } else if (a.forma === 'canal') {
+      ctx.save(); ctx.strokeStyle = G.rgba(COR.lavanda, 0.4 + 0.5 * k); ctx.lineWidth = 2 + 3 * k;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y - 60);
+      for (let i = 1; i <= 6; i++) { const t = i / 6; ctx.lineTo(G.lerp(e.x, p.x, t) + (i < 6 ? G.rand(-8, 8) : 0), G.lerp(e.y - 60, p.y - 40, t) + (i < 6 ? G.rand(-8, 8) : 0)); }
+      ctx.stroke(); ctx.restore();
+    } else if (a.forma === 'sinal') {
+      ctx.strokeStyle = G.rgba(COR.ambar, 0.8); ctx.beginPath(); ctx.ellipse(e.x, e.y, 30 + 40 * k, (30 + 40 * k) * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
     }
+  }
+
+  // Pátio das Calhas alagado: lâmina d'água e faixas de choque
+  function arenaAlagada() {
+    const a = J.alagada, F = J.faixas;
+    if (!a) return;
+    ctx.fillStyle = 'rgba(120,150,200,0.13)'; ctx.fillRect(a.x, a.y, a.w, a.h);
+    ctx.strokeStyle = 'rgba(190,210,235,0.12)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 12; i++) { const yy = a.y + ((i * 47 + J.t * 18) % a.h); ctx.beginPath(); ctx.moveTo(a.x + (i * 83) % a.w, yy); ctx.lineTo(a.x + (i * 83) % a.w + 60, yy); ctx.stroke(); }
+    if (!F) return;
+    const h = a.h / 5;
+    for (const b of F.bandas) {
+      const y = a.y + b * h;
+      if (F.estado === 'aviso') {
+        ctx.strokeStyle = G.rgba(COR.coral, 0.9); ctx.lineWidth = 3; ctx.strokeRect(a.x, y, a.w, h);
+        ctx.fillStyle = G.rgba(COR.coral, 0.25 * (1 - F.t / 1.2)); ctx.fillRect(a.x, y, a.w, h);
+      } else if (F.estado === 'choque') {
+        ctx.fillStyle = 'rgba(220,230,255,0.28)'; ctx.fillRect(a.x, y, a.w, h);
+        ctx.strokeStyle = 'rgba(240,245,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath();
+        for (let x = a.x; x < a.x + a.w; x += 30) { ctx.moveTo(x, y + G.rand(0, h)); ctx.lineTo(x + 30, y + G.rand(0, h)); }
+        ctx.stroke();
+      }
+    }
+  }
+
+  // gente com quem dá pra falar
+  function desenharNpc(n) {
+    const tipo = G.figuras.TIPOS[n.id] ? n.id : 'atirador';
+    G.figuras.desenhar(ctx, z, tipo, n.x, n.y, { pose: 'parado', olha: J.p.x < n.x ? -1 : 1, mira: 0.9 });
+    ctx.font = '700 11px "Space Mono", monospace'; ctx.textAlign = 'center';
+    const nome = G.NPCS[n.id].nome, w = ctx.measureText(nome).width;
+    ctx.fillStyle = 'rgba(17,29,44,0.8)'; ctx.fillRect(n.x - w / 2 - 6, n.y - 104, w + 12, 17);
+    ctx.fillStyle = COR.lavanda; ctx.fillText(nome, n.x, n.y - 91);
   }
 
   function desenharLoot(l) {
     const y = l.y - l.z;
+    if (l.tipo === 'peca') {
+      ctx.fillStyle = '#04060c'; ctx.beginPath(); ctx.arc(l.x, y - 6, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#9aa0ae'; ctx.beginPath(); ctx.arc(l.x, y - 6, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#04060c'; ctx.beginPath(); ctx.arc(l.x, y - 6, 1.5, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
     if (l.tipo === 'lasca') {
       ctx.fillStyle = '#04060c'; ctx.beginPath(); ctx.moveTo(l.x, y - 12); ctx.lineTo(l.x + 7, y - 4); ctx.lineTo(l.x, y + 1); ctx.lineTo(l.x - 7, y - 4); ctx.fill();
       ctx.fillStyle = COR.ambar; ctx.beginPath(); ctx.moveTo(l.x, y - 10); ctx.lineTo(l.x + 4.5, y - 4); ctx.lineTo(l.x, y - 1); ctx.lineTo(l.x - 4.5, y - 4); ctx.fill();
@@ -219,7 +267,7 @@
     for (const f of J.fx) if (f.tipo === 'queda') {
       const a = 1 - f.t / f.dur;
       ctx.globalAlpha = a * 0.8; ctx.fillStyle = '#2c3140';
-      ctx.beginPath(); ctx.ellipse(f.x, f.y - 4, f.tipo2 === 'portao' ? 40 : 28, 10, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(f.x, f.y - 4, f.maior ? 40 : 28, 10, 0, 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
     }
   }
@@ -248,8 +296,11 @@
     for (let cy = Mu.quadraDe(y0); cy <= Mu.quadraDe(y1); cy++) for (let cx = Mu.quadraDe(x0); cx <= Mu.quadraDe(x1); cx++) quadras.push(Mu.chunk(cx, cy));
     for (const ch of quadras) chao(ch);
     for (const ch of quadras) pocas(ch);
+    arenaAlagada();
     quedas();
     for (const e of J.inimigos) if (e.prep > 0) aviso(e);
+    for (const r of J.rastros) { ctx.fillStyle = G.rgba(COR.lavanda, 0.35 * Math.min(1, r.t)); ctx.beginPath(); ctx.ellipse(r.x, r.y, 14, 6, 0, 0, Math.PI * 2); ctx.fill(); }
+    if (J.marca && !J.marca.e.morto) { const e = J.marca.e; ctx.strokeStyle = G.rgba(COR.coral, 0.8); ctx.lineWidth = 2; ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r + 16, (e.r + 16) * 0.45, J.t, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
     // Varredura: cone quente no chão
     ctx.globalCompositeOperation = 'lighter';
     for (const f of J.fx) if (f.tipo === 'cone') {
@@ -269,6 +320,7 @@
       fila.push({ k: b.y + b.d, c: b, pal: G.BAIRROS[ch.bairro].pal });
     }
     for (const ch of quadras) for (const l of ch.postes) fila.push({ k: l.y, poste: l });
+    for (const ch of quadras) for (const n of ch.npcs || []) fila.push({ k: n.y, npc: n });
     for (const l of J.loot) fila.push({ k: l.y - 1, l });
     for (const e of J.inimigos) if (e.x > x0 - 80 && e.x < x1 + 80 && e.y > y0 - 40 && e.y < y1 + 120) fila.push({ k: e.y, e });
     fila.push({ k: p.y, p });
@@ -279,17 +331,21 @@
         desenharCaixa(f.c, f.pal);
         const b = f.c;
         if (depois && p.x + 12 > b.x && p.x - 12 < b.x + b.w && p.y > b.y - b.h * K && p.y - 76 < b.y + b.d) escondido = true;
-      } else if (f.poste) {
+      } else if (f.npc) desenharNpc(f.npc);
+      else if (f.poste) {
         const l = f.poste;
         ctx.fillStyle = '#0a0e18'; ctx.fillRect(l.x - 3, l.y - 150, 6, 150); ctx.fillRect(l.x - 3, l.y - 152, 34, 5);
         ctx.fillStyle = '#fff1d6'; ctx.fillRect(l.x + 20, l.y - 150, 14, 5);
       } else if (f.e) {
         const e = f.e;
-        G.figuras.desenhar(ctx, z, e.tipo, e.x, e.y, e.fig || {});
-        if (e.hp < e.hpMax || e === J.alvo) {
-          const w = e.tipo === 'portao' ? 54 : 36, yb = e.y - G.figuras.TIPOS[e.tipo].altura - 16;
+        const tipo = G.figuras.TIPOS[e.tipo] ? e.tipo : 'atirador';
+        G.figuras.desenhar(ctx, z, tipo, e.x, e.y, e.fig || {});
+        // no Surto do Ruído as barras de Vida somem
+        if ((e.hp < e.hpMax || e === J.alvo) && !(J.surto > 0) && !e.chefe) {
+          const w = e.elite ? 54 : e.r < 10 ? 20 : 36, yb = e.y - G.figuras.TIPOS[tipo].altura - 16 - (e.voa ? 50 : 0);
           ctx.fillStyle = 'rgba(8,13,28,0.8)'; ctx.fillRect(e.x - w / 2 - 1, yb - 1, w + 2, 6);
-          ctx.fillStyle = e.tipo === 'portao' ? COR.ambar : COR.coral; ctx.fillRect(e.x - w / 2, yb, w * Math.max(0, e.hp / e.hpMax), 4);
+          ctx.fillStyle = e.elite ? COR.ambar : e.id === 'eco' ? COR.lavanda : COR.coral; ctx.fillRect(e.x - w / 2, yb, w * Math.max(0, e.hp / e.hpMax), 4);
+          if (e.escudoEnergia > 0) { ctx.fillStyle = '#8FB8F0'; ctx.fillRect(e.x - w / 2, yb - 4, w * e.escudoEnergia / 40, 2); }
           if (e.atordoado > 0) { ctx.fillStyle = COR.ambar; ctx.font = '700 11px "Space Mono"'; ctx.textAlign = 'center'; ctx.fillText('✶ ✶', e.x, yb - 6); }
         }
         if (e === J.alvo) { ctx.strokeStyle = G.rgba(COR.texto, 0.5); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(e.x, e.y, e.r + 10, (e.r + 10) * 0.4, 0, 0, Math.PI * 2); ctx.stroke(); }
@@ -344,7 +400,8 @@
     }
     for (const f of J.fx) {
       const kk = f.t / f.dur;
-      if (f.tipo === 'clarao') luz(f.x, f.y - 30, f.raio * (0.6 + kk * 0.5), '#F2C38B', 0.7 * (1 - kk));
+      if (f.tipo === 'cabo') { ctx.globalAlpha = 1 - kk; ctx.strokeStyle = '#d9d2c0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(f.x, f.y - 50); ctx.lineTo(f.x1, f.y1 - 40); ctx.stroke(); }
+      else if (f.tipo === 'clarao') luz(f.x, f.y - 30, f.raio * (0.6 + kk * 0.5), '#F2C38B', 0.7 * (1 - kk));
       else if (f.tipo === 'anel') {
         ctx.globalAlpha = 1 - kk; ctx.strokeStyle = f.cor; ctx.lineWidth = 3;
         const r = f.raio * (0.3 + kk * 0.8);
@@ -369,6 +426,12 @@
     }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 
+    // Olho-de-Gato: contorno de quem está atrás da parede
+    if (p.visaoParedes) for (const e of J.inimigos) if (G.d2(e.x, e.y, p.x, p.y) < p.visaoParedes ** 2 && G.figuras.TIPOS[e.tipo]) {
+      ctx.globalAlpha = 0.3; ctx.strokeStyle = COR.coral; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.roundRect(e.x - 12, e.y - G.figuras.TIPOS[e.tipo].altura, 24, G.figuras.TIPOS[e.tipo].altura, 8); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     if (!p.morto && escondido) {
       ctx.strokeStyle = G.rgba(COR.menta, 0.55); ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.roundRect(p.x - 13, p.y - 78, 26, 78, 10); ctx.stroke();
@@ -407,6 +470,15 @@
       }
     }
     if (!claro) ctx.drawImage(vinheta, 0, 0, W, H);
+    if (J.lentidao > 0) { ctx.fillStyle = 'rgba(175,163,245,0.08)'; ctx.fillRect(0, 0, W, H); }
+    // Ruído na tela: linhas de varredura e um fantasma deslocado, crescendo com o estágio
+    const est = p.estagioRuim ? p.estagioRuim.id : 'limpo';
+    if (est !== 'limpo') {
+      const forca = { chiado: 0.03, estatica: 0.06, afinado: 0.09 }[est] + (J.surto > 0 ? 0.06 : 0);
+      ctx.fillStyle = `rgba(8,13,28,${forca})`;
+      for (let yy = (J.t * 40) % 4; yy < H; yy += 4 * dpr) ctx.fillRect(0, yy, W, dpr);
+      if (Math.random() < forca * 3) { ctx.globalAlpha = forca * 2.5; ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(cv, Math.round(G.rand(-3, 3) * dpr), 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
+    }
     if (p.flash > 0) { ctx.fillStyle = G.rgba(COR.coral, Math.min(0.22, p.flash)); ctx.fillRect(0, 0, W, H); }
     if (!p.morto && p.hp / p.hpMax < 0.3) { ctx.fillStyle = G.rgba(COR.coral, 0.06 + Math.sin(J.t * 6) * 0.04); ctx.fillRect(0, 0, W, H); }
   }
