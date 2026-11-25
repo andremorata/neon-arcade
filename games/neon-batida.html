@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>NEON BATIDA — Arcade</title>
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="../manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#080d1c">
+<link rel="stylesheet" href="../assets/css/neon-theme.css?v=fullscreen-1">
+<style>
+  /* Sem canvas: o quadro cresce com a grade. --arw/--arh 1 desliga a dica de girar. */
+  .stage { --arw: 1; --arh: 1; aspect-ratio: auto; max-width: 980px; touch-action: manipulation; }
+  .estudio { display: flex; flex-direction: column; gap: 12px; padding: 10px 12px 14px; }
+
+  .barra {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    margin: 0 52px 0 50px; min-height: 40px;
+    font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .barra label { display: flex; align-items: center; gap: 6px; }
+  .barra b { font-family: 'Orbitron', sans-serif; color: var(--text); min-width: 3.2em; letter-spacing: 0; }
+  .barra input[type=range] { width: 84px; accent-color: var(--neon-cyan); }
+  .barra select, .mini {
+    font: inherit; letter-spacing: 0.1em; color: var(--text);
+    background: rgba(155, 231, 206, 0.06); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 10px; cursor: pointer;
+  }
+  .barra select option { background: var(--bg-deep); }
+  .mini:active { transform: scale(0.95); }
+  .tocar {
+    font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: 12px; letter-spacing: 0.12em;
+    min-width: 104px; padding: 9px 14px; border-radius: 8px; cursor: pointer;
+    background: var(--neon-cyan); color: var(--bg); border: 1px solid var(--neon-cyan);
+  }
+  .tocar.parado { background: transparent; color: var(--neon-cyan); }
+  .acoes { display: flex; gap: 6px; margin-left: auto; }
+
+  .grade {
+    --cel: clamp(16px, 3.4vh, 28px);
+    display: grid; grid-template-columns: 70px repeat(16, 1fr); gap: 3px;
+    touch-action: none;   /* arrastar pinta, nao rola a pagina */
+  }
+  .rot {
+    display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap;
+    font-size: 10px; color: var(--text-dim);
+  }
+  .rot::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--cor); }
+  .cel {
+    height: var(--cel); border: 0; border-radius: 4px; padding: 0; cursor: pointer;
+    background: rgba(255, 255, 255, 0.07);
+    transition: background 0.08s, box-shadow 0.08s, transform 0.08s;
+  }
+  .cel.g { background: rgba(255, 255, 255, 0.035); }      /* blocos de 4 passos */
+  .cel.agora { background: rgba(255, 255, 255, 0.16); }
+  .cel.on { background: var(--cor); opacity: 0.78; }
+  .cel.on.agora { opacity: 1; box-shadow: 0 0 12px var(--cor); transform: scale(1.06); }
+  .cel:focus-visible { outline: 2px solid var(--title); outline-offset: 1px; }
+
+  .teclado { position: relative; display: flex; width: min(100%, 440px); height: clamp(64px, 13vh, 116px); margin: 0 auto; }
+  .tecla {
+    display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; cursor: pointer;
+    font-family: 'Orbitron', sans-serif; font-size: 10px; user-select: none;
+  }
+  .branca { flex: 1; background: #e6ecef; color: #4a5866; border: 1px solid #0a1220; border-radius: 0 0 7px 7px; }
+  .preta {
+    position: absolute; top: 0; width: 8%; height: 60%; transform: translateX(-50%); z-index: 1;
+    background: #141c2b; color: #c8d4e0; border: 1px solid #0a1220; border-radius: 0 0 5px 5px;
+  }
+  .branca.on { background: var(--neon-cyan); }
+  .preta.on { background: var(--neon-pink); color: var(--bg); }
+  .dica { text-align: center; font-size: 10px; letter-spacing: 0.12em; color: var(--text-dim); }
+
+  @media (max-width: 700px) {
+    .barra { margin: 0 0 0 50px; gap: 6px 10px; }
+    .barra input[type=range] { width: 64px; }
+    .acoes { margin-left: 0; }
+    .grade { grid-template-columns: 38px repeat(16, 1fr); gap: 2px; }
+    .rot { font-size: 8px; gap: 3px; }
+    .rot::before { display: none; }
+    .dica { display: none; }
+  }
+  @media (max-height: 520px) { .teclado, .dica { display: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">
+      <a href="../index.html"><h1>NEON BATIDA</h1></a>
+      <div class="tag">// | Acenda os quadrinhos e deixe rodar | <a href="../index.html" style="color:var(--neon-cyan)">arcade</a></div>
+    </div>
+  </header>
+
+  <!-- Sem recorde aqui: o #best existe só pro núcleo registrar a visita no menu. -->
+  <span id="best" data-key="batida" hidden></span>
+
+  <div class="stage" id="stage">
+    <button class="sound-toggle" id="soundToggle" title="Som">🔊</button>
+    <div class="estudio">
+      <div class="barra">
+        <!-- id pauseToggle: o núcleo liga o botão à tecla P, que aqui toca e para -->
+        <button class="tocar parado" id="pauseToggle" title="Tocar / parar (espaço)">▶ TOCAR</button>
+        <label>BPM <input type="range" id="bpm" min="60" max="180" step="1"><b id="bpmVal"></b></label>
+        <label>Swing <input type="range" id="swing" min="0" max="50" step="1"><b id="swingVal"></b></label>
+        <label>Escala <select id="escala"></select></label>
+        <div class="acoes">
+          <button class="mini" id="aleatorio">Aleatório</button>
+          <button class="mini" id="demo">Demo</button>
+          <button class="mini" id="limpar">Limpar</button>
+        </div>
+      </div>
+      <div class="grade" id="grade"></div>
+      <div class="teclado" id="teclado"></div>
+      <div class="dica">teclas A–K · pretas W E T Y U · espaço toca e para · a batida fica salva</div>
+    </div>
+  </div>
+
+  <footer>// <a href="../index.html">← arcade</a> · bateria, baixo e sintetizador 100% sintetizados</footer>
+</div>
+
+<script src="../assets/js/neon-core.js?v=fullscreen-1"></script>
+<script>
+(() => {
+  'use strict';
+  const Neon = window.Neon;
+  const $ = Neon.$;
+
+  const PASSOS = 16;
+  const DRUMS = [
+    { nome: 'Bumbo', cor: '#9be7ce' },
+    { nome: 'Caixa', cor: '#9be7ce' },
+    { nome: 'Chimbal', cor: '#9be7ce' },
+    { nome: 'Palma', cor: '#9be7ce' },
+    { nome: 'Baixo', cor: '#efce95' },
+  ];
+  const MELODIA = 7, LINHAS = DRUMS.length + MELODIA;
+  const ESCALAS = {
+    'Lá menor pentatônica': { raiz: 57, graus: [0, 3, 5, 7, 10, 12, 15] },
+    'Dó maior':             { raiz: 60, graus: [0, 2, 4, 5, 7, 9, 11] },
+    'Ré menor':             { raiz: 62, graus: [0, 2, 3, 5, 7, 8, 10] },
+    'Blues em Mi':          { raiz: 52, graus: [0, 3, 5, 6, 7, 10, 12] },
+  };
+  const NOMES = ['Dó', 'Dó♯', 'Ré', 'Ré♯', 'Mi', 'Fá', 'Fá♯', 'Sol', 'Sol♯', 'Lá', 'Lá♯', 'Si'];
+  const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+
+  // Linhas de cima pra baixo: percussão, baixo, e a melodia da nota mais aguda pra mais grave.
+  const notaDaLinha = r => {
+    const e = ESCALAS[cfg.escala];
+    return r === 4 ? e.raiz - 12 : e.raiz + e.graus[LINHAS - 1 - r];
+  };
+
+  // ── padrões prontos ('x' acende) ──
+  const DEMO = [
+    'x.....x.x.....x.',
+    '....x.......x...',
+    'x.x.x.x.x.x.x.xx',
+    '............x..x',
+    'x..x...x..x..x..',
+    '................',
+    '........x.......',
+    '......x.....x...',
+    'x.........x.....',
+    '...x...........x',
+    '.....x.......x..',
+    '..x.............',
+  ];
+  const dePadrao = linhas => linhas.map(l => [...l].map(c => (c === 'x' ? 1 : 0)));
+  const vazio = () => Array.from({ length: LINHAS }, () => Array(PASSOS).fill(0));
+
+  function aleatorio() {
+    const p = vazio(), r = Math.random;
+    for (let s = 0; s < PASSOS; s++) {
+      p[0][s] = s === 0 || (s % 4 === 0 && r() < 0.5) || r() < 0.12 ? 1 : 0;
+      p[1][s] = s % 8 === 4 || r() < 0.06 ? 1 : 0;
+      p[2][s] = s % 2 === 0 ? (r() < 0.9 ? 1 : 0) : (r() < 0.35 ? 1 : 0);
+      p[3][s] = r() < 0.08 ? 1 : 0;
+      p[4][s] = s === 0 || r() < 0.22 ? 1 : 0;
+      if (r() < 0.38) p[DRUMS.length + ((r() * MELODIA) | 0)][s] = 1;   // melodia de uma nota por vez
+    }
+    return p;
+  }
+
+  // ── estado salvo ──
+  const CHAVE = 'neon-batida';
+  const cfg = { bpm: 110, swing: 0, escala: 'Lá menor pentatônica', padrao: dePadrao(DEMO) };
+  try {
+    const s = JSON.parse(localStorage.getItem(CHAVE));
+    const ok = s && Array.isArray(s.padrao) && s.padrao.length === LINHAS &&
+      s.padrao.every(l => Array.isArray(l) && l.length === PASSOS);
+    if (ok) {
+      cfg.padrao = s.padrao.map(l => l.map(v => (v ? 1 : 0)));
+      cfg.bpm = Neon.clamp(+s.bpm || 110, 60, 180);
+      cfg.swing = Neon.clamp(+s.swing || 0, 0, 50);
+      if (ESCALAS[s.escala]) cfg.escala = s.escala;
+    }
+  } catch (_) { /* Sem storage ou dado quebrado: começa na demo. */ }
+  const salva = () => {
+    try { localStorage.setItem(CHAVE, JSON.stringify(cfg)); }
+    catch (_) { /* Sem storage: a batida vale só nesta aba. */ }
+  };
+
+  // ── áudio ──
+  let ac = null, bus = null, eco = null, ruido = null;
+  function liga() {
+    Neon.audio.ensure();
+    if (ac) return;
+    ac = Neon.audio.ctx;
+    bus = ac.createGain(); bus.gain.value = 0.85; bus.connect(Neon.audio.out);
+    eco = ac.createDelay(1); eco.delayTime.value = 0.3;
+    const volta = ac.createGain(); volta.gain.value = 0.28;
+    const tom = ac.createBiquadFilter(); tom.type = 'lowpass'; tom.frequency.value = 2200;
+    eco.connect(tom); tom.connect(volta); volta.connect(eco); tom.connect(bus);
+    const n = ac.sampleRate;
+    ruido = ac.createBuffer(1, n, n);
+    const d = ruido.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  }
+
+  function env(t, pico, dur, ataque) {
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(pico, t + (ataque || 0.004));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    return g;
+  }
+  function osc(t, tipo, f0, f1, dur, g) {
+    const o = ac.createOscillator();
+    o.type = tipo;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur * 0.5);
+    o.connect(g); o.start(t); o.stop(t + dur + 0.05);
+    return o;
+  }
+  function chiado(t, dur, filtro, freq, q, g) {
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter();
+    src.buffer = ruido;
+    f.type = filtro; f.frequency.value = freq; f.Q.value = q;
+    src.connect(f); f.connect(g);
+    src.start(t, Math.random() * 0.7); src.stop(t + dur + 0.05);
+  }
+
+  const VOZ = [
+    t => { const g = env(t, 0.9, 0.32); g.connect(bus); osc(t, 'sine', 150, 44, 0.3, g); },
+    t => {
+      const g = env(t, 0.42, 0.18); g.connect(bus); chiado(t, 0.18, 'bandpass', 1900, 0.8, g);
+      const c = env(t, 0.25, 0.1); c.connect(bus); osc(t, 'triangle', 200, 130, 0.1, c);
+    },
+    t => { const g = env(t, 0.2, 0.05); g.connect(bus); chiado(t, 0.05, 'highpass', 7200, 0.7, g); },
+    t => {
+      for (const d of [0, 0.011, 0.022]) { const g = env(t + d, 0.32, 0.03); g.connect(bus); chiado(t + d, 0.03, 'bandpass', 1250, 1.4, g); }
+      const g = env(t + 0.03, 0.22, 0.16); g.connect(bus); chiado(t + 0.03, 0.16, 'bandpass', 1250, 1.4, g);
+    },
+    (t, f, spb) => {
+      const lp = ac.createBiquadFilter(), g = env(t, 0.34, spb * 1.8, 0.01);
+      lp.type = 'lowpass'; lp.Q.value = 6;
+      lp.frequency.setValueAtTime(600, t); lp.frequency.exponentialRampToValueAtTime(130, t + spb * 1.8);
+      lp.connect(g); g.connect(bus);
+      osc(t, 'sawtooth', f, 0, spb * 1.8, lp);
+    },
+  ];
+  function lead(t, f, dur) {
+    if (!Neon.audio.on) return;
+    const lp = ac.createBiquadFilter(), g = env(t, 0.16, dur, 0.008);
+    lp.type = 'lowpass'; lp.frequency.value = 2600;
+    lp.connect(g); g.connect(bus); g.connect(eco);
+    osc(t, 'square', f, 0, dur, lp);
+    osc(t, 'triangle', f * 2, 0, dur, lp).detune.value = 6;
+  }
+  function soa(r, t, spb) {
+    if (!Neon.audio.on) return;
+    if (r < 4) VOZ[r](t);
+    else if (r === 4) VOZ[4](t, hz(notaDaLinha(r)), spb);
+    else lead(t, hz(notaDaLinha(r)), spb * 1.9);
+  }
+
+  // ── grade ──
+  const grade = $('grade'), cels = [];   // cels[linha][passo]
+  const rotulos = [];
+  for (let r = 0; r < LINHAS; r++) {
+    const cor = r < DRUMS.length ? DRUMS[r].cor : '#afa3f5';
+    const rot = document.createElement('div');
+    rot.className = 'rot';
+    rot.style.setProperty('--cor', cor);
+    grade.appendChild(rot);
+    rotulos.push(rot);
+    cels.push([]);
+    for (let s = 0; s < PASSOS; s++) {
+      const c = document.createElement('button');
+      c.className = 'cel' + ((s >> 2) % 2 ? ' g' : '');
+      c.style.setProperty('--cor', cor);
+      c.dataset.r = r; c.dataset.s = s;
+      grade.appendChild(c);
+      cels[r].push(c);
+    }
+  }
+
+  function nomeia() {
+    for (let r = 0; r < LINHAS; r++) {
+      const nome = r < DRUMS.length ? DRUMS[r].nome : NOMES[notaDaLinha(r) % 12];   // o baixo toca a tônica da escala
+      rotulos[r].textContent = nome;
+      for (let s = 0; s < PASSOS; s++) cels[r][s].setAttribute('aria-label', `${nome}, passo ${s + 1}`);
+    }
+  }
+  function desenha() {
+    for (let r = 0; r < LINHAS; r++) for (let s = 0; s < PASSOS; s++) {
+      const on = !!cfg.padrao[r][s];
+      cels[r][s].classList.toggle('on', on);
+      cels[r][s].setAttribute('aria-pressed', on);
+    }
+  }
+  function marca(c, on) {
+    const r = +c.dataset.r, s = +c.dataset.s;
+    if (!!cfg.padrao[r][s] === on) return;
+    cfg.padrao[r][s] = on ? 1 : 0;
+    c.classList.toggle('on', on);
+    c.setAttribute('aria-pressed', on);
+    if (on && !tocando) { liga(); soa(r, ac.currentTime + 0.01, 60 / cfg.bpm / 4); }
+  }
+
+  // Arrastar pinta: o primeiro quadrinho decide se acende ou apaga o caminho todo.
+  let pinta = null;
+  grade.addEventListener('pointerdown', e => {
+    const c = e.target.closest('.cel');
+    if (!c) return;
+    e.preventDefault();
+    pinta = !cfg.padrao[c.dataset.r][c.dataset.s];
+    marca(c, pinta);
+  });
+  window.addEventListener('pointermove', e => {
+    if (pinta === null) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const c = el && el.closest('.cel');
+    if (c) marca(c, pinta);
+  });
+  const soltar = () => { if (pinta !== null) { pinta = null; salva(); } };
+  window.addEventListener('pointerup', soltar);
+  window.addEventListener('pointercancel', soltar);
+  // Enter/espaço com foco no quadrinho chega como click sem ponteiro (detail 0).
+  grade.addEventListener('click', e => {
+    const c = e.target.closest('.cel');
+    if (!c || e.detail !== 0) return;
+    marca(c, !cfg.padrao[c.dataset.r][c.dataset.s]);
+    salva();
+  });
+
+  // ── relógio ──
+  // O rAF só olha à frente: as notas são agendadas no relógio do áudio, que não
+  // treme com quadro perdido. A fila diz quando acender cada coluna na tela.
+  const btn = $('pauseToggle');
+  let tocando = false, passo = 0, proximo = 0, fila = [], coluna = -1;
+
+  function agenda() {
+    if (proximo < ac.currentTime) proximo = ac.currentTime + 0.05;   // voltou de aba escondida
+    while (proximo < ac.currentTime + 0.12) {
+      const spb = 60 / cfg.bpm / 4;
+      const t = proximo + (passo % 2 ? (cfg.swing / 100) * spb : 0);
+      for (let r = 0; r < LINHAS; r++) if (cfg.padrao[r][passo]) soa(r, t, spb);
+      fila.push({ passo, t });
+      passo = (passo + 1) % PASSOS;
+      proximo += spb;
+    }
+  }
+  function mostra(s) {
+    if (coluna >= 0) for (let r = 0; r < LINHAS; r++) cels[r][coluna].classList.remove('agora');
+    coluna = s;
+    if (s >= 0) for (let r = 0; r < LINHAS; r++) cels[r][s].classList.add('agora');
+  }
+  function quadro() {
+    if (tocando) {
+      agenda();
+      let s = -1;
+      while (fila.length && fila[0].t <= ac.currentTime) s = fila.shift().passo;
+      if (s >= 0) mostra(s);
+    }
+    requestAnimationFrame(quadro);
+  }
+
+  function alterna(on) {
+    tocando = on === undefined ? !tocando : on;
+    if (tocando) { liga(); passo = 0; fila = []; proximo = ac.currentTime + 0.05; }
+    else mostra(-1);
+    btn.textContent = tocando ? '■ PARAR' : '▶ TOCAR';
+    btn.classList.toggle('parado', !tocando);
+  }
+
+  // ── controles ──
+  const bpm = $('bpm'), swing = $('swing'), escala = $('escala');
+  for (const nome of Object.keys(ESCALAS)) escala.add(new Option(nome, nome));
+  const mostraControles = () => {
+    bpm.value = cfg.bpm; $('bpmVal').textContent = cfg.bpm;
+    swing.value = cfg.swing; $('swingVal').textContent = cfg.swing + '%';
+    escala.value = cfg.escala;
+  };
+  bpm.addEventListener('input', () => { cfg.bpm = +bpm.value; mostraControles(); salva(); });
+  swing.addEventListener('input', () => { cfg.swing = +swing.value; mostraControles(); salva(); });
+  escala.addEventListener('change', () => { cfg.escala = escala.value; nomeia(); salva(); });
+  const troca = p => { cfg.padrao = p; desenha(); salva(); };
+  $('aleatorio').addEventListener('click', () => troca(aleatorio()));
+  $('demo').addEventListener('click', () => troca(dePadrao(DEMO)));
+  $('limpar').addEventListener('click', () => troca(vazio()));
+
+  // ── teclado de piano: uma oitava a partir do Dó 4 ──
+  const TECLAS = [
+    ['a', 60, 0], ['w', 61, 1], ['s', 62, 0], ['e', 63, 1], ['d', 64, 0], ['f', 65, 0], ['t', 66, 1],
+    ['g', 67, 0], ['y', 68, 1], ['h', 69, 0], ['u', 70, 1], ['j', 71, 0], ['k', 72, 0],
+  ];
+  const teclado = $('teclado'), porLetra = {};
+  let brancas = 0;
+  for (const [letra, nota, preta] of TECLAS) {
+    const el = document.createElement('div');
+    el.className = 'tecla ' + (preta ? 'preta' : 'branca');
+    el.textContent = letra.toUpperCase();
+    if (preta) el.style.left = (brancas * 100 / 8) + '%';
+    else brancas++;
+    const toca = () => {
+      liga();
+      lead(ac.currentTime + 0.005, hz(nota), 0.5);
+      el.classList.add('on');
+      setTimeout(() => el.classList.remove('on'), 160);
+    };
+    el.addEventListener('pointerdown', e => { e.preventDefault(); toca(); });
+    teclado.appendChild(el);
+    porLetra[letra] = toca;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'SELECT' || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === ' ' || e.key === 'p' || e.key === 'P') {
+      // espaço com foco num quadrinho alterna o quadrinho, não o som
+      if (k === ' ' && e.target.classList && e.target.classList.contains('cel')) return;
+      e.preventDefault();
+      if (!e.repeat) alterna();
+    } else if (porLetra[k] && !e.repeat) porLetra[k]();
+  });
+  Neon.onHide(() => { if (tocando) alterna(false); });
+
+  nomeia();
+  desenha();
+  mostraControles();
+  requestAnimationFrame(quadro);
+})();
+</script>
+</body>
+</html>

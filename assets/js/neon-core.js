@@ -356,6 +356,10 @@ window.Neon = (function () {
   const audio = {
     ensure: ensureAudio,
     get on() { return soundOn; },
+    // Instrumento que agenda nota no relógio do áudio (NEON BATIDA) precisa do
+    // contexto e da saída dos efeitos; sfx só toca "agora".
+    get ctx() { return AC; },
+    get out() { return sndGain; },
     setOn: setSound,
     sfx,
     bindToggle: bindSoundToggle,

@@ -35,7 +35,10 @@
   'use strict';
   const Neon = window.Neon;
 
+  // novo: data em que o jogo entrou. Por 30 dias, até o jogador abrir, ganha o
+  // selo NOVO e fica no topo do menu.
   const GAMES = [
+    { key: 'batida', emoji: '🎛️', name: 'NEON BATIDA', desc: 'Sequenciador de batidas: acenda os quadrinhos de bateria, baixo e melodia e deixe o loop rodar. Toque junto no teclado.', href: 'games/neon-batida.html', color: '#afa3f5', novo: '2026-11-25' },
     { key: 'darknoise', emoji: '🌧️', name: 'DARK NOISE', desc: 'ARPG de ação na chuva de Porto Vésper: cidade aberta, Mercenário, loot e biscates no Mercado Baixo. Protótipo.', href: 'arpg/index.html', color: '#e9b77c' },
     { key: 'piao', emoji: '🌀', name: 'NEON SPINNERS', desc: 'Batalha de piões em 4 estádios: tire o rival do prato, estoure a trava dele ou gire mais. 12 adversários, piões novos e melhorias.', href: 'games/neon-piao.html', color: '#7fd8ff' },
     { key: 'monster', emoji: '🛻', name: 'NEON MONSTER', desc: 'Monster trucks em 12 pistas: esmague carros e ônibus, voe sobre a lava e cuide da lataria. Quatro caminhões e melhorias na garagem.', href: 'games/neon-monster.html', color: '#f2b33d' },
@@ -95,6 +98,7 @@
     t.dataset.key = g.key;
     t.href = g.href;
     t.style.setProperty('--ticon', g.color);
+    if (g.novo && Date.now() - Date.parse(g.novo) < 30 * 864e5) t.dataset.novo = '1';
     t.innerHTML = `
       <div class="inner">
         <span class="t-emoji">${g.emoji}</span>
@@ -112,7 +116,9 @@
       let used = 0;
       try { used = Number(localStorage.getItem('neon-last-played-' + tile.dataset.key)); }
       catch (_) { /* Sem histórico, mantém a ordem original. */ }
-      return { tile, used: Number.isFinite(used) ? used : 0 };
+      if (!Number.isFinite(used)) used = 0;
+      if (used) delete tile.dataset.novo;   // jogou uma vez, deixou de ser novidade
+      return { tile, used: tile.dataset.novo ? Number.MAX_VALUE : used };
     });
     recent.sort((a, b) => b.used - a.used);
     for (const { tile } of recent) tiles.appendChild(tile);

@@ -1811,6 +1811,7 @@ for (const [, decl] of css.matchAll(/\.app(?::has\([^)]*\))?\s*\{[^}]*?padding:(
 // a trilha tem que desligar quando a partida acaba. Antes ela seguia tocando
 // por cima do fim de jogo, em todos os 13.
 for (const [name, html] of Object.entries(games)) {
+  if (name === 'batida') continue;   // sem trilha de fundo nem fim de partida: a música é do jogador
   assert.ok(html.includes('Neon.audio.music.down()'),
     `${name}: precisa chamar music.down() quando a partida acaba`);
 }
@@ -2738,6 +2739,13 @@ for (const fps of [30, 60, 120]) {
   storage.getItem = storage.setItem = () => { throw new Error('Storage indisponível'); };
   assert.doesNotThrow(visit, 'Recentes: armazenamento bloqueado não impede abrir o jogo');
   assert.deepStrictEqual(order(), ['jungle', 'tetris', 'pong'], 'Recentes: armazenamento bloqueado mantém o catálogo');
+  storage.getItem = key => values.get(key) ?? null;
+  storage.setItem = (key, value) => values.set(key, String(value));
+  tileOrder.push({ dataset: { key: 'batida', novo: '1' } });
+  assert.strictEqual(order()[0], 'batida', 'Novo: jogo novo ainda não aberto vai pro topo');
+  current = tileOrder[3]; visit(); current = tileOrder[0]; visit();
+  assert.strictEqual(order()[0], 'jungle', 'Novo: depois de aberto volta pra ordem de recentes');
+  assert.ok(!tileOrder[3].dataset.novo, 'Novo: o selo some depois da primeira partida');
   assert.match(core, /addEventListener\('pageshow', rememberVisit\)/, 'Recentes: reabrir pelo histórico registra a visita');
   assert.match(menu, /addEventListener\('pageshow', sortTiles\)/, 'Recentes: voltar pelo histórico reordena o menu');
   assert.match(menu, /addEventListener\('storage', sortTiles\)/, 'Recentes: outra aba atualiza o menu');
